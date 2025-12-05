@@ -10,21 +10,25 @@ import PredictiveChart from "@/components/dashboard/PredictiveChart";
 import CandlestickChart from "@/components/dashboard/CandlestickChart";
 import DonutChart from "@/components/dashboard/DonutChart";
 import SmartMoneyCard from "@/components/dashboard/SmartMoneyCard";
+import AIAnalyzer from "@/components/dashboard/AIAnalyzer";
+import { useCryptoPrices } from "@/hooks/useCryptoPrices";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 const Dashboard = () => {
   const [selectedCrypto, setSelectedCrypto] = useState("BTC");
+  const { prices, loading, getPriceBySymbol } = useCryptoPrices();
 
   const cryptoData: Record<string, { name: string; price: number; change: number }> = {
-    BTC: { name: "Bitcoin", price: 2840.4, change: -5.5 },
-    ETH: { name: "Ethereum", price: 2842, change: -5.46 },
-    SOL: { name: "Solana", price: 127.18, change: -6.85 },
-    XRP: { name: "Ripple", price: 2.05, change: -6.63 },
-    DOGE: { name: "Dogecoin", price: 0.1376, change: -7.84 },
+    BTC: { name: "Bitcoin", price: getPriceBySymbol("BTC")?.current_price || 86512, change: getPriceBySymbol("BTC")?.price_change_percentage_24h || -4.87 },
+    ETH: { name: "Ethereum", price: getPriceBySymbol("ETH")?.current_price || 2842, change: getPriceBySymbol("ETH")?.price_change_percentage_24h || -5.46 },
+    SOL: { name: "Solana", price: getPriceBySymbol("SOL")?.current_price || 127.18, change: getPriceBySymbol("SOL")?.price_change_percentage_24h || -6.85 },
+    XRP: { name: "Ripple", price: getPriceBySymbol("XRP")?.current_price || 2.05, change: getPriceBySymbol("XRP")?.price_change_percentage_24h || -6.63 },
+    DOGE: { name: "Dogecoin", price: getPriceBySymbol("DOGE")?.current_price || 0.1376, change: getPriceBySymbol("DOGE")?.price_change_percentage_24h || -7.84 },
   };
 
   const selected = cryptoData[selectedCrypto];
+  const liveData = getPriceBySymbol(selectedCrypto);
 
   return (
     <div className="min-h-screen bg-background">
@@ -82,8 +86,8 @@ const Dashboard = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
-                <span className="text-sm text-muted-foreground">OFFLINE</span>
+                <span className={`h-2 w-2 rounded-full ${loading ? "bg-warning" : "bg-success"} animate-pulse`} />
+                <span className="text-sm text-muted-foreground">{loading ? "LOADING..." : "LIVE"}</span>
               </div>
             </div>
 
@@ -100,22 +104,29 @@ const Dashboard = () => {
             <div className="mt-6 grid grid-cols-4 gap-4">
               <div>
                 <div className="text-sm text-muted-foreground">24h High</div>
-                <div className="font-semibold text-foreground">$3,050.05</div>
+                <div className="font-semibold text-foreground">${liveData?.high_24h?.toLocaleString() || "---"}</div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground">24h Low</div>
-                <div className="font-semibold text-foreground">$2,809.46</div>
+                <div className="font-semibold text-foreground">${liveData?.low_24h?.toLocaleString() || "---"}</div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground">24h Volume</div>
-                <div className="font-semibold text-foreground">$21.43B</div>
+                <div className="font-semibold text-foreground">${liveData?.total_volume ? (liveData.total_volume / 1e9).toFixed(2) + "B" : "---"}</div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground">Market Cap</div>
-                <div className="font-semibold text-foreground">$342.96B</div>
+                <div className="font-semibold text-foreground">${liveData?.market_cap ? (liveData.market_cap / 1e9).toFixed(2) + "B" : "---"}</div>
               </div>
             </div>
           </div>
+
+          {/* AI Analyzer */}
+          <AIAnalyzer 
+            crypto={selectedCrypto} 
+            price={selected.price} 
+            change={selected.change} 
+          />
 
           {/* Charts Grid */}
           <div className="grid gap-6 lg:grid-cols-3">
