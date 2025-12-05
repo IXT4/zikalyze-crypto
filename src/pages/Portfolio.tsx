@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Trash2, TrendingUp, TrendingDown, Wallet } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Trash2, TrendingUp, TrendingDown, Wallet, RefreshCw } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useCryptoPrices, symbolToId } from "@/hooks/useCryptoPrices";
 
 interface Holding {
   id: string;
@@ -25,25 +26,26 @@ interface Holding {
   name: string;
   amount: number;
   buyPrice: number;
-  currentPrice: number;
 }
 
-const cryptoPrices: Record<string, { name: string; price: number; change: number }> = {
-  BTC: { name: "Bitcoin", price: 42840.4, change: 2.5 },
-  ETH: { name: "Ethereum", price: 2842, change: -1.46 },
-  SOL: { name: "Solana", price: 127.18, change: 4.85 },
-  XRP: { name: "Ripple", price: 2.05, change: -2.63 },
-  DOGE: { name: "Dogecoin", price: 0.1376, change: 3.84 },
-  BNB: { name: "BNB", price: 315.2, change: 1.2 },
-  ADA: { name: "Cardano", price: 0.58, change: -0.8 },
-  AVAX: { name: "Avalanche", price: 38.5, change: 5.2 },
-};
+const SUPPORTED_CRYPTOS = [
+  { symbol: "BTC", name: "Bitcoin" },
+  { symbol: "ETH", name: "Ethereum" },
+  { symbol: "SOL", name: "Solana" },
+  { symbol: "XRP", name: "Ripple" },
+  { symbol: "DOGE", name: "Dogecoin" },
+  { symbol: "BNB", name: "BNB" },
+  { symbol: "ADA", name: "Cardano" },
+  { symbol: "AVAX", name: "Avalanche" },
+];
 
 const Portfolio = () => {
+  const { prices, loading, getPriceBySymbol, refetch } = useCryptoPrices();
+  
   const [holdings, setHoldings] = useState<Holding[]>([
-    { id: "1", symbol: "BTC", name: "Bitcoin", amount: 0.5, buyPrice: 40000, currentPrice: 42840.4 },
-    { id: "2", symbol: "ETH", name: "Ethereum", amount: 3, buyPrice: 2500, currentPrice: 2842 },
-    { id: "3", symbol: "SOL", name: "Solana", amount: 25, buyPrice: 100, currentPrice: 127.18 },
+    { id: "1", symbol: "BTC", name: "Bitcoin", amount: 0.5, buyPrice: 40000 },
+    { id: "2", symbol: "ETH", name: "Ethereum", amount: 3, buyPrice: 2500 },
+    { id: "3", symbol: "SOL", name: "Solana", amount: 25, buyPrice: 100 },
   ]);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -53,8 +55,12 @@ const Portfolio = () => {
     buyPrice: "",
   });
 
+  const getCurrentPrice = (symbol: string): number => {
+    return getPriceBySymbol(symbol)?.current_price || 0;
+  };
+
   const totalValue = holdings.reduce(
-    (sum, h) => sum + h.amount * h.currentPrice,
+    (sum, h) => sum + h.amount * getCurrentPrice(h.symbol),
     0
   );
 
@@ -69,7 +75,7 @@ const Portfolio = () => {
   const addHolding = () => {
     if (!newHolding.symbol || !newHolding.amount || !newHolding.buyPrice) return;
 
-    const crypto = cryptoPrices[newHolding.symbol];
+    const crypto = SUPPORTED_CRYPTOS.find(c => c.symbol === newHolding.symbol);
     if (!crypto) return;
 
     const holding: Holding = {
@@ -78,7 +84,6 @@ const Portfolio = () => {
       name: crypto.name,
       amount: parseFloat(newHolding.amount),
       buyPrice: parseFloat(newHolding.buyPrice),
-      currentPrice: crypto.price,
     };
 
     setHoldings([...holdings, holding]);
@@ -96,14 +101,24 @@ const Portfolio = () => {
 
       <main className="ml-16 lg:ml-64">
         <header className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h1 className="text-2xl font-bold text-foreground">Portfolio</h1>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Add Holding
-              </Button>
-            </DialogTrigger>
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-foreground">Portfolio</h1>
+            <div className="flex items-center gap-2">
+              <span className={`h-2 w-2 rounded-full ${loading ? "bg-warning" : "bg-success"} animate-pulse`} />
+              <span className="text-xs text-muted-foreground">{loading ? "Updating..." : "Live Prices"}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={refetch} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            </Button>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Holding
+                </Button>
+              </DialogTrigger>
             <DialogContent className="bg-card border-border">
               <DialogHeader>
                 <DialogTitle className="text-foreground">Add New Holding</DialogTitle>
@@ -119,9 +134,9 @@ const Portfolio = () => {
                     <SelectValue placeholder="Select crypto" />
                   </SelectTrigger>
                   <SelectContent className="bg-card border-border">
-                    {Object.entries(cryptoPrices).map(([symbol, data]) => (
-                      <SelectItem key={symbol} value={symbol}>
-                        {data.name} ({symbol})
+                    {SUPPORTED_CRYPTOS.map((crypto) => (
+                      <SelectItem key={crypto.symbol} value={crypto.symbol}>
+                        {crypto.name} ({crypto.symbol})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -148,8 +163,9 @@ const Portfolio = () => {
                   Add to Portfolio
                 </Button>
               </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          </div>
         </header>
 
         <div className="p-6 space-y-6">
@@ -226,10 +242,12 @@ const Portfolio = () => {
                   </thead>
                   <tbody>
                     {holdings.map((holding) => {
-                      const value = holding.amount * holding.currentPrice;
+                      const currentPrice = getCurrentPrice(holding.symbol);
+                      const value = holding.amount * currentPrice;
                       const cost = holding.amount * holding.buyPrice;
                       const pnl = value - cost;
-                      const pnlPercent = ((pnl / cost) * 100);
+                      const pnlPercent = cost > 0 ? ((pnl / cost) * 100) : 0;
+                      const priceChange = getPriceBySymbol(holding.symbol)?.price_change_percentage_24h || 0;
 
                       return (
                         <tr key={holding.id} className="border-b border-border/50">
@@ -246,7 +264,12 @@ const Portfolio = () => {
                           </td>
                           <td className="py-4 text-right text-foreground">{holding.amount}</td>
                           <td className="py-4 text-right text-muted-foreground">${holding.buyPrice.toLocaleString()}</td>
-                          <td className="py-4 text-right text-foreground">${holding.currentPrice.toLocaleString()}</td>
+                          <td className="py-4 text-right">
+                            <div className="text-foreground">${currentPrice.toLocaleString()}</div>
+                            <div className={`text-xs ${priceChange >= 0 ? "text-success" : "text-destructive"}`}>
+                              {priceChange >= 0 ? "+" : ""}{priceChange.toFixed(2)}%
+                            </div>
+                          </td>
                           <td className="py-4 text-right font-medium text-foreground">
                             ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
