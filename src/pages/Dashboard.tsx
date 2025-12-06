@@ -37,7 +37,7 @@ const Dashboard = () => {
       <main className="ml-16 lg:ml-64">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h1 className="text-2xl font-bold text-foreground">Welcome</h1>
+          <h1 className="text-2xl font-bold text-foreground">Zikalyze</h1>
           <div className="flex items-center gap-4">
             <div className="relative hidden md:block">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

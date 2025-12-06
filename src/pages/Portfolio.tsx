@@ -18,7 +18,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useCryptoPrices, symbolToId } from "@/hooks/useCryptoPrices";
+import { useCryptoPrices } from "@/hooks/useCryptoPrices";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Holding {
   id: string;
@@ -26,41 +27,46 @@ interface Holding {
   name: string;
   amount: number;
   buyPrice: number;
+  coinId: string;
 }
 
-const SUPPORTED_CRYPTOS = [
-  { symbol: "BTC", name: "Bitcoin" },
-  { symbol: "ETH", name: "Ethereum" },
-  { symbol: "SOL", name: "Solana" },
-  { symbol: "XRP", name: "Ripple" },
-  { symbol: "DOGE", name: "Dogecoin" },
-  { symbol: "BNB", name: "BNB" },
-  { symbol: "ADA", name: "Cardano" },
-  { symbol: "AVAX", name: "Avalanche" },
-];
+const STORAGE_KEY = "zikalyze_portfolio_holdings";
 
 const Portfolio = () => {
-  const { prices, loading, getPriceBySymbol, refetch } = useCryptoPrices();
+  const { prices, loading, getPriceBySymbol, getPriceById, refetch } = useCryptoPrices();
   
-  const [holdings, setHoldings] = useState<Holding[]>([
-    { id: "1", symbol: "BTC", name: "Bitcoin", amount: 0.5, buyPrice: 40000 },
-    { id: "2", symbol: "ETH", name: "Ethereum", amount: 3, buyPrice: 2500 },
-    { id: "3", symbol: "SOL", name: "Solana", amount: 25, buyPrice: 100 },
-  ]);
+  // Load holdings from localStorage on mount
+  const [holdings, setHoldings] = useState<Holding[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newHolding, setNewHolding] = useState({
-    symbol: "",
+    coinId: "",
     amount: "",
     buyPrice: "",
   });
 
-  const getCurrentPrice = (symbol: string): number => {
-    return getPriceBySymbol(symbol)?.current_price || 0;
+  // Save holdings to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings));
+  }, [holdings]);
+
+  const getCurrentPrice = (coinId: string): number => {
+    return getPriceById(coinId)?.current_price || 0;
+  };
+
+  const getPriceChange = (coinId: string): number => {
+    return getPriceById(coinId)?.price_change_percentage_24h || 0;
   };
 
   const totalValue = holdings.reduce(
-    (sum, h) => sum + h.amount * getCurrentPrice(h.symbol),
+    (sum, h) => sum + h.amount * getCurrentPrice(h.coinId),
     0
   );
 
@@ -73,21 +79,22 @@ const Portfolio = () => {
   const totalPnLPercent = totalCost > 0 ? ((totalPnL / totalCost) * 100) : 0;
 
   const addHolding = () => {
-    if (!newHolding.symbol || !newHolding.amount || !newHolding.buyPrice) return;
+    if (!newHolding.coinId || !newHolding.amount || !newHolding.buyPrice) return;
 
-    const crypto = SUPPORTED_CRYPTOS.find(c => c.symbol === newHolding.symbol);
+    const crypto = prices.find(c => c.id === newHolding.coinId);
     if (!crypto) return;
 
     const holding: Holding = {
       id: Date.now().toString(),
-      symbol: newHolding.symbol,
+      symbol: crypto.symbol.toUpperCase(),
       name: crypto.name,
+      coinId: crypto.id,
       amount: parseFloat(newHolding.amount),
       buyPrice: parseFloat(newHolding.buyPrice),
     };
 
     setHoldings([...holdings, holding]);
-    setNewHolding({ symbol: "", amount: "", buyPrice: "" });
+    setNewHolding({ coinId: "", amount: "", buyPrice: "" });
     setIsDialogOpen(false);
   };
 
@@ -119,50 +126,55 @@ const Portfolio = () => {
                   Add Holding
                 </Button>
               </DialogTrigger>
-            <DialogContent className="bg-card border-border">
-              <DialogHeader>
-                <DialogTitle className="text-foreground">Add New Holding</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <Select
-                  value={newHolding.symbol}
-                  onValueChange={(value) =>
-                    setNewHolding({ ...newHolding, symbol: value })
-                  }
-                >
-                  <SelectTrigger className="bg-secondary border-border">
-                    <SelectValue placeholder="Select crypto" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    {SUPPORTED_CRYPTOS.map((crypto) => (
-                      <SelectItem key={crypto.symbol} value={crypto.symbol}>
-                        {crypto.name} ({crypto.symbol})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  placeholder="Amount"
-                  value={newHolding.amount}
-                  onChange={(e) =>
-                    setNewHolding({ ...newHolding, amount: e.target.value })
-                  }
-                  className="bg-secondary border-border"
-                />
-                <Input
-                  type="number"
-                  placeholder="Buy Price (USD)"
-                  value={newHolding.buyPrice}
-                  onChange={(e) =>
-                    setNewHolding({ ...newHolding, buyPrice: e.target.value })
-                  }
-                  className="bg-secondary border-border"
-                />
-                <Button onClick={addHolding} className="w-full">
-                  Add to Portfolio
-                </Button>
-              </div>
+              <DialogContent className="bg-card border-border">
+                <DialogHeader>
+                  <DialogTitle className="text-foreground">Add New Holding</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-4">
+                  <Select
+                    value={newHolding.coinId}
+                    onValueChange={(value) =>
+                      setNewHolding({ ...newHolding, coinId: value })
+                    }
+                  >
+                    <SelectTrigger className="bg-secondary border-border">
+                      <SelectValue placeholder="Select crypto" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border max-h-[300px]">
+                      <ScrollArea className="h-[250px]">
+                        {prices.map((crypto) => (
+                          <SelectItem key={crypto.id} value={crypto.id}>
+                            <span className="flex items-center gap-2">
+                              <span className="font-medium">{crypto.symbol.toUpperCase()}</span>
+                              <span className="text-muted-foreground text-sm">{crypto.name}</span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </ScrollArea>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    placeholder="Amount"
+                    value={newHolding.amount}
+                    onChange={(e) =>
+                      setNewHolding({ ...newHolding, amount: e.target.value })
+                    }
+                    className="bg-secondary border-border"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Buy Price (USD)"
+                    value={newHolding.buyPrice}
+                    onChange={(e) =>
+                      setNewHolding({ ...newHolding, buyPrice: e.target.value })
+                    }
+                    className="bg-secondary border-border"
+                  />
+                  <Button onClick={addHolding} className="w-full">
+                    Add to Portfolio
+                  </Button>
+                </div>
               </DialogContent>
             </Dialog>
           </div>
@@ -242,12 +254,12 @@ const Portfolio = () => {
                   </thead>
                   <tbody>
                     {holdings.map((holding) => {
-                      const currentPrice = getCurrentPrice(holding.symbol);
+                      const currentPrice = getCurrentPrice(holding.coinId);
                       const value = holding.amount * currentPrice;
                       const cost = holding.amount * holding.buyPrice;
                       const pnl = value - cost;
                       const pnlPercent = cost > 0 ? ((pnl / cost) * 100) : 0;
-                      const priceChange = getPriceBySymbol(holding.symbol)?.price_change_percentage_24h || 0;
+                      const priceChange = getPriceChange(holding.coinId);
 
                       return (
                         <tr key={holding.id} className="border-b border-border/50">
