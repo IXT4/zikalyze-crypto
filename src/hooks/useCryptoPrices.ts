@@ -134,13 +134,15 @@ export const useCryptoPrices = () => {
   const [prices, setPrices] = useState<CryptoPrice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef1 = useRef<WebSocket | null>(null);
+  const wsRef2 = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<number | null>(null);
+  const isConnectedRef = useRef(false);
 
   const fetchPrices = useCallback(async () => {
     try {
       setLoading(true);
       
-      // Fetch 24hr ticker data from Binance
       const response = await fetch(`${BINANCE_API}/ticker/24hr`);
       
       if (!response.ok) {
@@ -148,8 +150,6 @@ export const useCryptoPrices = () => {
       }
       
       const data: BinanceTicker[] = await response.json();
-      
-      // Filter for USDT pairs and map to our format
       const usdtPairs = data.filter(ticker => ticker.symbol.endsWith("USDT"));
       
       const cryptoPrices: CryptoPrice[] = TOP_CRYPTOS.map((crypto, index) => {
@@ -165,11 +165,10 @@ export const useCryptoPrices = () => {
             high_24h: parseFloat(ticker.highPrice),
             low_24h: parseFloat(ticker.lowPrice),
             total_volume: parseFloat(ticker.quoteVolume),
-            market_cap: parseFloat(ticker.quoteVolume) * 10, // Approximate
+            market_cap: parseFloat(ticker.quoteVolume) * 10,
             market_cap_rank: index + 1,
           };
         }
-        
         return null;
       }).filter((p): p is CryptoPrice => p !== null);
       
@@ -182,16 +181,19 @@ export const useCryptoPrices = () => {
     }
   }, []);
 
-  // WebSocket for real-time price updates
   const connectWebSocket = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
+    if (isConnectedRef.current) return;
+    isConnectedRef.current = true;
 
-    const streams = TOP_CRYPTOS.slice(0, 50).map(c => `${c.symbol.toLowerCase()}usdt@ticker`).join("/");
-    const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+    // Close existing connections
+    if (wsRef1.current) wsRef1.current.close();
+    if (wsRef2.current) wsRef2.current.close();
 
-    ws.onmessage = (event) => {
+    // Split into two streams (Binance has limits per connection)
+    const first50 = TOP_CRYPTOS.slice(0, 50).map(c => `${c.symbol.toLowerCase()}usdt@ticker`).join("/");
+    const second50 = TOP_CRYPTOS.slice(50).map(c => `${c.symbol.toLowerCase()}usdt@ticker`).join("/");
+
+    const handleMessage = (event: MessageEvent) => {
       try {
         const message = JSON.parse(event.data);
         if (message.data) {
@@ -206,6 +208,7 @@ export const useCryptoPrices = () => {
                 price_change_percentage_24h: parseFloat(ticker.P),
                 high_24h: parseFloat(ticker.h),
                 low_24h: parseFloat(ticker.l),
+                total_volume: parseFloat(ticker.q),
               };
             }
             return coin;
@@ -216,37 +219,47 @@ export const useCryptoPrices = () => {
       }
     };
 
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
+    const handleClose = () => {
+      isConnectedRef.current = false;
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = window.setTimeout(() => {
+        connectWebSocket();
+      }, 3000);
     };
 
-    ws.onclose = () => {
-      // Reconnect after 5 seconds
-      setTimeout(() => {
-        if (prices.length > 0) {
-          connectWebSocket();
-        }
-      }, 5000);
-    };
+    // First WebSocket for coins 1-50
+    const ws1 = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${first50}`);
+    ws1.onmessage = handleMessage;
+    ws1.onerror = () => console.error("WebSocket 1 error");
+    ws1.onclose = handleClose;
+    wsRef1.current = ws1;
 
-    wsRef.current = ws;
-  }, [prices.length]);
+    // Second WebSocket for coins 51-100
+    if (second50) {
+      const ws2 = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${second50}`);
+      ws2.onmessage = handleMessage;
+      ws2.onerror = () => console.error("WebSocket 2 error");
+      ws2.onclose = () => {};
+      wsRef2.current = ws2;
+    }
+  }, []);
 
   useEffect(() => {
     fetchPrices();
   }, [fetchPrices]);
 
   useEffect(() => {
-    if (prices.length > 0) {
+    if (prices.length > 0 && !isConnectedRef.current) {
       connectWebSocket();
     }
     
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      isConnectedRef.current = false;
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef1.current) wsRef1.current.close();
+      if (wsRef2.current) wsRef2.current.close();
     };
-  }, [prices.length, connectWebSocket]);
+  }, [prices.length > 0, connectWebSocket]);
 
   const getPriceBySymbol = useCallback((symbol: string): CryptoPrice | undefined => {
     return prices.find((p) => p.symbol.toUpperCase() === symbol.toUpperCase());
