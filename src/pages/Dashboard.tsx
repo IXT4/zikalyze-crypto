@@ -5,12 +5,8 @@ import CryptoTicker from "@/components/dashboard/CryptoTicker";
 import PriceChart from "@/components/dashboard/PriceChart";
 import VolumeChart from "@/components/dashboard/VolumeChart";
 import AIMetrics from "@/components/dashboard/AIMetrics";
-import AnalyticsChart from "@/components/dashboard/AnalyticsChart";
-import PredictiveChart from "@/components/dashboard/PredictiveChart";
-import CandlestickChart from "@/components/dashboard/CandlestickChart";
-import DonutChart from "@/components/dashboard/DonutChart";
-import SmartMoneyCard from "@/components/dashboard/SmartMoneyCard";
 import AIAnalyzer from "@/components/dashboard/AIAnalyzer";
+import Top100CryptoList from "@/components/dashboard/Top100CryptoList";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -27,8 +23,11 @@ const Dashboard = () => {
     DOGE: { name: "Dogecoin", price: getPriceBySymbol("DOGE")?.current_price || 0.1376, change: getPriceBySymbol("DOGE")?.price_change_percentage_24h || -7.84 },
   };
 
-  const selected = cryptoData[selectedCrypto];
+  // Get selected crypto from prices or fallback
   const liveData = getPriceBySymbol(selectedCrypto);
+  const selected = liveData 
+    ? { name: liveData.name, price: liveData.current_price, change: liveData.price_change_percentage_24h }
+    : cryptoData[selectedCrypto] || { name: selectedCrypto, price: 0, change: 0 };
 
   return (
     <div className="min-h-screen bg-background">
@@ -78,7 +77,7 @@ const Dashboard = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-warning/20 text-warning font-bold">
-                  ₿
+                  {selectedCrypto.slice(0, 1)}
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-foreground">{selected.name}</h2>
@@ -93,10 +92,12 @@ const Dashboard = () => {
 
             <div className="mt-6">
               <div className="text-4xl font-bold text-foreground">
-                ${selected.price.toLocaleString()}
+                ${selected.price < 1 ? selected.price.toFixed(6) : selected.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="mt-2 flex items-center gap-2">
-                <span className="text-destructive">↘ {Math.abs(selected.change)}%</span>
+                <span className={selected.change >= 0 ? "text-success" : "text-destructive"}>
+                  {selected.change >= 0 ? "↗" : "↘"} {Math.abs(selected.change).toFixed(2)}%
+                </span>
                 <span className="text-muted-foreground">24h</span>
               </div>
             </div>
@@ -136,19 +137,11 @@ const Dashboard = () => {
             </div>
             <div className="space-y-6">
               <AIMetrics />
-              <SmartMoneyCard />
             </div>
           </div>
 
-          {/* Analytics Row */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <AnalyticsChart />
-            <PredictiveChart />
-            <DonutChart />
-          </div>
-
-          {/* Candlestick */}
-          <CandlestickChart />
+          {/* Top 100 Crypto List */}
+          <Top100CryptoList selected={selectedCrypto} onSelect={setSelectedCrypto} />
         </div>
       </main>
     </div>
