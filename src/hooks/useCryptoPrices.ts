@@ -13,13 +13,121 @@ export interface CryptoPrice {
   market_cap_rank: number;
 }
 
-const COINGECKO_API = "https://api.coingecko.com/api/v3";
+interface BinanceTicker {
+  symbol: string;
+  lastPrice: string;
+  priceChangePercent: string;
+  highPrice: string;
+  lowPrice: string;
+  volume: string;
+  quoteVolume: string;
+}
 
-// Stablecoins to exclude
-const STABLECOINS = [
-  "tether", "usd-coin", "dai", "binance-usd", "trueusd", "paxos-standard",
-  "usdd", "frax", "gemini-dollar", "paypal-usd", "first-digital-usd",
-  "ethena-usde", "usual-usd", "fdusd", "ondo-us-dollar-yield"
+const BINANCE_API = "https://api.binance.com/api/v3";
+
+// Top 100 crypto symbols (excluding stablecoins) + GoMining
+const TOP_CRYPTOS: { symbol: string; name: string; id: string }[] = [
+  { symbol: "BTC", name: "Bitcoin", id: "bitcoin" },
+  { symbol: "ETH", name: "Ethereum", id: "ethereum" },
+  { symbol: "BNB", name: "BNB", id: "binancecoin" },
+  { symbol: "SOL", name: "Solana", id: "solana" },
+  { symbol: "XRP", name: "XRP", id: "ripple" },
+  { symbol: "DOGE", name: "Dogecoin", id: "dogecoin" },
+  { symbol: "ADA", name: "Cardano", id: "cardano" },
+  { symbol: "AVAX", name: "Avalanche", id: "avalanche-2" },
+  { symbol: "TRX", name: "TRON", id: "tron" },
+  { symbol: "TON", name: "Toncoin", id: "the-open-network" },
+  { symbol: "LINK", name: "Chainlink", id: "chainlink" },
+  { symbol: "SHIB", name: "Shiba Inu", id: "shiba-inu" },
+  { symbol: "DOT", name: "Polkadot", id: "polkadot" },
+  { symbol: "BCH", name: "Bitcoin Cash", id: "bitcoin-cash" },
+  { symbol: "LTC", name: "Litecoin", id: "litecoin" },
+  { symbol: "UNI", name: "Uniswap", id: "uniswap" },
+  { symbol: "NEAR", name: "NEAR Protocol", id: "near" },
+  { symbol: "APT", name: "Aptos", id: "aptos" },
+  { symbol: "PEPE", name: "Pepe", id: "pepe" },
+  { symbol: "ICP", name: "Internet Computer", id: "internet-computer" },
+  { symbol: "ETC", name: "Ethereum Classic", id: "ethereum-classic" },
+  { symbol: "RNDR", name: "Render", id: "render-token" },
+  { symbol: "FET", name: "Fetch.ai", id: "fetch-ai" },
+  { symbol: "POL", name: "Polygon", id: "matic-network" },
+  { symbol: "HBAR", name: "Hedera", id: "hedera-hashgraph" },
+  { symbol: "STX", name: "Stacks", id: "blockstack" },
+  { symbol: "IMX", name: "Immutable", id: "immutable-x" },
+  { symbol: "MNT", name: "Mantle", id: "mantle" },
+  { symbol: "CRO", name: "Cronos", id: "crypto-com-chain" },
+  { symbol: "VET", name: "VeChain", id: "vechain" },
+  { symbol: "FIL", name: "Filecoin", id: "filecoin" },
+  { symbol: "TAO", name: "Bittensor", id: "bittensor" },
+  { symbol: "KAS", name: "Kaspa", id: "kaspa" },
+  { symbol: "ARB", name: "Arbitrum", id: "arbitrum" },
+  { symbol: "ATOM", name: "Cosmos", id: "cosmos" },
+  { symbol: "OP", name: "Optimism", id: "optimism" },
+  { symbol: "INJ", name: "Injective", id: "injective-protocol" },
+  { symbol: "WIF", name: "dogwifhat", id: "dogwifcoin" },
+  { symbol: "MKR", name: "Maker", id: "maker" },
+  { symbol: "GRT", name: "The Graph", id: "the-graph" },
+  { symbol: "THETA", name: "Theta Network", id: "theta-token" },
+  { symbol: "XLM", name: "Stellar", id: "stellar" },
+  { symbol: "FTM", name: "Fantom", id: "fantom" },
+  { symbol: "RUNE", name: "THORChain", id: "thorchain" },
+  { symbol: "BONK", name: "Bonk", id: "bonk" },
+  { symbol: "SUI", name: "Sui", id: "sui" },
+  { symbol: "SEI", name: "Sei", id: "sei-network" },
+  { symbol: "AAVE", name: "Aave", id: "aave" },
+  { symbol: "PYTH", name: "Pyth Network", id: "pyth-network" },
+  { symbol: "FLOKI", name: "FLOKI", id: "floki" },
+  { symbol: "JUP", name: "Jupiter", id: "jupiter" },
+  { symbol: "ALGO", name: "Algorand", id: "algorand" },
+  { symbol: "TIA", name: "Celestia", id: "celestia" },
+  { symbol: "SAND", name: "The Sandbox", id: "the-sandbox" },
+  { symbol: "MANA", name: "Decentraland", id: "decentraland" },
+  { symbol: "AXS", name: "Axie Infinity", id: "axie-infinity" },
+  { symbol: "APE", name: "ApeCoin", id: "apecoin" },
+  { symbol: "GALA", name: "Gala", id: "gala" },
+  { symbol: "FLOW", name: "Flow", id: "flow" },
+  { symbol: "KAVA", name: "Kava", id: "kava" },
+  { symbol: "XTZ", name: "Tezos", id: "tezos" },
+  { symbol: "EOS", name: "EOS", id: "eos" },
+  { symbol: "CHZ", name: "Chiliz", id: "chiliz" },
+  { symbol: "QNT", name: "Quant", id: "quant-network" },
+  { symbol: "EGLD", name: "MultiversX", id: "elrond-erd-2" },
+  { symbol: "IOTA", name: "IOTA", id: "iota" },
+  { symbol: "LDO", name: "Lido DAO", id: "lido-dao" },
+  { symbol: "CAKE", name: "PancakeSwap", id: "pancakeswap-token" },
+  { symbol: "NEO", name: "NEO", id: "neo" },
+  { symbol: "CRV", name: "Curve DAO", id: "curve-dao-token" },
+  { symbol: "XEC", name: "eCash", id: "ecash" },
+  { symbol: "MINA", name: "Mina", id: "mina-protocol" },
+  { symbol: "WLD", name: "Worldcoin", id: "worldcoin-wld" },
+  { symbol: "ORDI", name: "ORDI", id: "ordinals" },
+  { symbol: "SNX", name: "Synthetix", id: "havven" },
+  { symbol: "ROSE", name: "Oasis Network", id: "oasis-network" },
+  { symbol: "ZEC", name: "Zcash", id: "zcash" },
+  { symbol: "DYDX", name: "dYdX", id: "dydx" },
+  { symbol: "CFX", name: "Conflux", id: "conflux-token" },
+  { symbol: "BLUR", name: "Blur", id: "blur" },
+  { symbol: "AKT", name: "Akash Network", id: "akash-network" },
+  { symbol: "OSMO", name: "Osmosis", id: "osmosis" },
+  { symbol: "RPL", name: "Rocket Pool", id: "rocket-pool" },
+  { symbol: "ZIL", name: "Zilliqa", id: "zilliqa" },
+  { symbol: "GMT", name: "STEPN", id: "stepn" },
+  { symbol: "ONE", name: "Harmony", id: "harmony" },
+  { symbol: "ENS", name: "Ethereum Name Service", id: "ethereum-name-service" },
+  { symbol: "COMP", name: "Compound", id: "compound-governance-token" },
+  { symbol: "HOT", name: "Holo", id: "holotoken" },
+  { symbol: "AR", name: "Arweave", id: "arweave" },
+  { symbol: "ENJ", name: "Enjin Coin", id: "enjincoin" },
+  { symbol: "MASK", name: "Mask Network", id: "mask-network" },
+  { symbol: "1INCH", name: "1inch", id: "1inch" },
+  { symbol: "CELO", name: "Celo", id: "celo" },
+  { symbol: "ANKR", name: "Ankr", id: "ankr" },
+  { symbol: "SKL", name: "SKALE", id: "skale" },
+  { symbol: "BAT", name: "Basic Attention Token", id: "basic-attention-token" },
+  { symbol: "OCEAN", name: "Ocean Protocol", id: "ocean-protocol" },
+  { symbol: "STORJ", name: "Storj", id: "storj" },
+  { symbol: "COTI", name: "COTI", id: "coti" },
+  { symbol: "GOMINING", name: "GoMining", id: "gomining-token" },
 ];
 
 export const useCryptoPrices = () => {
@@ -27,50 +135,45 @@ export const useCryptoPrices = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const pricesRef = useRef<CryptoPrice[]>([]);
 
   const fetchPrices = useCallback(async () => {
     try {
       setLoading(true);
-      // Fetch top 150 to ensure we get 100 after filtering stablecoins
-      const response = await fetch(
-        `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=150&page=1&sparkline=false`
-      );
+      
+      // Fetch 24hr ticker data from Binance
+      const response = await fetch(`${BINANCE_API}/ticker/24hr`);
       
       if (!response.ok) {
-        throw new Error("Failed to fetch prices");
+        throw new Error("Failed to fetch prices from Binance");
       }
       
-      const data = await response.json();
+      const data: BinanceTicker[] = await response.json();
       
-      // Filter out stablecoins and take top 100
-      let filtered = data.filter((coin: CryptoPrice) => 
-        !STABLECOINS.includes(coin.id)
-      );
+      // Filter for USDT pairs and map to our format
+      const usdtPairs = data.filter(ticker => ticker.symbol.endsWith("USDT"));
       
-      // Add GoMining token if not in list
-      const hasGoMining = filtered.some((c: CryptoPrice) => c.id === "gomining-token");
-      if (!hasGoMining) {
-        try {
-          const gominingRes = await fetch(
-            `${COINGECKO_API}/coins/markets?vs_currency=usd&ids=gomining-token&sparkline=false`
-          );
-          if (gominingRes.ok) {
-            const gominingData = await gominingRes.json();
-            if (gominingData.length > 0) {
-              filtered.push(gominingData[0]);
-            }
-          }
-        } catch (e) {
-          console.log("Could not fetch GoMining token");
+      const cryptoPrices: CryptoPrice[] = TOP_CRYPTOS.map((crypto, index) => {
+        const ticker = usdtPairs.find(t => t.symbol === `${crypto.symbol}USDT`);
+        
+        if (ticker) {
+          return {
+            id: crypto.id,
+            symbol: crypto.symbol.toLowerCase(),
+            name: crypto.name,
+            current_price: parseFloat(ticker.lastPrice),
+            price_change_percentage_24h: parseFloat(ticker.priceChangePercent),
+            high_24h: parseFloat(ticker.highPrice),
+            low_24h: parseFloat(ticker.lowPrice),
+            total_volume: parseFloat(ticker.quoteVolume),
+            market_cap: parseFloat(ticker.quoteVolume) * 10, // Approximate
+            market_cap_rank: index + 1,
+          };
         }
-      }
+        
+        return null;
+      }).filter((p): p is CryptoPrice => p !== null);
       
-      // Take top 100
-      const top100 = filtered.slice(0, 100);
-      
-      setPrices(top100);
-      pricesRef.current = top100;
+      setPrices(cryptoPrices);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -79,36 +182,55 @@ export const useCryptoPrices = () => {
     }
   }, []);
 
-  // WebSocket for live price updates
+  // WebSocket for real-time price updates
   const connectWebSocket = useCallback(() => {
-    if (pricesRef.current.length === 0) return;
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
 
-    // Use CoinGecko's free polling as WebSocket fallback
-    // Since CoinGecko doesn't have free WebSocket, we'll use faster polling
-    const interval = setInterval(() => {
-      if (pricesRef.current.length > 0) {
-        const ids = pricesRef.current.map(p => p.id).join(",");
-        fetch(`${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`)
-          .then(res => res.json())
-          .then(data => {
-            setPrices(prev => prev.map(coin => {
-              const update = data[coin.id];
-              if (update) {
-                return {
-                  ...coin,
-                  current_price: update.usd || coin.current_price,
-                  price_change_percentage_24h: update.usd_24h_change || coin.price_change_percentage_24h
-                };
-              }
-              return coin;
-            }));
-          })
-          .catch(() => {});
+    const streams = TOP_CRYPTOS.slice(0, 50).map(c => `${c.symbol.toLowerCase()}usdt@ticker`).join("/");
+    const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.data) {
+          const ticker = message.data;
+          const symbol = ticker.s.replace("USDT", "").toLowerCase();
+          
+          setPrices(prev => prev.map(coin => {
+            if (coin.symbol === symbol) {
+              return {
+                ...coin,
+                current_price: parseFloat(ticker.c),
+                price_change_percentage_24h: parseFloat(ticker.P),
+                high_24h: parseFloat(ticker.h),
+                low_24h: parseFloat(ticker.l),
+              };
+            }
+            return coin;
+          }));
+        }
+      } catch (e) {
+        console.error("WebSocket parse error:", e);
       }
-    }, 10000); // Update every 10 seconds for live feel
+    };
 
-    return () => clearInterval(interval);
-  }, []);
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    ws.onclose = () => {
+      // Reconnect after 5 seconds
+      setTimeout(() => {
+        if (prices.length > 0) {
+          connectWebSocket();
+        }
+      }, 5000);
+    };
+
+    wsRef.current = ws;
+  }, [prices.length]);
 
   useEffect(() => {
     fetchPrices();
@@ -116,10 +238,15 @@ export const useCryptoPrices = () => {
 
   useEffect(() => {
     if (prices.length > 0) {
-      const cleanup = connectWebSocket();
-      return cleanup;
+      connectWebSocket();
     }
-  }, [prices.length, connectWebSocket]);
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [prices.length > 0]);
 
   const getPriceBySymbol = useCallback((symbol: string): CryptoPrice | undefined => {
     return prices.find((p) => p.symbol.toUpperCase() === symbol.toUpperCase());
@@ -133,101 +260,6 @@ export const useCryptoPrices = () => {
 };
 
 // Extended symbol to ID mapping for top 100 cryptos
-export const symbolToId: Record<string, string> = {
-  BTC: "bitcoin",
-  ETH: "ethereum",
-  SOL: "solana",
-  XRP: "ripple",
-  DOGE: "dogecoin",
-  BNB: "binancecoin",
-  ADA: "cardano",
-  AVAX: "avalanche-2",
-  TRX: "tron",
-  TON: "the-open-network",
-  LINK: "chainlink",
-  SHIB: "shiba-inu",
-  DOT: "polkadot",
-  BCH: "bitcoin-cash",
-  LEO: "leo-token",
-  LTC: "litecoin",
-  UNI: "uniswap",
-  NEAR: "near",
-  APT: "aptos",
-  PEPE: "pepe",
-  ICP: "internet-computer",
-  ETC: "ethereum-classic",
-  RNDR: "render-token",
-  FET: "fetch-ai",
-  POL: "matic-network",
-  HBAR: "hedera-hashgraph",
-  STX: "blockstack",
-  IMX: "immutable-x",
-  MNT: "mantle",
-  CRO: "crypto-com-chain",
-  VET: "vechain",
-  FIL: "filecoin",
-  TAO: "bittensor",
-  KAS: "kaspa",
-  ARB: "arbitrum",
-  ATOM: "cosmos",
-  OKB: "okb",
-  OP: "optimism",
-  INJ: "injective-protocol",
-  WIF: "dogwifcoin",
-  MKR: "maker",
-  GRT: "the-graph",
-  THETA: "theta-token",
-  XLM: "stellar",
-  FTM: "fantom",
-  RUNE: "thorchain",
-  BONK: "bonk",
-  SUI: "sui",
-  SEI: "sei-network",
-  AAVE: "aave",
-  PYTH: "pyth-network",
-  FLOKI: "floki",
-  JUP: "jupiter",
-  ALGO: "algorand",
-  TIA: "celestia",
-  SAND: "the-sandbox",
-  MANA: "decentraland",
-  AXS: "axie-infinity",
-  APE: "apecoin",
-  GALA: "gala",
-  FLOW: "flow",
-  KAVA: "kava",
-  XTZ: "tezos",
-  EOS: "eos",
-  CHZ: "chiliz",
-  QNT: "quant-network",
-  EGLD: "elrond-erd-2",
-  IOTA: "iota",
-  LDO: "lido-dao",
-  CAKE: "pancakeswap-token",
-  NEO: "neo",
-  CRV: "curve-dao-token",
-  XEC: "ecash",
-  MINA: "mina-protocol",
-  WLD: "worldcoin-wld",
-  BTT: "bittorrent",
-  ORDI: "ordinals",
-  SNX: "havven",
-  ROSE: "oasis-network",
-  ZEC: "zcash",
-  KCS: "kucoin-shares",
-  DYDX: "dydx",
-  CFX: "conflux-token",
-  BLUR: "blur",
-  AKT: "akash-network",
-  NEXO: "nexo",
-  OSMO: "osmosis",
-  RPL: "rocket-pool",
-  ZIL: "zilliqa",
-  GMT: "stepn",
-  ONE: "harmony",
-  ENS: "ethereum-name-service",
-  COMP: "compound-governance-token",
-  HOT: "holotoken",
-  AR: "arweave",
-  GOMINING: "gomining-token",
-};
+export const symbolToId: Record<string, string> = Object.fromEntries(
+  TOP_CRYPTOS.map(c => [c.symbol, c.id])
+);
