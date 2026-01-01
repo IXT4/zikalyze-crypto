@@ -88,10 +88,30 @@ export default {
             height: "0",
           },
         },
+        "flash-green": {
+          "0%": { backgroundColor: "hsl(var(--success) / 0.4)" },
+          "100%": { backgroundColor: "transparent" },
+        },
+        "flash-red": {
+          "0%": { backgroundColor: "hsl(var(--destructive) / 0.4)" },
+          "100%": { backgroundColor: "transparent" },
+        },
+        "price-up": {
+          "0%": { color: "hsl(var(--success))", transform: "scale(1.05)" },
+          "100%": { color: "inherit", transform: "scale(1)" },
+        },
+        "price-down": {
+          "0%": { color: "hsl(var(--destructive))", transform: "scale(1.05)" },
+          "100%": { color: "inherit", transform: "scale(1)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "flash-green": "flash-green 0.6s ease-out",
+        "flash-red": "flash-red 0.6s ease-out",
+        "price-up": "price-up 0.5s ease-out",
+        "price-down": "price-down 0.5s ease-out",
       },
     },
   },
