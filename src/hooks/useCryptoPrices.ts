@@ -246,7 +246,7 @@ export const useCryptoPrices = () => {
         wsRef.current.close();
       }
     };
-  }, [prices.length > 0]);
+  }, [prices.length, connectWebSocket]);
 
   const getPriceBySymbol = useCallback((symbol: string): CryptoPrice | undefined => {
     return prices.find((p) => p.symbol.toUpperCase() === symbol.toUpperCase());
