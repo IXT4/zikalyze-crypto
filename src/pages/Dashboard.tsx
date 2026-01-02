@@ -126,7 +126,11 @@ const Dashboard = () => {
           <AIAnalyzer 
             crypto={selectedCrypto} 
             price={selected.price} 
-            change={selected.change} 
+            change={selected.change}
+            high24h={liveData?.high_24h}
+            low24h={liveData?.low_24h}
+            volume={liveData?.total_volume}
+            marketCap={liveData?.market_cap}
           />
 
           {/* Charts Grid */}

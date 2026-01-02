@@ -1,0 +1,4 @@
+project_id = "eqtzrftndyninwasclfd"
+
+[functions.crypto-analyze]
+verify_jwt = false
