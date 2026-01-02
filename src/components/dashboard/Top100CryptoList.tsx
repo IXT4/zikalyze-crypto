@@ -147,9 +147,14 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                     <td className="py-3 text-sm text-muted-foreground">{index + 1}</td>
                     <td className="py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center text-xs font-bold text-foreground shrink-0">
-                          {crypto.symbol.slice(0, 3).toUpperCase()}
-                        </div>
+                        <img 
+                          src={crypto.image} 
+                          alt={crypto.name}
+                          className="w-10 h-10 rounded-full shrink-0"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
                         <div className="min-w-0">
                           <div className="font-medium text-foreground text-sm truncate">{crypto.name}</div>
                           <div className="text-xs text-muted-foreground font-semibold">{crypto.symbol.toUpperCase()}</div>
@@ -210,9 +215,13 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
           
           <div className="space-y-4 py-4">
             <div className="flex items-center gap-3 p-3 bg-secondary rounded-lg">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center text-xs font-bold">
-                {selectedCryptoForAlert?.symbol.slice(0, 3).toUpperCase()}
-              </div>
+              {selectedCryptoForAlert?.image && (
+                <img 
+                  src={selectedCryptoForAlert.image} 
+                  alt={selectedCryptoForAlert.name}
+                  className="w-10 h-10 rounded-full"
+                />
+              )}
               <div>
                 <div className="font-medium">{selectedCryptoForAlert?.name}</div>
                 <div className="text-sm text-muted-foreground">
