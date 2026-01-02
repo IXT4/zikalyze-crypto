@@ -4,6 +4,7 @@ export interface CryptoPrice {
   id: string;
   symbol: string;
   name: string;
+  image: string;
   current_price: number;
   price_change_percentage_24h: number;
   high_24h: number;
@@ -17,6 +18,7 @@ interface CoinGeckoCoin {
   id: string;
   symbol: string;
   name: string;
+  image: string;
   current_price: number;
   price_change_percentage_24h: number;
   high_24h: number;
@@ -76,6 +78,7 @@ export const useCryptoPrices = () => {
         id: coin.id,
         symbol: coin.symbol.toLowerCase(),
         name: coin.name,
+        image: coin.image,
         current_price: coin.current_price || 0,
         price_change_percentage_24h: coin.price_change_percentage_24h || 0,
         high_24h: coin.high_24h || 0,
