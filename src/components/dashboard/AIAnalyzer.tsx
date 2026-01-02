@@ -2,218 +2,154 @@ import { useState, useEffect, useCallback } from "react";
 import { Brain, TrendingUp, TrendingDown, Zap, BarChart3, Target, Activity, Play, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 interface AIAnalyzerProps {
   crypto: string;
   price: number;
   change: number;
+  high24h?: number;
+  low24h?: number;
+  volume?: number;
+  marketCap?: number;
 }
 
-const useTypewriter = (text: string, speed: number = 40) => {
-  const [displayText, setDisplayText] = useState("");
-  const [isComplete, setIsComplete] = useState(false);
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crypto-analyze`;
 
-  useEffect(() => {
-    if (!text) {
-      setDisplayText("");
-      setIsComplete(false);
-      return;
-    }
-    
-    setDisplayText("");
-    setIsComplete(false);
-    let index = 0;
-    
-    const interval = setInterval(() => {
-      if (index < text.length) {
-        setDisplayText(text.slice(0, index + 1));
-        index++;
-      } else {
-        setIsComplete(true);
-        clearInterval(interval);
-      }
-    }, speed);
-
-    return () => clearInterval(interval);
-  }, [text, speed]);
-
-  return { displayText, isComplete };
-};
-
-const generateAnalysis = (crypto: string, price: number, change: number) => {
-  const trend = change >= 0 ? "bullish" : "bearish";
-  const strength = Math.abs(change) > 5 ? "strong" : Math.abs(change) > 2 ? "moderate" : "weak";
-  const rsi = 50 + change * 3;
-  const macdSignal = change >= 0 ? "bullish crossover" : "bearish crossover";
-  const volumeProfile = Math.abs(change) > 3 ? "high" : "moderate";
-  
-  const analyses = {
-    bullish: {
-      strong: `🚀 STRONG BULLISH SIGNAL DETECTED for ${crypto}
-
-📊 Technical Analysis:
-• RSI: ${rsi.toFixed(1)} (Overbought territory - momentum strong)
-• MACD: ${macdSignal} confirmed
-• Volume Profile: ${volumeProfile.toUpperCase()} buying pressure
-
-💰 Smart Money Flow:
-Institutional accumulation detected at $${(price * 0.97).toFixed(2)}. Large wallet addresses increasing holdings by 12.5% in last 24h.
-
-🎯 ICT Analysis:
-• Order Block: Strong support at $${(price * 0.95).toFixed(2)}
-• Fair Value Gap: Filled - continuation likely
-• Liquidity Pool: Cleared below $${(price * 0.93).toFixed(2)}
-
-📈 Price Targets:
-• TP1: $${(price * 1.05).toFixed(2)} (+5%)
-• TP2: $${(price * 1.12).toFixed(2)} (+12%)
-• Stop Loss: $${(price * 0.94).toFixed(2)} (-6%)
-
-⚡ Signal Strength: ${(85 + Math.random() * 10).toFixed(0)}%
-Risk/Reward Ratio: 1:3.2 - FAVORABLE`,
-
-      moderate: `📈 MODERATE BULLISH TREND for ${crypto}
-
-📊 Technical Analysis:
-• RSI: ${rsi.toFixed(1)} (Neutral-Bullish zone)
-• MACD: Positive momentum building
-• Volume: ${volumeProfile} - accumulation phase
-
-💰 Smart Money Indicators:
-Order blocks forming at $${(price * 0.97).toFixed(2)}. Whale activity shows net positive inflow.
-
-🎯 ICT Confluence:
-• Premium/Discount: Trading in discount zone
-• Breaker Block: Bullish confirmation pending
-• Optimal Trade Entry: Near $${(price * 0.985).toFixed(2)}
-
-📈 Price Levels:
-• Resistance: $${(price * 1.04).toFixed(2)}
-• Support: $${(price * 0.96).toFixed(2)}
-
-⚡ Confidence: ${(70 + Math.random() * 15).toFixed(0)}%`,
-
-      weak: `📊 CAUTIOUS BULLISH OUTLOOK for ${crypto}
-
-📊 Technical Overview:
-• RSI: ${rsi.toFixed(1)} (Neutral)
-• Trend: Slight upward bias within range
-• Volume: Below average - consolidation
-
-🔍 Market Structure:
-Price ranging between $${(price * 0.97).toFixed(2)} - $${(price * 1.03).toFixed(2)}. Awaiting breakout confirmation.
-
-💡 Recommendation:
-Wait for clearer signals. Set alerts at key levels.
-
-⚡ Signal Strength: ${(55 + Math.random() * 15).toFixed(0)}%`,
-    },
-    bearish: {
-      strong: `🔴 STRONG BEARISH SIGNAL for ${crypto}
-
-📊 Technical Analysis:
-• RSI: ${rsi.toFixed(1)} (Oversold territory)
-• MACD: ${macdSignal} - strong selling
-• Volume Profile: ${volumeProfile.toUpperCase()} distribution
-
-💰 Smart Money Flow:
-Institutional distribution detected. Large wallets reducing exposure by 8.3% in 24h.
-
-🎯 ICT Analysis:
-• Order Block: Resistance at $${(price * 1.03).toFixed(2)}
-• Fair Value Gap: Created - may act as resistance
-• Liquidity Grab: Executed above $${(price * 1.02).toFixed(2)}
-
-📉 Price Targets:
-• TP1: $${(price * 0.95).toFixed(2)} (-5%)
-• TP2: $${(price * 0.90).toFixed(2)} (-10%)
-• Stop Loss: $${(price * 1.04).toFixed(2)} (+4%)
-
-⚠️ Risk Level: HIGH
-Consider hedging existing positions`,
-
-      moderate: `📉 MODERATE BEARISH PRESSURE on ${crypto}
-
-📊 Technical Analysis:
-• RSI: ${rsi.toFixed(1)} (Approaching oversold)
-• Momentum: Negative but stabilizing
-• Volume: Distribution pattern forming
-
-💰 Smart Money Concepts:
-Liquidity sweep below $${(price * 0.98).toFixed(2)} completed. Watch for potential reversal signals.
-
-🎯 Key Levels:
-• Immediate Resistance: $${(price * 1.02).toFixed(2)}
-• Support Zone: $${(price * 0.95).toFixed(2)} - $${(price * 0.97).toFixed(2)}
-
-📊 Confidence: ${(65 + Math.random() * 15).toFixed(0)}%`,
-
-      weak: `⚠️ SLIGHT BEARISH BIAS for ${crypto}
-
-📊 Overview:
-Minor pullback of ${change.toFixed(2)}% within broader structure. May represent healthy retracement.
-
-🔍 Watch For:
-• Bullish divergence on RSI
-• Volume climax at support
-• Break above $${(price * 1.015).toFixed(2)}
-
-💡 Action: Monitor, don't panic sell
-
-⚡ Signal Strength: ${(50 + Math.random() * 15).toFixed(0)}%`,
-    },
-  };
-
-  return analyses[trend][strength];
-};
-
-const AIAnalyzer = ({ crypto, price, change }: AIAnalyzerProps) => {
+const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap }: AIAnalyzerProps) => {
   const [analysis, setAnalysis] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
 
   const processingSteps = [
-    "Scanning market data...",
+    "Connecting to AI engine...",
+    "Fetching market data...",
     "Analyzing smart money flow...",
     "Processing ICT patterns...",
-    "Calculating entry points...",
-    "Generating report..."
+    "Generating analysis..."
   ];
 
-  const runAnalysis = useCallback(() => {
+  const runAnalysis = useCallback(async () => {
     setIsAnalyzing(true);
     setHasAnalyzed(false);
     setAnalysis("");
     setProcessingStep(0);
 
-    // Simulate step-by-step processing
+    // Simulate step-by-step processing for visual feedback
     const stepInterval = setInterval(() => {
       setProcessingStep(prev => {
         if (prev < processingSteps.length - 1) {
           return prev + 1;
         }
-        clearInterval(stepInterval);
         return prev;
       });
-    }, 600);
+    }, 500);
 
-    // Generate analysis after processing
-    const timeout = setTimeout(() => {
-      const newAnalysis = generateAnalysis(crypto, price, change);
-      setAnalysis(newAnalysis);
-      setIsAnalyzing(false);
+    try {
+      const response = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ 
+          crypto, 
+          price, 
+          change,
+          high24h,
+          low24h,
+          volume,
+          marketCap
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          toast.error("Rate limit exceeded. Please try again later.");
+          throw new Error("Rate limit exceeded");
+        }
+        if (response.status === 402) {
+          toast.error("AI credits exhausted. Please add credits to continue.");
+          throw new Error("Payment required");
+        }
+        throw new Error("Failed to start analysis");
+      }
+
+      if (!response.body) {
+        throw new Error("No response body");
+      }
+
+      clearInterval(stepInterval);
+      setProcessingStep(processingSteps.length - 1);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = "";
+      let fullText = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.startsWith(":") || line.trim() === "") continue;
+          if (!line.startsWith("data: ")) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") break;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              fullText += content;
+              setAnalysis(fullText);
+            }
+          } catch {
+            // Incomplete JSON, put it back
+            textBuffer = line + "\n" + textBuffer;
+            break;
+          }
+        }
+      }
+
+      // Final flush
+      if (textBuffer.trim()) {
+        for (let raw of textBuffer.split("\n")) {
+          if (!raw) continue;
+          if (raw.endsWith("\r")) raw = raw.slice(0, -1);
+          if (raw.startsWith(":") || raw.trim() === "") continue;
+          if (!raw.startsWith("data: ")) continue;
+          const jsonStr = raw.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              fullText += content;
+              setAnalysis(fullText);
+            }
+          } catch { /* ignore */ }
+        }
+      }
+
       setHasAnalyzed(true);
+    } catch (error) {
+      console.error("Analysis error:", error);
+      toast.error("Failed to generate analysis. Please try again.");
+    } finally {
       clearInterval(stepInterval);
-    }, 3000);
-
-    return () => {
-      clearTimeout(timeout);
-      clearInterval(stepInterval);
-    };
-  }, [crypto, price, change]);
-
-  const { displayText, isComplete } = useTypewriter(analysis, 40);
+      setIsAnalyzing(false);
+    }
+  }, [crypto, price, change, high24h, low24h, volume, marketCap]);
 
   const sentiment = change >= 0 ? "bullish" : "bearish";
   const confidence = Math.min(95, 60 + Math.abs(change) * 5);
@@ -248,7 +184,7 @@ const AIAnalyzer = ({ crypto, price, change }: AIAnalyzerProps) => {
             </div>
             <div>
               <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
-              <span className="text-xs text-muted-foreground">Advanced Market Intelligence</span>
+              <span className="text-xs text-muted-foreground">Powered by Real AI Analysis</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -258,7 +194,7 @@ const AIAnalyzer = ({ crypto, price, change }: AIAnalyzerProps) => {
                 isAnalyzing ? "text-warning animate-pulse" : hasAnalyzed ? "text-success" : "text-muted-foreground"
               )} />
               <span className="text-xs text-muted-foreground">
-                {isAnalyzing ? "Processing..." : hasAnalyzed ? "Complete" : "Ready"}
+                {isAnalyzing ? "Analyzing..." : hasAnalyzed ? "Complete" : "Ready"}
               </span>
             </div>
           </div>
@@ -331,8 +267,8 @@ const AIAnalyzer = ({ crypto, price, change }: AIAnalyzerProps) => {
         </div>
 
         {/* Processing Steps or Analysis Output */}
-        <div className="min-h-[200px] p-4 rounded-xl bg-background/50 border border-border/50 overflow-hidden">
-          {!hasAnalyzed && !isAnalyzing ? (
+        <div className="min-h-[200px] max-h-[400px] overflow-y-auto p-4 rounded-xl bg-background/50 border border-border/50">
+          {!hasAnalyzed && !isAnalyzing && !analysis ? (
             <div className="flex flex-col items-center justify-center h-full text-center py-8">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                 <Brain className="h-8 w-8 text-primary" />
@@ -341,10 +277,10 @@ const AIAnalyzer = ({ crypto, price, change }: AIAnalyzerProps) => {
                 Click the button above to run AI analysis
               </p>
               <p className="text-muted-foreground/60 text-xs">
-                Powered by ICT & Smart Money Concepts
+                Powered by Advanced AI • ICT & Smart Money Concepts
               </p>
             </div>
-          ) : isAnalyzing ? (
+          ) : isAnalyzing && !analysis ? (
             <div className="space-y-3">
               {processingSteps.map((step, index) => (
                 <div 
@@ -377,8 +313,8 @@ const AIAnalyzer = ({ crypto, price, change }: AIAnalyzerProps) => {
             </div>
           ) : (
             <div className="whitespace-pre-line text-sm text-foreground leading-relaxed">
-              {displayText}
-              {!isComplete && <span className="animate-pulse text-primary">|</span>}
+              {analysis}
+              {isAnalyzing && <span className="animate-pulse text-primary">▌</span>}
             </div>
           )}
         </div>
