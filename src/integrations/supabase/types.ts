@@ -18,16 +18,19 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          name: string | null
           public_key: string
         }
         Insert: {
           created_at?: string
           id?: string
+          name?: string | null
           public_key: string
         }
         Update: {
           created_at?: string
           id?: string
+          name?: string | null
           public_key?: string
         }
         Relationships: []

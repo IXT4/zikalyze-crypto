@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { TrendingUp, Key, ArrowRight, Loader2, Copy, Check, Shield, RefreshCw } from "lucide-react";
+import { TrendingUp, Key, ArrowRight, Loader2, Copy, Check, Shield, RefreshCw, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { generateKeyPair, derivePublicKey } from "@/lib/crypto-auth";
@@ -10,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const Login = () => {
   const [privateKey, setPrivateKey] = useState("");
+  const [userName, setUserName] = useState("");
   const [generatedKeys, setGeneratedKeys] = useState<{ privateKey: string; publicKey: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -18,15 +20,24 @@ const Login = () => {
   const { toast } = useToast();
 
   const handleGenerateKeys = async () => {
+    if (!userName.trim()) {
+      toast({
+        title: "Name Required",
+        description: "Please enter your name to create a wallet.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     try {
       const keys = await generateKeyPair();
       setGeneratedKeys(keys);
       
-      // Store the public key in the database
+      // Store the public key and name in the database
       const { error } = await supabase
         .from("user_wallets")
-        .insert({ public_key: keys.publicKey });
+        .insert({ public_key: keys.publicKey, name: userName.trim() });
 
       if (error) {
         if (error.code === "23505") {
@@ -88,7 +99,7 @@ const Login = () => {
       // Check if the public key exists in the database
       const { data, error } = await supabase
         .from("user_wallets")
-        .select("id, public_key")
+        .select("id, public_key, name")
         .eq("public_key", derivedPublicKey)
         .single();
 
@@ -106,6 +117,7 @@ const Login = () => {
       localStorage.setItem("wallet_session", JSON.stringify({
         walletId: data.id,
         publicKey: data.public_key,
+        name: data.name,
         authenticatedAt: new Date().toISOString(),
       }));
 
@@ -131,6 +143,7 @@ const Login = () => {
     if (generatedKeys) {
       localStorage.setItem("wallet_session", JSON.stringify({
         publicKey: generatedKeys.publicKey,
+        name: userName.trim(),
         authenticatedAt: new Date().toISOString(),
       }));
       navigate("/dashboard");
@@ -212,23 +225,38 @@ const Login = () => {
               </p>
 
               {!generatedKeys ? (
-                <Button
-                  onClick={handleGenerateKeys}
-                  className="w-full bg-primary hover:bg-primary/90 glow-purple"
-                  disabled={isGenerating}
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Generate Key Pair
-                    </>
-                  )}
-                </Button>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Your Name</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Enter your name..."
+                        value={userName}
+                        onChange={(e) => setUserName(e.target.value)}
+                        className="bg-secondary border-border pl-10"
+                      />
+                    </div>
+                  </div>
+                  
+                  <Button
+                    onClick={handleGenerateKeys}
+                    className="w-full bg-primary hover:bg-primary/90 glow-purple"
+                    disabled={isGenerating || !userName.trim()}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Generate Key Pair
+                      </>
+                    )}
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-4">
                   <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
