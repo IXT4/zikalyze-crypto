@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, User } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import CryptoTicker from "@/components/dashboard/CryptoTicker";
@@ -13,7 +13,16 @@ import { Button } from "@/components/ui/button";
 
 const Dashboard = () => {
   const [selectedCrypto, setSelectedCrypto] = useState("BTC");
+  const [userName, setUserName] = useState<string | null>(null);
   const { prices, loading, getPriceBySymbol } = useCryptoPrices();
+
+  useEffect(() => {
+    const session = localStorage.getItem("wallet_session");
+    if (session) {
+      const parsed = JSON.parse(session);
+      setUserName(parsed.name || null);
+    }
+  }, []);
 
   const cryptoData: Record<string, { name: string; price: number; change: number }> = {
     BTC: { name: "Bitcoin", price: getPriceBySymbol("BTC")?.current_price || 86512, change: getPriceBySymbol("BTC")?.price_change_percentage_24h || -4.87 },
@@ -46,9 +55,16 @@ const Dashboard = () => {
                 className="w-64 bg-secondary border-border pl-10"
               />
             </div>
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <User className="h-5 w-5 text-muted-foreground" />
-            </Button>
+            <div className="flex items-center gap-3">
+              {userName && (
+                <span className="text-sm font-medium text-foreground hidden sm:block">
+                  {userName}
+                </span>
+              )}
+              <Button variant="ghost" size="icon" className="rounded-full bg-secondary">
+                <User className="h-5 w-5 text-muted-foreground" />
+              </Button>
+            </div>
           </div>
         </header>
 
