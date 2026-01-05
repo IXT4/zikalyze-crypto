@@ -50,35 +50,21 @@ serve(async (req) => {
 
     console.log(`Analyzing ${sanitizedCrypto} at $${price} with ${change}% change`);
 
-    const systemPrompt = `You are an expert cryptocurrency trader and market analyst specializing in ICT (Inner Circle Trader) concepts and Smart Money analysis. Your role is to provide accurate, professional market analysis.
+    const systemPrompt = `You are a precise cryptocurrency analyst with 95% prediction accuracy. Provide concise, actionable analysis using ICT (Inner Circle Trader) concepts. Be direct and specific with price levels.`;
 
-Your analysis should include:
-1. Technical Analysis: RSI levels, MACD signals, volume profile assessment
-2. Smart Money Flow: Institutional activity, whale movements, accumulation/distribution patterns
-3. ICT Concepts: Order blocks, fair value gaps, liquidity pools, optimal trade entries
-4. Price Targets: Realistic entry points, take profit levels, and stop loss recommendations
-5. Overall sentiment and confidence level
+    const userPrompt = `Analyze ${sanitizedCrypto}:
+• Price: $${price.toLocaleString()}
+• 24h: ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
+• High/Low: $${high24h?.toLocaleString() || 'N/A'} / $${low24h?.toLocaleString() || 'N/A'}
+• Volume: $${volume?.toLocaleString() || 'N/A'}
+• MCap: $${marketCap?.toLocaleString() || 'N/A'}
 
-Be specific with price levels and percentages. Use emojis for visual clarity. Keep the analysis professional but accessible.`;
-
-    const userPrompt = `Analyze the following cryptocurrency data and provide a comprehensive trading analysis:
-
-Cryptocurrency: ${sanitizedCrypto}
-Current Price: $${price.toLocaleString()}
-24h Change: ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
-24h High: $${high24h?.toLocaleString() || 'N/A'}
-24h Low: $${low24h?.toLocaleString() || 'N/A'}
-24h Volume: $${volume?.toLocaleString() || 'N/A'}
-Market Cap: $${marketCap?.toLocaleString() || 'N/A'}
-
-Provide a detailed analysis covering:
-1. Technical indicators (RSI, MACD, momentum)
-2. Smart money flow and institutional signals
-3. ICT analysis (order blocks, FVGs, liquidity levels)
-4. Entry/exit recommendations with specific price targets
-5. Risk assessment and confidence level
-
-Format the response with clear sections using emojis for headers.`;
+Provide brief analysis (under 200 words):
+📊 TREND: Current direction + strength
+🎯 LEVELS: Key support/resistance
+💡 SIGNAL: Entry recommendation (Long/Short/Hold)
+⚠️ RISK: Stop loss level
+📈 TARGET: Take profit levels`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
