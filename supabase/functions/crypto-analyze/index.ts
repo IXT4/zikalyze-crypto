@@ -11,14 +11,44 @@ serve(async (req) => {
   }
 
   try {
-    const { crypto, price, change, high24h, low24h, volume, marketCap } = await req.json();
+    const body = await req.json();
+    const { crypto, price, change, high24h, low24h, volume, marketCap } = body;
+    
+    // Input validation
+    if (!crypto || typeof crypto !== 'string' || crypto.length > 20) {
+      return new Response(JSON.stringify({ error: 'Invalid cryptocurrency symbol' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    if (typeof price !== 'number' || price < 0 || price > 1e15) {
+      return new Response(JSON.stringify({ error: 'Invalid price value' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    if (typeof change !== 'number' || change < -100 || change > 10000) {
+      return new Response(JSON.stringify({ error: 'Invalid change value' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Sanitize crypto symbol
+    const sanitizedCrypto = crypto.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10);
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+      console.error("LOVABLE_API_KEY is not configured");
+      return new Response(JSON.stringify({ error: 'Analysis service unavailable' }), {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    console.log(`Analyzing ${crypto} at $${price} with ${change}% change`);
+    console.log(`Analyzing ${sanitizedCrypto} at $${price} with ${change}% change`);
 
     const systemPrompt = `You are an expert cryptocurrency trader and market analyst specializing in ICT (Inner Circle Trader) concepts and Smart Money analysis. Your role is to provide accurate, professional market analysis.
 
@@ -33,7 +63,7 @@ Be specific with price levels and percentages. Use emojis for visual clarity. Ke
 
     const userPrompt = `Analyze the following cryptocurrency data and provide a comprehensive trading analysis:
 
-Cryptocurrency: ${crypto}
+Cryptocurrency: ${sanitizedCrypto}
 Current Price: $${price.toLocaleString()}
 24h Change: ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
 24h High: $${high24h?.toLocaleString() || 'N/A'}
@@ -67,21 +97,25 @@ Format the response with clear sections using emojis for headers.`;
     });
 
     if (!response.ok) {
+      console.error("AI gateway error:", response.status);
+      
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+        return new Response(JSON.stringify({ error: "Service busy. Please try again in a moment." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required. Please add credits to continue." }), {
-          status: 402,
+        return new Response(JSON.stringify({ error: "Service temporarily unavailable." }), {
+          status: 503,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error(`AI gateway error: ${response.status}`);
+      
+      return new Response(JSON.stringify({ error: "Analysis unavailable. Please try again later." }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     return new Response(response.body, {
@@ -90,7 +124,7 @@ Format the response with clear sections using emojis for headers.`;
   } catch (error) {
     console.error("Error in crypto-analyze function:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: "Analysis service temporarily unavailable. Please try again later." }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
