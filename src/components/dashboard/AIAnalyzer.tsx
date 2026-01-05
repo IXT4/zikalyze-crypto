@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Brain, Zap, Play, RefreshCw, Activity } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
+  const [copied, setCopied] = useState(false);
   const typewriterRef = useRef<NodeJS.Timeout | null>(null);
   const charIndexRef = useRef(0);
 
@@ -139,6 +140,18 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
 
   const sentiment = change >= 0 ? "bullish" : "bearish";
 
+  const handleCopy = async () => {
+    if (!fullAnalysis) return;
+    try {
+      await navigator.clipboard.writeText(fullAnalysis);
+      setCopied(true);
+      toast.success("Analysis copied to clipboard");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
+
   return (
     <div className="rounded-2xl border border-border bg-card p-6 overflow-hidden relative">
       <div className={cn(
@@ -196,6 +209,17 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         </Button>
 
         {/* Analysis Output */}
+        <div className="relative">
+          {hasAnalyzed && fullAnalysis && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCopy}
+              className="absolute top-2 right-2 z-10 h-8 w-8 bg-secondary/80 hover:bg-secondary"
+            >
+              {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          )}
         <div className="min-h-[180px] max-h-[350px] overflow-y-auto p-4 rounded-xl bg-background/50 border border-border/50">
           {!hasAnalyzed && !isAnalyzing && !displayedText ? (
             <div className="flex flex-col items-center justify-center h-full text-center py-6">
@@ -229,6 +253,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               )}
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>
