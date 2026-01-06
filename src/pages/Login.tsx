@@ -2,28 +2,27 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { TrendingUp, Key, ArrowRight, Loader2, Copy, Check, Shield, RefreshCw, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { generateKeyPair, derivePublicKey } from "@/lib/crypto-auth";
+import { generateAccessKey, isValidAccessKey, formatAccessKey, parseAccessKey } from "@/lib/crypto-auth";
 import { supabase } from "@/integrations/supabase/client";
 
 const Login = () => {
-  const [privateKey, setPrivateKey] = useState("");
+  const [accessKey, setAccessKey] = useState("");
   const [userName, setUserName] = useState("");
-  const [generatedKeys, setGeneratedKeys] = useState<{ privateKey: string; publicKey: string } | null>(null);
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleGenerateKeys = async () => {
+  const handleGenerateKey = async () => {
     if (!userName.trim()) {
       toast({
         title: "Name Required",
-        description: "Please enter your name to create a wallet.",
+        description: "Please enter your name to create an account.",
         variant: "destructive",
       });
       return;
@@ -31,36 +30,46 @@ const Login = () => {
 
     setIsGenerating(true);
     try {
-      const keys = await generateKeyPair();
-      setGeneratedKeys(keys);
+      const key = generateAccessKey();
       
-      // Store the public key and name in the database
-      const { error } = await supabase
+      // Store the access key and name in the database
+      const { data, error } = await supabase
         .from("user_wallets")
-        .insert({ public_key: keys.publicKey, name: userName.trim() });
+        .insert({ public_key: key, name: userName.trim() })
+        .select("id")
+        .single();
 
       if (error) {
         if (error.code === "23505") {
           toast({
-            title: "Key already exists",
-            description: "This key pair has already been registered. Please generate a new one.",
+            title: "Key collision",
+            description: "Please try again to generate a new key.",
             variant: "destructive",
           });
-          setGeneratedKeys(null);
         } else {
           throw error;
         }
       } else {
+        setGeneratedKey(key);
+        
+        // Auto-login after creating account
+        localStorage.setItem("wallet_session", JSON.stringify({
+          walletId: data.id,
+          publicKey: key,
+          name: userName.trim(),
+          authenticatedAt: new Date().toISOString(),
+        }));
+        
         toast({
-          title: "Wallet Created!",
-          description: "Save your private key securely. You'll need it to recover your account.",
+          title: "Account Created!",
+          description: "Save your access key securely. You'll need it to recover your account.",
         });
       }
     } catch (error) {
       console.error("Key generation error:", error);
       toast({
-        title: "Generation Failed",
-        description: "Failed to generate keys. Please try again.",
+        title: "Creation Failed",
+        description: "Failed to create account. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -69,12 +78,12 @@ const Login = () => {
   };
 
   const handleCopyKey = async () => {
-    if (generatedKeys?.privateKey) {
-      await navigator.clipboard.writeText(generatedKeys.privateKey);
+    if (generatedKey) {
+      await navigator.clipboard.writeText(formatAccessKey(generatedKey));
       setCopied(true);
       toast({
-        title: "Private Key Copied",
-        description: "Store it somewhere safe. Never share it with anyone!",
+        title: "Access Key Copied",
+        description: "Store it somewhere safe. You'll need it to recover your account!",
       });
       setTimeout(() => setCopied(false), 2000);
     }
@@ -82,10 +91,12 @@ const Login = () => {
 
   const handleRecoverAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!privateKey.trim()) {
+    const cleanKey = parseAccessKey(accessKey);
+    
+    if (!isValidAccessKey(cleanKey)) {
       toast({
-        title: "Private Key Required",
-        description: "Please enter your private key to recover your account.",
+        title: "Invalid Access Key",
+        description: "Access key must be 11 alphanumeric characters.",
         variant: "destructive",
       });
       return;
@@ -93,20 +104,17 @@ const Login = () => {
 
     setIsLoading(true);
     try {
-      // Derive the public key from the private key
-      const derivedPublicKey = await derivePublicKey(privateKey.trim());
-      
-      // Check if the public key exists in the database
+      // Check if the access key exists in the database
       const { data, error } = await supabase
         .from("user_wallets")
         .select("id, public_key, name")
-        .eq("public_key", derivedPublicKey)
+        .eq("public_key", cleanKey)
         .single();
 
       if (error || !data) {
         toast({
           title: "Account Not Found",
-          description: "No account found with this private key. Please check your key or create a new wallet.",
+          description: "No account found with this access key. Please check your key or create a new account.",
           variant: "destructive",
         });
         setIsLoading(false);
@@ -130,8 +138,8 @@ const Login = () => {
     } catch (error) {
       console.error("Recovery error:", error);
       toast({
-        title: "Invalid Private Key",
-        description: "The private key format is invalid. Please check and try again.",
+        title: "Recovery Failed",
+        description: "Something went wrong. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -140,14 +148,12 @@ const Login = () => {
   };
 
   const handleContinueToApp = () => {
-    if (generatedKeys) {
-      localStorage.setItem("wallet_session", JSON.stringify({
-        publicKey: generatedKeys.publicKey,
-        name: userName.trim(),
-        authenticatedAt: new Date().toISOString(),
-      }));
-      navigate("/dashboard");
-    }
+    navigate("/dashboard");
+  };
+
+  const handleAccessKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    setAccessKey(value);
   };
 
   return (
@@ -165,36 +171,40 @@ const Login = () => {
         <div className="rounded-2xl border border-border bg-card p-8">
           <div className="mb-6 flex items-center justify-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            <span className="text-sm text-muted-foreground">Decentralized Authentication</span>
+            <span className="text-sm text-muted-foreground">Secure Access</span>
           </div>
 
           <Tabs defaultValue="recover" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="recover">Recover Account</TabsTrigger>
-              <TabsTrigger value="generate">Create Wallet</TabsTrigger>
+              <TabsTrigger value="recover">Login</TabsTrigger>
+              <TabsTrigger value="generate">Sign Up</TabsTrigger>
             </TabsList>
 
             <TabsContent value="recover" className="space-y-4">
               <h1 className="text-center text-xl font-bold text-foreground">
-                Recover Your Account
+                Login to Your Account
               </h1>
               <p className="text-center text-sm text-muted-foreground mb-4">
-                Enter your private key to access your account
+                Enter your 11-character access key
               </p>
 
               <form onSubmit={handleRecoverAccount} className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Private Key</label>
+                  <label className="text-sm font-medium text-foreground">Access Key</label>
                   <div className="relative">
-                    <Key className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Textarea
-                      placeholder="Enter your private key..."
-                      value={privateKey}
-                      onChange={(e) => setPrivateKey(e.target.value)}
-                      className="min-h-[100px] bg-secondary border-border pl-10 font-mono text-xs"
+                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="XXX-XXXX-XXXX"
+                      value={accessKey}
+                      onChange={handleAccessKeyChange}
+                      className="bg-secondary border-border pl-10 font-mono text-lg tracking-wider uppercase"
+                      maxLength={13}
                       required
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Example: ABC-1234-XY56
+                  </p>
                 </div>
 
                 <Button
@@ -205,11 +215,11 @@ const Login = () => {
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Recovering...
+                      Logging in...
                     </>
                   ) : (
                     <>
-                      Recover Account <ArrowRight className="ml-2 h-4 w-4" />
+                      Login <ArrowRight className="ml-2 h-4 w-4" />
                     </>
                   )}
                 </Button>
@@ -218,13 +228,13 @@ const Login = () => {
 
             <TabsContent value="generate" className="space-y-4">
               <h1 className="text-center text-xl font-bold text-foreground">
-                Create New Wallet
+                Create New Account
               </h1>
               <p className="text-center text-sm text-muted-foreground mb-4">
-                Generate a secure key pair for your account
+                Generate your unique access key
               </p>
 
-              {!generatedKeys ? (
+              {!generatedKey ? (
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-foreground">Your Name</label>
@@ -240,19 +250,19 @@ const Login = () => {
                   </div>
                   
                   <Button
-                    onClick={handleGenerateKeys}
+                    onClick={handleGenerateKey}
                     className="w-full bg-primary hover:bg-primary/90 glow-purple"
                     disabled={isGenerating || !userName.trim()}
                   >
                     {isGenerating ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Generating...
+                        Creating...
                       </>
                     ) : (
                       <>
                         <RefreshCw className="mr-2 h-4 w-4" />
-                        Generate Key Pair
+                        Create Account
                       </>
                     )}
                   </Button>
@@ -261,29 +271,29 @@ const Login = () => {
                 <div className="space-y-4">
                   <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
                     <p className="text-xs text-destructive font-medium mb-2">
-                      ⚠️ IMPORTANT: Save your private key now!
+                      ⚠️ IMPORTANT: Save your access key now!
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      This is the only way to recover your account. Store it securely and never share it.
+                      This is the only way to recover your account. Store it securely.
                     </p>
                   </div>
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-foreground flex items-center gap-2">
                       <Key className="h-4 w-4 text-primary" />
-                      Your Private Key
+                      Your Access Key
                     </label>
                     <div className="relative">
-                      <Textarea
-                        value={generatedKeys.privateKey}
+                      <Input
+                        value={formatAccessKey(generatedKey)}
                         readOnly
-                        className="min-h-[80px] bg-secondary border-border font-mono text-xs pr-12"
+                        className="bg-secondary border-border font-mono text-xl tracking-widest text-center pr-12"
                       />
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="absolute right-2 top-2"
+                        className="absolute right-2 top-1/2 -translate-y-1/2"
                         onClick={handleCopyKey}
                       >
                         {copied ? (
@@ -304,10 +314,10 @@ const Login = () => {
 
                   <Button
                     variant="outline"
-                    onClick={() => setGeneratedKeys(null)}
+                    onClick={() => setGeneratedKey(null)}
                     className="w-full"
                   >
-                    Generate New Keys
+                    Generate New Key
                   </Button>
                 </div>
               )}
@@ -316,9 +326,9 @@ const Login = () => {
 
           <div className="mt-6 text-center">
             <p className="text-xs text-muted-foreground">
-              Your keys are generated locally and never transmitted.
+              Your access key is your login credential.
               <br />
-              Only your public key is stored on our servers.
+              Keep it safe and never share it with anyone.
             </p>
           </div>
         </div>
