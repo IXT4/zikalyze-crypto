@@ -295,18 +295,19 @@ const parseWebSocketMessage = (exchange: Exchange, data: any): { price: number; 
         }
         break;
       case "mexc":
-        // Kline/candlestick data
-        if (data.d?.k) {
-          const k = data.d.k;
-          return { price: parseFloat(k.c), volume: parseFloat(k.v || "0"), time: new Date(k.t) };
+        // New MEXC kline format: publicspotkline with closingprice, volume, etc.
+        if (data.publicspotkline) {
+          const k = data.publicspotkline;
+          return { 
+            price: parseFloat(k.closingprice), 
+            volume: parseFloat(k.volume || "0"), 
+            time: new Date(data.createtime || Date.now())
+          };
         }
-        // Deals/trades data
+        // Deals/trades data fallback
         if (data.d?.deals?.[0]) {
           const d = data.d.deals[0];
           return { price: parseFloat(d.p), volume: parseFloat(d.v || "0"), time: new Date(d.t) };
-        }
-        if (data.d?.p) {
-          return { price: parseFloat(data.d.p), volume: parseFloat(data.d.v || "0"), time: new Date() };
         }
         break;
       case "gateio":
@@ -405,12 +406,12 @@ export const useRealtimeChartData = (symbol: string) => {
           subscribeMessage = JSON.stringify({ op: "subscribe", args: [`tickers.${exchangeSymbol}`] });
           break;
         case "mexc":
-          wsUrl = "wss://wbs.mexc.com/ws";
-          subscribeMessage = JSON.stringify({ method: "SUBSCRIPTION", params: [`spot@public.deals.v3.api@${exchangeSymbol}`] });
+          wsUrl = "wss://wbs-api.mexc.com/ws";
+          subscribeMessage = JSON.stringify({ method: "SUBSCRIPTION", params: [`spot@public.kline.v3.api.pb@${exchangeSymbol}@Min1`] });
           break;
         case "gateio":
           wsUrl = "wss://api.gateio.ws/ws/v4/";
-          subscribeMessage = JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: "spot.tickers", event: "subscribe", payload: [exchangeSymbol] });
+          subscribeMessage = JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: "spot.candlesticks", event: "subscribe", payload: ["1m", exchangeSymbol] });
           break;
         case "coinbase":
           wsUrl = "wss://ws-feed.exchange.coinbase.com";
@@ -493,8 +494,8 @@ export const useRealtimeChartData = (symbol: string) => {
 
         switch (exchange) {
           case "mexc":
-            wsUrl = "wss://wbs.mexc.com/ws";
-            subscribeMessage = JSON.stringify({ method: "SUBSCRIPTION", params: [`spot@public.kline.v3.api@${exchangeSymbol}@Min1`] });
+            wsUrl = "wss://wbs-api.mexc.com/ws";
+            subscribeMessage = JSON.stringify({ method: "SUBSCRIPTION", params: [`spot@public.kline.v3.api.pb@${exchangeSymbol}@Min1`] });
             break;
           case "gateio":
             wsUrl = "wss://api.gateio.ws/ws/v4/";
