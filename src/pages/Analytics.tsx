@@ -135,7 +135,7 @@ const Analytics = () => {
 
           <div className="grid gap-6 lg:grid-cols-2">
             <PredictiveChart />
-            <VolumeChart crypto="BTC" coinGeckoId="bitcoin" />
+            <VolumeChart crypto="BTC" />
           </div>
 
           {/* Top Gainers & Losers */}
