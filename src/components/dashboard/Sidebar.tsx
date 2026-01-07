@@ -8,6 +8,7 @@ import {
   Settings,
   Search,
   LogOut,
+  BellRing,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +16,7 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: BarChart3, label: "Analytics", path: "/dashboard/analytics" },
   { icon: Brain, label: "AI Analyzer", path: "/dashboard/analyzer" },
+  { icon: BellRing, label: "Alerts", path: "/dashboard/alerts" },
   { icon: Wallet, label: "Portfolio", path: "/dashboard/portfolio" },
   { icon: Settings, label: "Settings", path: "/dashboard/settings" },
 ];
