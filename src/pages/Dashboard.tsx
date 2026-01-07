@@ -7,6 +7,9 @@ import VolumeChart from "@/components/dashboard/VolumeChart";
 import AIMetrics from "@/components/dashboard/AIMetrics";
 import AIAnalyzer from "@/components/dashboard/AIAnalyzer";
 import Top100CryptoList from "@/components/dashboard/Top100CryptoList";
+import CandlestickChart from "@/components/dashboard/CandlestickChart";
+import AnalyticsChart from "@/components/dashboard/AnalyticsChart";
+import PredictiveChart from "@/components/dashboard/PredictiveChart";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -164,8 +167,13 @@ const Dashboard = () => {
                 volume={liveData?.total_volume}
                 marketCap={liveData?.market_cap}
               />
+              <AnalyticsChart />
+              <PredictiveChart />
             </div>
           </div>
+
+          {/* Candlestick Chart */}
+          <CandlestickChart crypto={selectedCrypto} />
 
           {/* Top 100 Crypto List */}
           <Top100CryptoList selected={selectedCrypto} onSelect={setSelectedCrypto} />
