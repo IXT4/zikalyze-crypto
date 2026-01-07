@@ -5,6 +5,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Format number for display (Deno-compatible)
+function formatNumber(num: number | undefined | null): string {
+  if (num === undefined || num === null || isNaN(num)) return 'N/A';
+  if (num >= 1e12) return `${(num / 1e12).toFixed(2)}T`;
+  if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
+  if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
+  if (num >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
+  if (num < 0.01 && num > 0) return num.toFixed(6);
+  return num.toFixed(2);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -48,12 +59,18 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Analyzing ${sanitizedCrypto} at $${price} with ${change}% change`);
+    console.log(`Analyzing ${sanitizedCrypto} at $${formatNumber(price)} with ${change.toFixed(2)}% change`);
 
     // Calculate key metrics for analysis
-    const volatility = high24h && low24h ? ((high24h - low24h) / low24h * 100).toFixed(2) : 'N/A';
-    const rangePosition = high24h && low24h ? ((price - low24h) / (high24h - low24h) * 100).toFixed(1) : 'N/A';
-    const volumeToMcap = volume && marketCap ? ((volume / marketCap) * 100).toFixed(3) : 'N/A';
+    const volatility = high24h && low24h && low24h > 0 
+      ? ((high24h - low24h) / low24h * 100).toFixed(2) 
+      : 'N/A';
+    const rangePosition = high24h && low24h && (high24h - low24h) > 0 
+      ? ((price - low24h) / (high24h - low24h) * 100).toFixed(1) 
+      : 'N/A';
+    const volumeToMcap = volume && marketCap && marketCap > 0 
+      ? ((volume / marketCap) * 100).toFixed(3) 
+      : 'N/A';
 
     const systemPrompt = `You are ZIKALYZE AI — an elite crypto analyst. Deliver clear, actionable signals using multi-timeframe analysis.
 
@@ -68,11 +85,15 @@ Be CONCISE. Use simple language. Every signal must have: Entry, Stop Loss, Take 
     const userPrompt = `📊 ${sanitizedCrypto} ANALYSIS
 
 CURRENT DATA:
-• Price: $${price.toLocaleString()}
-• 24h: ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
-• High/Low: $${high24h?.toLocaleString() || 'N/A'} / $${low24h?.toLocaleString() || 'N/A'}
-• Volume: $${volume?.toLocaleString() || 'N/A'}
-• Volatility: ${volatility}% | Position in range: ${rangePosition}%
+• Price: $${formatNumber(price)}
+• 24h Change: ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
+• 24h High: $${formatNumber(high24h)}
+• 24h Low: $${formatNumber(low24h)}
+• Volume: $${formatNumber(volume)}
+• Market Cap: $${formatNumber(marketCap)}
+• Volatility: ${volatility}%
+• Position in range: ${rangePosition}%
+• Volume/MCap: ${volumeToMcap}%
 
 Give analysis in this EXACT format (max 250 words):
 
