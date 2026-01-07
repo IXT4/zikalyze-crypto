@@ -605,7 +605,21 @@ export const useRealtimeChartData = (symbol: string) => {
     };
 
     const loadData = async () => {
-      // REST-based exchanges first
+      // Priority 1: Try MEXC WebSocket first (broadest crypto coverage)
+      const mexcSymbol = getExchangeSymbol(symbol, "mexc");
+      if (mexcSymbol && mountedRef.current) {
+        const success = await tryWebSocketConnection("mexc", mexcSymbol);
+        if (success) return;
+      }
+
+      // Priority 2: Try Gate.io WebSocket (also broad coverage)
+      const gateioSymbol = getExchangeSymbol(symbol, "gateio");
+      if (gateioSymbol && mountedRef.current) {
+        const success = await tryWebSocketConnection("gateio", gateioSymbol);
+        if (success) return;
+      }
+
+      // Priority 3: REST-based exchanges as fallback
       const restExchanges: Exchange[] = ["binance", "okx", "bybit", "coinbase", "kraken"];
 
       for (const exchange of restExchanges) {
@@ -634,19 +648,6 @@ export const useRealtimeChartData = (symbol: string) => {
           connectWebSocket(exchange, exchangeSymbol);
           return;
         }
-      }
-
-      // Try WebSocket-only exchanges (MEXC, Gate.io) as fallback
-      const wsOnlyExchanges: Exchange[] = ["mexc", "gateio"];
-      for (const exchange of wsOnlyExchanges) {
-        if (!mountedRef.current) return;
-        
-        const exchangeSymbol = getExchangeSymbol(symbol, exchange);
-        if (!exchangeSymbol) continue;
-
-        // Try connecting via WebSocket directly - success will be determined by receiving data
-        const success = await tryWebSocketConnection(exchange, exchangeSymbol);
-        if (success) return;
       }
 
       if (mountedRef.current) {
