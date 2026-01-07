@@ -153,7 +153,7 @@ const Dashboard = () => {
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-6">
               <PriceChart crypto={selectedCrypto} />
-              <VolumeChart />
+              <VolumeChart crypto={selectedCrypto} />
             </div>
             <div className="space-y-6">
               <AIMetrics 
