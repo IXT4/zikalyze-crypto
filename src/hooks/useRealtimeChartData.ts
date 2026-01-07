@@ -135,13 +135,19 @@ const setCacheData = (symbol: string, data: ChartDataPoint[], priceChange: numbe
   dataCache.set(symbol.toUpperCase(), { data, priceChange, timestamp: Date.now(), exchange });
 };
 
-// Get exchange symbol
+// Get exchange symbol - try mapping first, then fallback to direct symbol for Binance
 const getExchangeSymbol = (sym: string, exchange: Exchange): string | null => {
   const upperSym = sym.toUpperCase();
   switch (exchange) {
-    case "binance": return BINANCE_SYMBOL_MAP[upperSym] || null;
-    case "coinbase": return COINBASE_SYMBOL_MAP[upperSym] || null;
-    case "kraken": return KRAKEN_SYMBOL_MAP[upperSym] || null;
+    case "binance": 
+      // Try mapping first, then fallback to direct symbol
+      return BINANCE_SYMBOL_MAP[upperSym] || upperSym;
+    case "coinbase": 
+      // Try mapping first, then construct standard format
+      return COINBASE_SYMBOL_MAP[upperSym] || `${upperSym}-USD`;
+    case "kraken": 
+      // Try mapping first, then construct standard format
+      return KRAKEN_SYMBOL_MAP[upperSym] || `${upperSym}/USD`;
     default: return null;
   }
 };
