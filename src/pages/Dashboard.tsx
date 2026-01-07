@@ -152,8 +152,8 @@ const Dashboard = () => {
           {/* Charts Grid */}
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-6">
-              <PriceChart crypto={selectedCrypto} />
-              <VolumeChart crypto={selectedCrypto} />
+              <PriceChart crypto={selectedCrypto} coinGeckoId={liveData?.id} />
+              <VolumeChart crypto={selectedCrypto} coinGeckoId={liveData?.id} />
             </div>
             <div className="space-y-6">
               <AIMetrics 
