@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      price_alerts: {
+        Row: {
+          condition: string
+          created_at: string
+          current_price_at_creation: number
+          id: string
+          is_triggered: boolean
+          name: string
+          symbol: string
+          target_price: number
+          triggered_at: string | null
+          user_wallet_id: string | null
+        }
+        Insert: {
+          condition: string
+          created_at?: string
+          current_price_at_creation: number
+          id?: string
+          is_triggered?: boolean
+          name: string
+          symbol: string
+          target_price: number
+          triggered_at?: string | null
+          user_wallet_id?: string | null
+        }
+        Update: {
+          condition?: string
+          created_at?: string
+          current_price_at_creation?: number
+          id?: string
+          is_triggered?: boolean
+          name?: string
+          symbol?: string
+          target_price?: number
+          triggered_at?: string | null
+          user_wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_alerts_user_wallet_id_fkey"
+            columns: ["user_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "user_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_wallets: {
         Row: {
           created_at: string
