@@ -8,7 +8,7 @@ export interface ChartDataPoint {
 }
 
 // Supported live exchanges in priority order
-type Exchange = "binance" | "okx" | "bybit" | "coinbase" | "kraken";
+type Exchange = "binance" | "okx" | "bybit" | "mexc" | "gateio" | "coinbase" | "kraken";
 
 const COINBASE_SYMBOL_MAP: Record<string, string> = {
   BTC: "BTC-USD", ETH: "ETH-USD", SOL: "SOL-USD", XRP: "XRP-USD", DOGE: "DOGE-USD",
@@ -151,6 +151,10 @@ const getExchangeSymbol = (sym: string, exchange: Exchange): string | null => {
       return `${normalized}-USDT`;
     case "bybit":
       return `${normalized}USDT`;
+    case "mexc":
+      return `${normalized}USDT`;
+    case "gateio":
+      return `${normalized}_USDT`;
     case "coinbase": 
       return COINBASE_SYMBOL_MAP[upperSym] || COINBASE_SYMBOL_MAP[normalized] || `${normalized}-USD`;
     case "kraken": 
@@ -224,6 +228,46 @@ const fetchBybitData = async (symbol: string, bybitSymbol: string): Promise<Char
   } catch { recordFailure(backoffKey); return null; }
 };
 
+const fetchMexcData = async (symbol: string, mexcSymbol: string): Promise<ChartDataPoint[] | null> => {
+  const backoffKey = getBackoffKey(symbol, "mexc");
+  if (!canRetry(backoffKey)) return null;
+  try {
+    const response = await fetchWithTimeout(
+      `https://api.mexc.com/api/v3/klines?symbol=${mexcSymbol}&interval=1m&limit=20`
+    );
+    if (!response.ok) { recordFailure(backoffKey); return null; }
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) { recordFailure(backoffKey); return null; }
+    recordSuccess(backoffKey);
+    return data.map((kline: any[]) => ({
+      time: formatTime(new Date(kline[6])),
+      price: parseFloat(kline[4]),
+      volume: parseFloat(kline[5]),
+      positive: parseFloat(kline[4]) >= parseFloat(kline[1]),
+    }));
+  } catch { recordFailure(backoffKey); return null; }
+};
+
+const fetchGateioData = async (symbol: string, gateioSymbol: string): Promise<ChartDataPoint[] | null> => {
+  const backoffKey = getBackoffKey(symbol, "gateio");
+  if (!canRetry(backoffKey)) return null;
+  try {
+    const response = await fetchWithTimeout(
+      `https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${gateioSymbol}&interval=1m&limit=20`
+    );
+    if (!response.ok) { recordFailure(backoffKey); return null; }
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) { recordFailure(backoffKey); return null; }
+    recordSuccess(backoffKey);
+    return data.map((candle: string[]) => ({
+      time: formatTime(new Date(parseInt(candle[0]) * 1000)),
+      price: parseFloat(candle[2]),
+      volume: parseFloat(candle[1]),
+      positive: parseFloat(candle[2]) >= parseFloat(candle[5]),
+    }));
+  } catch { recordFailure(backoffKey); return null; }
+};
+
 const fetchCoinbaseData = async (symbol: string, coinbaseSymbol: string): Promise<ChartDataPoint[] | null> => {
   const backoffKey = getBackoffKey(symbol, "coinbase");
   if (!canRetry(backoffKey)) return null;
@@ -285,6 +329,23 @@ const parseWebSocketMessage = (exchange: Exchange, data: any): { price: number; 
         if (data.data) {
           const d = data.data;
           return { price: parseFloat(d.lastPrice), volume: parseFloat(d.volume24h || "0"), time: new Date(parseInt(d.ts)) };
+        }
+        break;
+      case "mexc":
+        if (data.d?.deals?.[0]) {
+          const d = data.d.deals[0];
+          return { price: parseFloat(d.p), volume: parseFloat(d.v || "0"), time: new Date(d.t) };
+        }
+        if (data.d?.p) {
+          return { price: parseFloat(data.d.p), volume: parseFloat(data.d.v || "0"), time: new Date() };
+        }
+        break;
+      case "gateio":
+        if (data.result?.last) {
+          return { price: parseFloat(data.result.last), volume: parseFloat(data.result.base_volume || "0"), time: new Date() };
+        }
+        if (data.channel === "spot.tickers" && data.result) {
+          return { price: parseFloat(data.result.last), volume: parseFloat(data.result.base_volume || "0"), time: new Date(parseInt(data.time) * 1000) };
         }
         break;
       case "coinbase":
@@ -368,6 +429,14 @@ export const useRealtimeChartData = (symbol: string) => {
           wsUrl = "wss://stream.bybit.com/v5/public/spot";
           subscribeMessage = JSON.stringify({ op: "subscribe", args: [`tickers.${exchangeSymbol}`] });
           break;
+        case "mexc":
+          wsUrl = "wss://wbs.mexc.com/ws";
+          subscribeMessage = JSON.stringify({ method: "SUBSCRIPTION", params: [`spot@public.deals.v3.api@${exchangeSymbol}`] });
+          break;
+        case "gateio":
+          wsUrl = "wss://api.gateio.ws/ws/v4/";
+          subscribeMessage = JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: "spot.tickers", event: "subscribe", payload: [exchangeSymbol] });
+          break;
         case "coinbase":
           wsUrl = "wss://ws-feed.exchange.coinbase.com";
           subscribeMessage = JSON.stringify({ type: "subscribe", product_ids: [exchangeSymbol], channels: ["ticker"] });
@@ -440,7 +509,7 @@ export const useRealtimeChartData = (symbol: string) => {
     };
 
     const loadData = async () => {
-      const exchanges: Exchange[] = ["binance", "okx", "bybit", "coinbase", "kraken"];
+      const exchanges: Exchange[] = ["binance", "okx", "bybit", "mexc", "gateio", "coinbase", "kraken"];
 
       for (const exchange of exchanges) {
         if (!mountedRef.current) return;
@@ -454,6 +523,8 @@ export const useRealtimeChartData = (symbol: string) => {
           case "binance": data = await fetchBinanceData(symbol, exchangeSymbol); break;
           case "okx": data = await fetchOkxData(symbol, exchangeSymbol); break;
           case "bybit": data = await fetchBybitData(symbol, exchangeSymbol); break;
+          case "mexc": data = await fetchMexcData(symbol, exchangeSymbol); break;
+          case "gateio": data = await fetchGateioData(symbol, exchangeSymbol); break;
           case "coinbase": data = await fetchCoinbaseData(symbol, exchangeSymbol); break;
           case "kraken": data = await fetchKrakenData(symbol, exchangeSymbol); break;
         }
