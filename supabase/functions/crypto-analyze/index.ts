@@ -63,13 +63,20 @@ serve(async (req) => {
 • On-chain Analytics: Whale movements, exchange flows, funding rates implications
 • Market Psychology: Fear/greed dynamics, retail vs institutional behavior
 
+MULTI-TIMEFRAME MASTERY (MTF):
+• DAILY: Establish macro bias, identify major S/R zones, HTF order blocks, weekly liquidity pools
+• 4H: Key level modifications, intermediate structure, swing points, institutional accumulation/distribution zones
+• 1H: Confirmation signals, BOS/CHoCH validation, session highs/lows, liquidity sweeps confirmation
+• 15M: Precision entries, micro order blocks, fair value gap fills, optimal trade execution
+
 Your analysis is PRECISE, ACTIONABLE, and PROFITABLE. You identify exactly where smart money is positioned and where retail gets trapped. Every price level you give has a specific reason. You think like a market maker hunting liquidity.
 
 Rules:
+- ALWAYS analyze from higher timeframe down to lower (Daily → 4H → 1H → 15M)
 - Be extremely specific with price levels (exact numbers, not ranges)
 - Identify the current market phase (accumulation, markup, distribution, markdown)
 - Spot liquidity pools where stops are clustered
-- Call out order blocks and fair value gaps
+- Call out order blocks and fair value gaps with their timeframe origin
 - Provide risk/reward ratios for every trade
 - Never be vague — precision is everything`;
 
@@ -88,29 +95,38 @@ Rules:
 │ Vol/MCap Ratio: ${volumeToMcap}%
 └────────────────────────────────────
 
-Deliver your ELITE analysis (under 250 words, be DIRECT):
+Deliver your ELITE MTF analysis (under 300 words, be DIRECT):
 
-🏛️ MARKET STRUCTURE
-Current phase + bias (bullish/bearish/ranging) with key structural levels
+📅 DAILY TIMEFRAME (Macro Bias)
+• Overall trend direction + major S/R zones
+• HTF order blocks + weekly liquidity pools
+• Key psychological levels
 
-💰 SMART MONEY ZONES
-• Order blocks (OB) with exact prices
-• Fair value gaps (FVG) to watch
-• Liquidity pools where stops are clustered
+⏰ 4H TIMEFRAME (Structure)
+• Intermediate trend + swing structure
+• 4H order blocks + FVGs
+• Institutional accumulation/distribution zones
 
-🎯 TRADE SETUP
-• SIGNAL: LONG / SHORT / WAIT (be decisive)
-• Entry Zone: Exact price range
-• Stop Loss: Precise level + reasoning
-• Take Profit 1: Conservative target
-• Take Profit 2: Extended target
+🕐 1H TIMEFRAME (Confirmation)
+• BOS/CHoCH signals + session analysis
+• 1H OBs for confirmation
+• Liquidity sweep confirmation
+
+⚡ 15M TIMEFRAME (Entry)
+• Micro order blocks for precision entry
+• FVG fills + entry triggers
+• Exact entry price with tight stops
+
+🎯 UNIFIED TRADE SETUP
+• SIGNAL: LONG / SHORT / WAIT (decisive)
+• HTF Bias: (Daily direction)
+• Entry Zone: (15M precision level)
+• Stop Loss: (Below/above which structure?)
+• TP1: (1H target) | TP2: (4H target) | TP3: (Daily target)
 • Risk/Reward: Calculate it
 
-⚡ CATALYST & TIMING
-Key levels that trigger moves + optimal entry timing
-
-⚠️ RISK ASSESSMENT
-What would invalidate this setup + position sizing recommendation (% of portfolio)`;
+⚠️ INVALIDATION
+What breaks the setup across each timeframe + position size recommendation`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
