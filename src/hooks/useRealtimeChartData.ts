@@ -8,7 +8,7 @@ export interface ChartDataPoint {
 }
 
 // Supported live exchanges in priority order
-type Exchange = "binance" | "coinbase" | "kraken";
+type Exchange = "binance" | "okx" | "bybit" | "coinbase" | "kraken";
 
 const COINBASE_SYMBOL_MAP: Record<string, string> = {
   BTC: "BTC-USD", ETH: "ETH-USD", SOL: "SOL-USD", XRP: "XRP-USD", DOGE: "DOGE-USD",
@@ -73,6 +73,11 @@ const BINANCE_SYMBOL_MAP: Record<string, string> = {
   STRK: "STRK", DYM: "DYM", ALT: "ALT", PIXEL: "PIXEL", ORDI: "ORDI", TON: "TON",
 };
 
+// Normalize symbol - remove underscores, special chars
+const normalizeSymbol = (sym: string): string => {
+  return sym.toUpperCase().replace(/[_\-\/]/g, "").replace(/USD[TC]?$/i, "");
+};
+
 const formatTime = (date: Date): string => {
   return date.toLocaleTimeString("en-US", {
     hour: "2-digit",
@@ -135,19 +140,21 @@ const setCacheData = (symbol: string, data: ChartDataPoint[], priceChange: numbe
   dataCache.set(symbol.toUpperCase(), { data, priceChange, timestamp: Date.now(), exchange });
 };
 
-// Get exchange symbol - try mapping first, then fallback to direct symbol for Binance
+// Get exchange symbol - try mapping first, then fallback to normalized symbol
 const getExchangeSymbol = (sym: string, exchange: Exchange): string | null => {
   const upperSym = sym.toUpperCase();
+  const normalized = normalizeSymbol(sym);
   switch (exchange) {
     case "binance": 
-      // Try mapping first, then fallback to direct symbol
-      return BINANCE_SYMBOL_MAP[upperSym] || upperSym;
+      return BINANCE_SYMBOL_MAP[upperSym] || BINANCE_SYMBOL_MAP[normalized] || normalized;
+    case "okx":
+      return `${normalized}-USDT`;
+    case "bybit":
+      return `${normalized}USDT`;
     case "coinbase": 
-      // Try mapping first, then construct standard format
-      return COINBASE_SYMBOL_MAP[upperSym] || `${upperSym}-USD`;
+      return COINBASE_SYMBOL_MAP[upperSym] || COINBASE_SYMBOL_MAP[normalized] || `${normalized}-USD`;
     case "kraken": 
-      // Try mapping first, then construct standard format
-      return KRAKEN_SYMBOL_MAP[upperSym] || `${upperSym}/USD`;
+      return KRAKEN_SYMBOL_MAP[upperSym] || KRAKEN_SYMBOL_MAP[normalized] || `${normalized}/USD`;
     default: return null;
   }
 };
@@ -169,6 +176,50 @@ const fetchBinanceData = async (symbol: string, binanceSymbol: string): Promise<
       price: parseFloat(kline[4]),
       volume: parseFloat(kline[5]),
       positive: parseFloat(kline[4]) >= parseFloat(kline[1]),
+    }));
+  } catch { recordFailure(backoffKey); return null; }
+};
+
+const fetchOkxData = async (symbol: string, okxSymbol: string): Promise<ChartDataPoint[] | null> => {
+  const backoffKey = getBackoffKey(symbol, "okx");
+  if (!canRetry(backoffKey)) return null;
+  try {
+    const response = await fetchWithTimeout(
+      `https://www.okx.com/api/v5/market/candles?instId=${okxSymbol}&bar=1m&limit=20`
+    );
+    if (!response.ok) { recordFailure(backoffKey); return null; }
+    const data = await response.json();
+    if (data.code !== "0" || !Array.isArray(data.data) || data.data.length === 0) { 
+      recordFailure(backoffKey); return null; 
+    }
+    recordSuccess(backoffKey);
+    return data.data.reverse().map((candle: string[]) => ({
+      time: formatTime(new Date(parseInt(candle[0]))),
+      price: parseFloat(candle[4]),
+      volume: parseFloat(candle[5]),
+      positive: parseFloat(candle[4]) >= parseFloat(candle[1]),
+    }));
+  } catch { recordFailure(backoffKey); return null; }
+};
+
+const fetchBybitData = async (symbol: string, bybitSymbol: string): Promise<ChartDataPoint[] | null> => {
+  const backoffKey = getBackoffKey(symbol, "bybit");
+  if (!canRetry(backoffKey)) return null;
+  try {
+    const response = await fetchWithTimeout(
+      `https://api.bybit.com/v5/market/kline?category=spot&symbol=${bybitSymbol}&interval=1&limit=20`
+    );
+    if (!response.ok) { recordFailure(backoffKey); return null; }
+    const data = await response.json();
+    if (data.retCode !== 0 || !data.result?.list || data.result.list.length === 0) { 
+      recordFailure(backoffKey); return null; 
+    }
+    recordSuccess(backoffKey);
+    return data.result.list.reverse().map((candle: string[]) => ({
+      time: formatTime(new Date(parseInt(candle[0]))),
+      price: parseFloat(candle[4]),
+      volume: parseFloat(candle[5]),
+      positive: parseFloat(candle[4]) >= parseFloat(candle[1]),
     }));
   } catch { recordFailure(backoffKey); return null; }
 };
@@ -223,6 +274,18 @@ const parseWebSocketMessage = (exchange: Exchange, data: any): { price: number; 
     switch (exchange) {
       case "binance":
         if (data.k) return { price: parseFloat(data.k.c), volume: parseFloat(data.k.v), time: new Date(data.k.T) };
+        break;
+      case "okx":
+        if (data.data?.[0]) {
+          const d = data.data[0];
+          return { price: parseFloat(d.last || d.c), volume: parseFloat(d.vol24h || d.v || "0"), time: new Date(parseInt(d.ts)) };
+        }
+        break;
+      case "bybit":
+        if (data.data) {
+          const d = data.data;
+          return { price: parseFloat(d.lastPrice), volume: parseFloat(d.volume24h || "0"), time: new Date(parseInt(d.ts)) };
+        }
         break;
       case "coinbase":
         if (data.type === "ticker" && data.price)
@@ -297,6 +360,14 @@ export const useRealtimeChartData = (symbol: string) => {
         case "binance":
           wsUrl = `wss://stream.binance.com:9443/ws/${exchangeSymbol.toLowerCase()}usdt@kline_1m`;
           break;
+        case "okx":
+          wsUrl = "wss://ws.okx.com:8443/ws/v5/public";
+          subscribeMessage = JSON.stringify({ op: "subscribe", args: [{ channel: "tickers", instId: exchangeSymbol }] });
+          break;
+        case "bybit":
+          wsUrl = "wss://stream.bybit.com/v5/public/spot";
+          subscribeMessage = JSON.stringify({ op: "subscribe", args: [`tickers.${exchangeSymbol}`] });
+          break;
         case "coinbase":
           wsUrl = "wss://ws-feed.exchange.coinbase.com";
           subscribeMessage = JSON.stringify({ type: "subscribe", product_ids: [exchangeSymbol], channels: ["ticker"] });
@@ -369,7 +440,7 @@ export const useRealtimeChartData = (symbol: string) => {
     };
 
     const loadData = async () => {
-      const exchanges: Exchange[] = ["binance", "coinbase", "kraken"];
+      const exchanges: Exchange[] = ["binance", "okx", "bybit", "coinbase", "kraken"];
 
       for (const exchange of exchanges) {
         if (!mountedRef.current) return;
@@ -381,6 +452,8 @@ export const useRealtimeChartData = (symbol: string) => {
 
         switch (exchange) {
           case "binance": data = await fetchBinanceData(symbol, exchangeSymbol); break;
+          case "okx": data = await fetchOkxData(symbol, exchangeSymbol); break;
+          case "bybit": data = await fetchBybitData(symbol, exchangeSymbol); break;
           case "coinbase": data = await fetchCoinbaseData(symbol, exchangeSymbol); break;
           case "kraken": data = await fetchKrakenData(symbol, exchangeSymbol); break;
         }
