@@ -7,6 +7,97 @@ export interface ChartDataPoint {
   positive: boolean;
 }
 
+// Map symbols to CoinGecko IDs for fallback
+const COINGECKO_ID_MAP: Record<string, string> = {
+  BTC: "bitcoin",
+  ETH: "ethereum",
+  SOL: "solana",
+  XRP: "ripple",
+  DOGE: "dogecoin",
+  BNB: "binancecoin",
+  ADA: "cardano",
+  AVAX: "avalanche-2",
+  DOT: "polkadot",
+  MATIC: "matic-network",
+  LINK: "chainlink",
+  UNI: "uniswap",
+  ATOM: "cosmos",
+  LTC: "litecoin",
+  BCH: "bitcoin-cash",
+  NEAR: "near",
+  APT: "aptos",
+  FIL: "filecoin",
+  ARB: "arbitrum",
+  OP: "optimism",
+  INJ: "injective-protocol",
+  SUI: "sui",
+  TIA: "celestia",
+  SEI: "sei-network",
+  PEPE: "pepe",
+  SHIB: "shiba-inu",
+  WIF: "dogwifcoin",
+  BONK: "bonk",
+  FLOKI: "floki",
+  RENDER: "render-token",
+  FET: "fetch-ai",
+  AAVE: "aave",
+  MKR: "maker",
+  GRT: "the-graph",
+  IMX: "immutable-x",
+  STX: "blockstack",
+  RUNE: "thorchain",
+  SAND: "the-sandbox",
+  MANA: "decentraland",
+  AXS: "axie-infinity",
+  GALA: "gala",
+  APE: "apecoin",
+  CRV: "curve-dao-token",
+  SNX: "synthetix-network-token",
+  COMP: "compound-governance-token",
+  LDO: "lido-dao",
+  ENS: "ethereum-name-service",
+  ALGO: "algorand",
+  XLM: "stellar",
+  VET: "vechain",
+  ICP: "internet-computer",
+  HBAR: "hedera-hashgraph",
+  ETC: "ethereum-classic",
+  FTM: "fantom",
+  TRX: "tron",
+  XMR: "monero",
+  EOS: "eos",
+  THETA: "theta-token",
+  XTZ: "tezos",
+  NEO: "neo",
+  KAVA: "kava",
+  ZEC: "zcash",
+  DASH: "dash",
+  EGLD: "elrond-erd-2",
+  FLOW: "flow",
+  MINA: "mina-protocol",
+  ROSE: "oasis-network",
+  ONE: "harmony",
+  ZIL: "zilliqa",
+  ENJ: "enjincoin",
+  CHZ: "chiliz",
+  BAT: "basic-attention-token",
+  CAKE: "pancakeswap-token",
+  SUSHI: "sushi",
+  YFI: "yearn-finance",
+  STETH: "staked-ether",
+  WBTC: "wrapped-bitcoin",
+  TON: "the-open-network",
+  LEO: "leo-token",
+  OKB: "okb",
+  KCS: "kucoin-shares",
+  CRO: "crypto-com-chain",
+  TUSD: "true-usd",
+  USDD: "usdd",
+  USDC: "usd-coin",
+  BUSD: "binance-usd",
+  DAI: "dai",
+};
+
 // Map CoinGecko symbols to Binance symbols
 const BINANCE_SYMBOL_MAP: Record<string, string> = {
   BTC: "BTC",
@@ -107,15 +198,17 @@ const formatTime = (date: Date): string => {
   });
 };
 
-export const useRealtimeChartData = (symbol: string) => {
+export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [priceChange, setPriceChange] = useState(0);
   const [isSupported, setIsSupported] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<"binance" | "coingecko" | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const lastPriceRef = useRef<number | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const isConnectedRef = useRef(false);
+  const refreshIntervalRef = useRef<number | null>(null);
 
   // Get Binance-compatible symbol
   const getBinanceSymbol = useCallback((sym: string): string | null => {
@@ -129,6 +222,66 @@ export const useRealtimeChartData = (symbol: string) => {
       return upperSym;
     }
     return null;
+  }, []);
+
+  // Get CoinGecko ID for fallback
+  const getCoinGeckoId = useCallback((sym: string): string | null => {
+    if (coinGeckoId) return coinGeckoId;
+    const upperSym = sym.toUpperCase();
+    return COINGECKO_ID_MAP[upperSym] || null;
+  }, [coinGeckoId]);
+
+  // Fetch data from CoinGecko as fallback
+  const fetchCoinGeckoData = useCallback(async (cgId: string): Promise<boolean> => {
+    try {
+      // Get 1 day of data with 5-minute intervals (closest to 1m available in free tier)
+      const response = await fetch(
+        `https://api.coingecko.com/api/v3/coins/${cgId}/market_chart?vs_currency=usd&days=1`
+      );
+      
+      if (!response.ok) {
+        return false;
+      }
+      
+      const data = await response.json();
+      
+      if (!data.prices || data.prices.length === 0) {
+        return false;
+      }
+
+      // Take the last 20 data points
+      const recentPrices = data.prices.slice(-20);
+      const recentVolumes = data.total_volumes?.slice(-20) || [];
+      
+      const historicalData: ChartDataPoint[] = recentPrices.map((pricePoint: [number, number], index: number) => {
+        const [timestamp, price] = pricePoint;
+        const prevPrice = index > 0 ? recentPrices[index - 1][1] : price;
+        const volume = recentVolumes[index]?.[1] || 0;
+        
+        return {
+          time: formatTime(new Date(timestamp)),
+          price: price,
+          volume: volume,
+          positive: price >= prevPrice,
+        };
+      });
+      
+      if (historicalData.length > 0) {
+        lastPriceRef.current = historicalData[0].price;
+        const latestPrice = historicalData[historicalData.length - 1].price;
+        const change = ((latestPrice - historicalData[0].price) / historicalData[0].price) * 100;
+        setPriceChange(change);
+      }
+      
+      setChartData(historicalData);
+      setIsSupported(true);
+      setDataSource("coingecko");
+      setError(null);
+      return true;
+    } catch (error) {
+      console.error("Failed to fetch CoinGecko data:", error);
+      return false;
+    }
   }, []);
 
   const connectWebSocket = useCallback((binanceSymbol: string) => {
@@ -206,12 +359,14 @@ export const useRealtimeChartData = (symbol: string) => {
       ws.onclose = () => {
         isConnectedRef.current = false;
         
-        // Only reconnect if still supported
-        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = window.setTimeout(() => {
-          const binSym = getBinanceSymbol(symbol);
-          if (binSym) connectWebSocket(binSym);
-        }, 5000);
+        // Only reconnect if using Binance source
+        if (dataSource === "binance" && reconnectTimeoutRef.current === null) {
+          reconnectTimeoutRef.current = window.setTimeout(() => {
+            reconnectTimeoutRef.current = null;
+            const binSym = getBinanceSymbol(symbol);
+            if (binSym) connectWebSocket(binSym);
+          }, 5000);
+        }
       };
       
       wsRef.current = ws;
@@ -219,31 +374,23 @@ export const useRealtimeChartData = (symbol: string) => {
       console.error("Failed to create WebSocket:", error);
       setError("Failed to connect");
     }
-  }, [symbol, getBinanceSymbol]);
+  }, [symbol, getBinanceSymbol, dataSource]);
 
-  // Fetch initial historical data
-  const fetchHistoricalData = useCallback(async (binanceSymbol: string) => {
+  // Fetch initial historical data from Binance
+  const fetchBinanceData = useCallback(async (binanceSymbol: string): Promise<boolean> => {
     try {
       const response = await fetch(
         `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}USDT&interval=1m&limit=20`
       );
       
       if (!response.ok) {
-        if (response.status === 400) {
-          // Symbol not found on Binance
-          setIsSupported(false);
-          setError("Not available on Binance");
-          return false;
-        }
-        throw new Error("Failed to fetch historical data");
+        return false;
       }
       
       const data = await response.json();
       
       // Check if we got valid data
       if (!Array.isArray(data) || data.length === 0) {
-        setIsSupported(false);
-        setError("No data available");
         return false;
       }
       
@@ -270,15 +417,26 @@ export const useRealtimeChartData = (symbol: string) => {
       
       setChartData(historicalData);
       setIsSupported(true);
+      setDataSource("binance");
       setError(null);
       return true;
     } catch (error) {
-      console.error("Failed to fetch historical data:", error);
-      setIsSupported(false);
-      setError("Failed to load data");
+      console.error("Failed to fetch Binance data:", error);
       return false;
     }
   }, []);
+
+  // Setup periodic refresh for CoinGecko data (since no WebSocket)
+  const setupCoinGeckoRefresh = useCallback((cgId: string) => {
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+    }
+    
+    // Refresh every 60 seconds (CoinGecko rate limits)
+    refreshIntervalRef.current = window.setInterval(() => {
+      fetchCoinGeckoData(cgId);
+    }, 60000);
+  }, [fetchCoinGeckoData]);
 
   useEffect(() => {
     // Reset state when symbol changes
@@ -287,42 +445,68 @@ export const useRealtimeChartData = (symbol: string) => {
     setPriceChange(0);
     setIsSupported(true);
     setError(null);
+    setDataSource(null);
     isConnectedRef.current = false;
     
-    // Close existing connection
+    // Close existing connections and intervals
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
     }
     
-    // Get Binance-compatible symbol
-    const binanceSymbol = getBinanceSymbol(symbol);
-    
-    if (!binanceSymbol) {
-      setIsSupported(false);
-      setError("Symbol not supported");
-      return;
-    }
-    
-    // Fetch historical data first, then connect WebSocket
-    fetchHistoricalData(binanceSymbol).then((success) => {
-      if (success) {
-        connectWebSocket(binanceSymbol);
+    const loadData = async () => {
+      // Try Binance first
+      const binanceSymbol = getBinanceSymbol(symbol);
+      
+      if (binanceSymbol) {
+        const binanceSuccess = await fetchBinanceData(binanceSymbol);
+        if (binanceSuccess) {
+          connectWebSocket(binanceSymbol);
+          return;
+        }
       }
-    });
+      
+      // Fallback to CoinGecko
+      const cgId = getCoinGeckoId(symbol);
+      if (cgId) {
+        const cgSuccess = await fetchCoinGeckoData(cgId);
+        if (cgSuccess) {
+          setupCoinGeckoRefresh(cgId);
+          return;
+        }
+      }
+      
+      // Neither worked
+      setIsSupported(false);
+      setError("Data not available for this asset");
+    };
+    
+    loadData();
     
     return () => {
       isConnectedRef.current = false;
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
       }
     };
-  }, [symbol, fetchHistoricalData, connectWebSocket, getBinanceSymbol]);
+  }, [symbol, fetchBinanceData, fetchCoinGeckoData, connectWebSocket, getBinanceSymbol, getCoinGeckoId, setupCoinGeckoRefresh]);
 
-  return { chartData, priceChange, isSupported, error };
+  return { chartData, priceChange, isSupported, error, dataSource };
 };
