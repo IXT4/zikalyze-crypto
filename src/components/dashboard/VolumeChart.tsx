@@ -4,10 +4,11 @@ import { AlertCircle } from "lucide-react";
 
 interface VolumeChartProps {
   crypto: string;
+  coinGeckoId?: string;
 }
 
-const VolumeChart = ({ crypto }: VolumeChartProps) => {
-  const { chartData, isSupported, error, dataSource } = useRealtimeChartData(crypto);
+const VolumeChart = ({ crypto, coinGeckoId }: VolumeChartProps) => {
+  const { chartData, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
 
   // Format volume for display (convert to K, M, B)
   const formatVolume = (value: number) => {

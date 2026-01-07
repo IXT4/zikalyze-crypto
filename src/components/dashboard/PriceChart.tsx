@@ -5,10 +5,11 @@ import { AlertCircle } from "lucide-react";
 
 interface PriceChartProps {
   crypto: string;
+  coinGeckoId?: string;
 }
 
-const PriceChart = ({ crypto }: PriceChartProps) => {
-  const { chartData, priceChange, isSupported, error, dataSource } = useRealtimeChartData(crypto);
+const PriceChart = ({ crypto, coinGeckoId }: PriceChartProps) => {
+  const { chartData, priceChange, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
   
   const isPositive = priceChange >= 0;
   const strokeColor = isPositive ? "hsl(142, 76%, 46%)" : "hsl(0, 84%, 60%)";
