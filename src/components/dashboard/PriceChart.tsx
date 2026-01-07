@@ -8,7 +8,7 @@ interface PriceChartProps {
 }
 
 const PriceChart = ({ crypto }: PriceChartProps) => {
-  const { chartData, priceChange, isSupported, error } = useRealtimeChartData(crypto);
+  const { chartData, priceChange, isSupported, error, dataSource } = useRealtimeChartData(crypto);
   
   const isPositive = priceChange >= 0;
   const strokeColor = isPositive ? "hsl(142, 76%, 46%)" : "hsl(0, 84%, 60%)";
@@ -95,7 +95,14 @@ const PriceChart = ({ crypto }: PriceChartProps) => {
   return (
     <div className="rounded-2xl border border-border bg-card p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-foreground">Price Chart</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-foreground">Price Chart</h3>
+          {dataSource === "coingecko" && (
+            <span className="rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-medium text-warning">
+              Delayed
+            </span>
+          )}
+        </div>
         {isSupported && chartData.length > 0 && (
           <span className={cn(
             "rounded-lg px-2 py-1 text-xs font-medium",

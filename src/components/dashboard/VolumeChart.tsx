@@ -7,7 +7,7 @@ interface VolumeChartProps {
 }
 
 const VolumeChart = ({ crypto }: VolumeChartProps) => {
-  const { chartData, isSupported, error } = useRealtimeChartData(crypto);
+  const { chartData, isSupported, error, dataSource } = useRealtimeChartData(crypto);
 
   // Format volume for display (convert to K, M, B)
   const formatVolume = (value: number) => {
@@ -77,7 +77,14 @@ const VolumeChart = ({ crypto }: VolumeChartProps) => {
 
   return (
     <div className="rounded-2xl border border-border bg-card p-6">
-      <h3 className="mb-4 text-lg font-semibold text-foreground">Volume</h3>
+      <div className="mb-4 flex items-center gap-2">
+        <h3 className="text-lg font-semibold text-foreground">Volume</h3>
+        {dataSource === "coingecko" && (
+          <span className="rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-medium text-warning">
+            Delayed
+          </span>
+        )}
+      </div>
       <div className="h-32">
         {renderContent()}
       </div>
