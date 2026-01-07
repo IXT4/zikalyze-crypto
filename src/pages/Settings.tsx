@@ -1,28 +1,21 @@
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/dashboard/Sidebar";
-import { Search, User, Bell, Shield, Palette, Globe, Moon, Sun, Save } from "lucide-react";
+import { Search, User, Bell, Shield, Palette, Globe, Moon, Sun, Save, Volume2, VolumeX } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
+import { useSettings } from "@/hooks/useSettings";
+import { alertSound } from "@/lib/alertSound";
 
 const Settings = () => {
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const { settings, saveSettings, toggleSetting } = useSettings();
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
-  
-  // Settings state
-  const [settings, setSettings] = useState({
-    notifications: true,
-    emailAlerts: true,
-    priceAlerts: true,
-    language: "English",
-    currency: "USD",
-    twoFactorAuth: false,
-  });
 
   // Avoid hydration mismatch
   useEffect(() => {
@@ -33,6 +26,14 @@ const Settings = () => {
 
   const handleThemeToggle = (checked: boolean) => {
     setTheme(checked ? "dark" : "light");
+  };
+
+  const handleSoundToggle = (checked: boolean) => {
+    saveSettings({ soundEnabled: checked });
+    if (checked) {
+      // Play test sound when enabling
+      alertSound.playTestSound();
+    }
   };
 
   const tabs = [
@@ -109,7 +110,7 @@ const Settings = () => {
                         </div>
                         <select 
                           value={settings.language}
-                          onChange={(e) => setSettings({...settings, language: e.target.value})}
+                          onChange={(e) => saveSettings({ language: e.target.value })}
                           className="bg-background border border-border rounded-lg px-3 py-2 text-foreground"
                         >
                           <option>English</option>
@@ -126,7 +127,7 @@ const Settings = () => {
                         </div>
                         <select 
                           value={settings.currency}
-                          onChange={(e) => setSettings({...settings, currency: e.target.value})}
+                          onChange={(e) => saveSettings({ currency: e.target.value })}
                           className="bg-background border border-border rounded-lg px-3 py-2 text-foreground"
                         >
                           <option>USD</option>
@@ -146,24 +147,31 @@ const Settings = () => {
                   
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
+                      <div className="flex items-center gap-3">
+                        {settings.soundEnabled ? (
+                          <Volume2 className="h-5 w-5 text-primary" />
+                        ) : (
+                          <VolumeX className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        <div>
+                          <div className="font-medium text-foreground">Alert Sounds</div>
+                          <div className="text-sm text-muted-foreground">Play sound when price alerts trigger</div>
+                        </div>
+                      </div>
+                      <Switch 
+                        checked={settings.soundEnabled}
+                        onCheckedChange={handleSoundToggle}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
                       <div>
                         <div className="font-medium text-foreground">Push Notifications</div>
                         <div className="text-sm text-muted-foreground">Receive push notifications for updates</div>
                       </div>
                       <Switch 
                         checked={settings.notifications}
-                        onCheckedChange={(checked) => setSettings({...settings, notifications: checked})}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
-                      <div>
-                        <div className="font-medium text-foreground">Email Alerts</div>
-                        <div className="text-sm text-muted-foreground">Receive email notifications</div>
-                      </div>
-                      <Switch 
-                        checked={settings.emailAlerts}
-                        onCheckedChange={(checked) => setSettings({...settings, emailAlerts: checked})}
+                        onCheckedChange={(checked) => saveSettings({ notifications: checked })}
                       />
                     </div>
 
@@ -174,7 +182,7 @@ const Settings = () => {
                       </div>
                       <Switch 
                         checked={settings.priceAlerts}
-                        onCheckedChange={(checked) => setSettings({...settings, priceAlerts: checked})}
+                        onCheckedChange={(checked) => saveSettings({ priceAlerts: checked })}
                       />
                     </div>
                   </div>
@@ -225,7 +233,7 @@ const Settings = () => {
                       </div>
                       <Switch 
                         checked={settings.twoFactorAuth}
-                        onCheckedChange={(checked) => setSettings({...settings, twoFactorAuth: checked})}
+                        onCheckedChange={(checked) => saveSettings({ twoFactorAuth: checked })}
                       />
                     </div>
 
