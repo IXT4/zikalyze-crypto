@@ -7,6 +7,9 @@ export interface ChartDataPoint {
   positive: boolean;
 }
 
+// Supported exchanges in priority order
+type Exchange = "binance" | "coinbase" | "kraken" | "coingecko";
+
 // Map symbols to CoinGecko IDs for fallback
 const COINGECKO_ID_MAP: Record<string, string> = {
   BTC: "bitcoin",
@@ -98,96 +101,127 @@ const COINGECKO_ID_MAP: Record<string, string> = {
   DAI: "dai",
 };
 
-// Map CoinGecko symbols to Binance symbols
+// Coinbase symbol mapping (uses different format: BTC-USD)
+const COINBASE_SYMBOL_MAP: Record<string, string> = {
+  BTC: "BTC-USD",
+  ETH: "ETH-USD",
+  SOL: "SOL-USD",
+  XRP: "XRP-USD",
+  DOGE: "DOGE-USD",
+  ADA: "ADA-USD",
+  AVAX: "AVAX-USD",
+  DOT: "DOT-USD",
+  MATIC: "MATIC-USD",
+  LINK: "LINK-USD",
+  UNI: "UNI-USD",
+  ATOM: "ATOM-USD",
+  LTC: "LTC-USD",
+  BCH: "BCH-USD",
+  NEAR: "NEAR-USD",
+  APT: "APT-USD",
+  FIL: "FIL-USD",
+  ARB: "ARB-USD",
+  OP: "OP-USD",
+  INJ: "INJ-USD",
+  SUI: "SUI-USD",
+  SHIB: "SHIB-USD",
+  AAVE: "AAVE-USD",
+  MKR: "MKR-USD",
+  GRT: "GRT-USD",
+  IMX: "IMX-USD",
+  SAND: "SAND-USD",
+  MANA: "MANA-USD",
+  AXS: "AXS-USD",
+  GALA: "GALA-USD",
+  APE: "APE-USD",
+  CRV: "CRV-USD",
+  SNX: "SNX-USD",
+  COMP: "COMP-USD",
+  LDO: "LDO-USD",
+  ENS: "ENS-USD",
+  ALGO: "ALGO-USD",
+  XLM: "XLM-USD",
+  ICP: "ICP-USD",
+  HBAR: "HBAR-USD",
+  ETC: "ETC-USD",
+  EOS: "EOS-USD",
+  XTZ: "XTZ-USD",
+  ZEC: "ZEC-USD",
+  DASH: "DASH-USD",
+  FLOW: "FLOW-USD",
+  ENJ: "ENJ-USD",
+  CHZ: "CHZ-USD",
+  BAT: "BAT-USD",
+  SUSHI: "SUSHI-USD",
+  YFI: "YFI-USD",
+};
+
+// Kraken symbol mapping (uses different format: XBT for BTC)
+const KRAKEN_SYMBOL_MAP: Record<string, string> = {
+  BTC: "XBT/USD",
+  ETH: "ETH/USD",
+  SOL: "SOL/USD",
+  XRP: "XRP/USD",
+  DOGE: "DOGE/USD",
+  ADA: "ADA/USD",
+  AVAX: "AVAX/USD",
+  DOT: "DOT/USD",
+  MATIC: "MATIC/USD",
+  LINK: "LINK/USD",
+  UNI: "UNI/USD",
+  ATOM: "ATOM/USD",
+  LTC: "LTC/USD",
+  BCH: "BCH/USD",
+  NEAR: "NEAR/USD",
+  APT: "APT/USD",
+  FIL: "FIL/USD",
+  SHIB: "SHIB/USD",
+  AAVE: "AAVE/USD",
+  MKR: "MKR/USD",
+  GRT: "GRT/USD",
+  SAND: "SAND/USD",
+  MANA: "MANA/USD",
+  AXS: "AXS/USD",
+  GALA: "GALA/USD",
+  APE: "APE/USD",
+  CRV: "CRV/USD",
+  SNX: "SNX/USD",
+  COMP: "COMP/USD",
+  LDO: "LDO/USD",
+  ENS: "ENS/USD",
+  ALGO: "ALGO/USD",
+  XLM: "XLM/USD",
+  ETC: "ETC/USD",
+  EOS: "EOS/USD",
+  XTZ: "XTZ/USD",
+  ZEC: "ZEC/USD",
+  DASH: "DASH/USD",
+  FLOW: "FLOW/USD",
+  ENJ: "ENJ/USD",
+  BAT: "BAT/USD",
+  SUSHI: "SUSHI/USD",
+  YFI: "YFI/USD",
+  TRX: "TRX/USD",
+  XMR: "XMR/USD",
+};
+
+// Binance symbol mapping
 const BINANCE_SYMBOL_MAP: Record<string, string> = {
-  BTC: "BTC",
-  ETH: "ETH",
-  SOL: "SOL",
-  XRP: "XRP",
-  DOGE: "DOGE",
-  BNB: "BNB",
-  ADA: "ADA",
-  AVAX: "AVAX",
-  DOT: "DOT",
-  MATIC: "MATIC",
-  LINK: "LINK",
-  UNI: "UNI",
-  ATOM: "ATOM",
-  LTC: "LTC",
-  BCH: "BCH",
-  NEAR: "NEAR",
-  APT: "APT",
-  FIL: "FIL",
-  ARB: "ARB",
-  OP: "OP",
-  INJ: "INJ",
-  SUI: "SUI",
-  TIA: "TIA",
-  SEI: "SEI",
-  PEPE: "PEPE",
-  SHIB: "SHIB",
-  WIF: "WIF",
-  BONK: "BONK",
-  FLOKI: "FLOKI",
-  RENDER: "RENDER",
-  FET: "FET",
-  AAVE: "AAVE",
-  MKR: "MKR",
-  GRT: "GRT",
-  IMX: "IMX",
-  STX: "STX",
-  RUNE: "RUNE",
-  SAND: "SAND",
-  MANA: "MANA",
-  AXS: "AXS",
-  GALA: "GALA",
-  APE: "APE",
-  CRV: "CRV",
-  SNX: "SNX",
-  COMP: "COMP",
-  LDO: "LDO",
-  ENS: "ENS",
-  ALGO: "ALGO",
-  XLM: "XLM",
-  VET: "VET",
-  ICP: "ICP",
-  HBAR: "HBAR",
-  ETC: "ETC",
-  FTM: "FTM",
-  TRX: "TRX",
-  XMR: "XMR",
-  EOS: "EOS",
-  THETA: "THETA",
-  XTZ: "XTZ",
-  NEO: "NEO",
-  KAVA: "KAVA",
-  ZEC: "ZEC",
-  DASH: "DASH",
-  EGLD: "EGLD",
-  FLOW: "FLOW",
-  MINA: "MINA",
-  ROSE: "ROSE",
-  ONE: "ONE",
-  ZIL: "ZIL",
-  ENJ: "ENJ",
-  CHZ: "CHZ",
-  BAT: "BAT",
-  CAKE: "CAKE",
-  SUSHI: "SUSHI",
-  YFI: "YFI",
-  DYDX: "DYDX",
-  GMT: "GMT",
-  BLUR: "BLUR",
-  MASK: "MASK",
-  WLD: "WLD",
-  JTO: "JTO",
-  PYTH: "PYTH",
-  JUP: "JUP",
-  STRK: "STRK",
-  DYM: "DYM",
-  ALT: "ALT",
-  PIXEL: "PIXEL",
-  ORDI: "ORDI",
+  BTC: "BTC", ETH: "ETH", SOL: "SOL", XRP: "XRP", DOGE: "DOGE", BNB: "BNB",
+  ADA: "ADA", AVAX: "AVAX", DOT: "DOT", MATIC: "MATIC", LINK: "LINK", UNI: "UNI",
+  ATOM: "ATOM", LTC: "LTC", BCH: "BCH", NEAR: "NEAR", APT: "APT", FIL: "FIL",
+  ARB: "ARB", OP: "OP", INJ: "INJ", SUI: "SUI", TIA: "TIA", SEI: "SEI",
+  PEPE: "PEPE", SHIB: "SHIB", WIF: "WIF", BONK: "BONK", FLOKI: "FLOKI",
+  RENDER: "RENDER", FET: "FET", AAVE: "AAVE", MKR: "MKR", GRT: "GRT", IMX: "IMX",
+  STX: "STX", RUNE: "RUNE", SAND: "SAND", MANA: "MANA", AXS: "AXS", GALA: "GALA",
+  APE: "APE", CRV: "CRV", SNX: "SNX", COMP: "COMP", LDO: "LDO", ENS: "ENS",
+  ALGO: "ALGO", XLM: "XLM", VET: "VET", ICP: "ICP", HBAR: "HBAR", ETC: "ETC",
+  FTM: "FTM", TRX: "TRX", XMR: "XMR", EOS: "EOS", THETA: "THETA", XTZ: "XTZ",
+  NEO: "NEO", KAVA: "KAVA", ZEC: "ZEC", DASH: "DASH", EGLD: "EGLD", FLOW: "FLOW",
+  MINA: "MINA", ROSE: "ROSE", ONE: "ONE", ZIL: "ZIL", ENJ: "ENJ", CHZ: "CHZ",
+  BAT: "BAT", CAKE: "CAKE", SUSHI: "SUSHI", YFI: "YFI", DYDX: "DYDX", GMT: "GMT",
+  BLUR: "BLUR", MASK: "MASK", WLD: "WLD", JTO: "JTO", PYTH: "PYTH", JUP: "JUP",
+  STRK: "STRK", DYM: "DYM", ALT: "ALT", PIXEL: "PIXEL", ORDI: "ORDI",
 };
 
 const formatTime = (date: Date): string => {
@@ -198,10 +232,9 @@ const formatTime = (date: Date): string => {
   });
 };
 
-const fetchWithTimeout = async (url: string, timeoutMs = 12000) => {
+const fetchWithTimeout = async (url: string, timeoutMs = 10000) => {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-
   try {
     return await fetch(url, { signal: controller.signal });
   } finally {
@@ -209,57 +242,57 @@ const fetchWithTimeout = async (url: string, timeoutMs = 12000) => {
   }
 };
 
-// CoinGecko cache with 5-minute TTL
+// Cache with TTL
 interface CacheEntry {
   data: ChartDataPoint[];
   priceChange: number;
   timestamp: number;
+  exchange: Exchange;
 }
 
-const coinGeckoCache = new Map<string, CacheEntry>();
+const dataCache = new Map<string, CacheEntry>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-// Exponential backoff state per coin
+// Backoff state per exchange per coin
 const backoffState = new Map<string, { attempts: number; nextRetry: number }>();
-const BASE_BACKOFF = 5000; // 5 seconds
-const MAX_BACKOFF = 5 * 60 * 1000; // 5 minutes max
+const BASE_BACKOFF = 3000;
+const MAX_BACKOFF = 2 * 60 * 1000;
+
+const getBackoffKey = (symbol: string, exchange: Exchange) => `${symbol}-${exchange}`;
 
 const getBackoffDelay = (attempts: number): number => {
   return Math.min(BASE_BACKOFF * Math.pow(2, attempts), MAX_BACKOFF);
 };
 
-const canRetry = (cgId: string): boolean => {
-  const state = backoffState.get(cgId);
+const canRetry = (key: string): boolean => {
+  const state = backoffState.get(key);
   if (!state) return true;
   return Date.now() >= state.nextRetry;
 };
 
-const recordFailure = (cgId: string) => {
-  const state = backoffState.get(cgId) || { attempts: 0, nextRetry: 0 };
+const recordFailure = (key: string) => {
+  const state = backoffState.get(key) || { attempts: 0, nextRetry: 0 };
   state.attempts += 1;
   state.nextRetry = Date.now() + getBackoffDelay(state.attempts);
-  backoffState.set(cgId, state);
+  backoffState.set(key, state);
 };
 
-const recordSuccess = (cgId: string) => {
-  backoffState.delete(cgId);
+const recordSuccess = (key: string) => {
+  backoffState.delete(key);
 };
 
-const getCachedData = (cgId: string): CacheEntry | null => {
-  const cached = coinGeckoCache.get(cgId);
-  if (!cached) return null;
-  // Return cached data even if expired (will be refreshed in background)
-  return cached;
+const getCachedData = (symbol: string): CacheEntry | null => {
+  return dataCache.get(symbol.toUpperCase()) || null;
 };
 
-const isCacheValid = (cgId: string): boolean => {
-  const cached = coinGeckoCache.get(cgId);
+const isCacheValid = (symbol: string): boolean => {
+  const cached = dataCache.get(symbol.toUpperCase());
   if (!cached) return false;
   return Date.now() - cached.timestamp < CACHE_TTL;
 };
 
-const setCacheData = (cgId: string, data: ChartDataPoint[], priceChange: number) => {
-  coinGeckoCache.set(cgId, { data, priceChange, timestamp: Date.now() });
+const setCacheData = (symbol: string, data: ChartDataPoint[], priceChange: number, exchange: Exchange) => {
+  dataCache.set(symbol.toUpperCase(), { data, priceChange, timestamp: Date.now(), exchange });
 };
 
 export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
@@ -268,62 +301,193 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSupported, setIsSupported] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dataSource, setDataSource] = useState<"binance" | "coingecko" | null>(null);
+  const [dataSource, setDataSource] = useState<Exchange | null>(null);
+  
   const wsRef = useRef<WebSocket | null>(null);
   const lastPriceRef = useRef<number | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const isConnectedRef = useRef(false);
   const refreshIntervalRef = useRef<number | null>(null);
+  const currentExchangeRef = useRef<Exchange | null>(null);
+  const symbolRef = useRef(symbol);
 
-  // Get Binance-compatible symbol
-  const getBinanceSymbol = useCallback((sym: string): string | null => {
+  // Get exchange-specific symbol
+  const getExchangeSymbol = useCallback((sym: string, exchange: Exchange): string | null => {
     const upperSym = sym.toUpperCase();
-    // Check mapping first
-    if (BINANCE_SYMBOL_MAP[upperSym]) {
-      return BINANCE_SYMBOL_MAP[upperSym];
+    switch (exchange) {
+      case "binance":
+        return BINANCE_SYMBOL_MAP[upperSym] || null;
+      case "coinbase":
+        return COINBASE_SYMBOL_MAP[upperSym] || null;
+      case "kraken":
+        return KRAKEN_SYMBOL_MAP[upperSym] || null;
+      case "coingecko":
+        if (coinGeckoId) return coinGeckoId;
+        return COINGECKO_ID_MAP[upperSym] || null;
+      default:
+        return null;
     }
-    // Only allow alphanumeric symbols (no underscores, etc.)
-    if (/^[A-Z0-9]+$/.test(upperSym) && upperSym.length <= 10) {
-      return upperSym;
+  }, [coinGeckoId]);
+
+  // Parse WebSocket message based on exchange
+  const parseWebSocketMessage = useCallback((exchange: Exchange, data: any): { price: number; volume: number; time: Date } | null => {
+    try {
+      switch (exchange) {
+        case "binance":
+          if (data.k) {
+            return {
+              price: parseFloat(data.k.c),
+              volume: parseFloat(data.k.v),
+              time: new Date(data.k.T),
+            };
+          }
+          break;
+        case "coinbase":
+          if (data.type === "ticker" && data.price) {
+            return {
+              price: parseFloat(data.price),
+              volume: parseFloat(data.volume_24h || "0"),
+              time: new Date(data.time || Date.now()),
+            };
+          }
+          break;
+        case "kraken":
+          // Kraken ticker format: [channelID, tickerData, channelName, pair]
+          if (Array.isArray(data) && data.length >= 2 && typeof data[1] === "object") {
+            const ticker = data[1];
+            if (ticker.c && Array.isArray(ticker.c)) {
+              return {
+                price: parseFloat(ticker.c[0]),
+                volume: parseFloat(ticker.v?.[1] || "0"),
+                time: new Date(),
+              };
+            }
+          }
+          break;
+      }
+    } catch (e) {
+      console.error(`Parse error for ${exchange}:`, e);
     }
     return null;
   }, []);
 
-  // Get CoinGecko ID for fallback
-  const getCoinGeckoId = useCallback((sym: string): string | null => {
-    if (coinGeckoId) return coinGeckoId;
-    const upperSym = sym.toUpperCase();
-    return COINGECKO_ID_MAP[upperSym] || null;
-  }, [coinGeckoId]);
+  // Fetch historical data from Binance
+  const fetchBinanceData = useCallback(async (binanceSymbol: string): Promise<ChartDataPoint[] | null> => {
+    const backoffKey = getBackoffKey(symbol, "binance");
+    if (!canRetry(backoffKey)) return null;
 
-  // Fetch data from CoinGecko as fallback with caching and backoff
-  const fetchCoinGeckoData = useCallback(async (cgId: string, forceRefresh = false): Promise<boolean> => {
-    // Check cache first (use cached data immediately if available)
-    const cached = getCachedData(cgId);
-    if (cached && !forceRefresh) {
-      // Use cached data immediately
-      setChartData(cached.data);
-      setPriceChange(cached.priceChange);
-      setIsSupported(true);
-      setDataSource("coingecko");
-      setError(null);
+    try {
+      const response = await fetchWithTimeout(
+        `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}USDT&interval=1m&limit=20`
+      );
       
-      if (cached.data.length > 0) {
-        lastPriceRef.current = cached.data[0].price;
+      if (!response.ok) {
+        recordFailure(backoffKey);
+        return null;
       }
       
-      // If cache is still valid, don't fetch
-      if (isCacheValid(cgId)) {
-        return true;
+      const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        recordFailure(backoffKey);
+        return null;
       }
-      // Cache expired but we have data - fetch in background
+      
+      recordSuccess(backoffKey);
+      return data.map((kline: any[]) => ({
+        time: formatTime(new Date(kline[6])),
+        price: parseFloat(kline[4]),
+        volume: parseFloat(kline[5]),
+        positive: parseFloat(kline[4]) >= parseFloat(kline[1]),
+      }));
+    } catch {
+      recordFailure(backoffKey);
+      return null;
     }
+  }, [symbol]);
 
-    // Check if we're in backoff period
-    if (!canRetry(cgId) && cached) {
-      // Use stale cache during backoff
-      return true;
+  // Fetch historical data from Coinbase
+  const fetchCoinbaseData = useCallback(async (coinbaseSymbol: string): Promise<ChartDataPoint[] | null> => {
+    const backoffKey = getBackoffKey(symbol, "coinbase");
+    if (!canRetry(backoffKey)) return null;
+
+    try {
+      const end = new Date();
+      const start = new Date(end.getTime() - 20 * 60 * 1000); // 20 minutes ago
+      const response = await fetchWithTimeout(
+        `https://api.exchange.coinbase.com/products/${coinbaseSymbol}/candles?granularity=60&start=${start.toISOString()}&end=${end.toISOString()}`
+      );
+      
+      if (!response.ok) {
+        recordFailure(backoffKey);
+        return null;
+      }
+      
+      const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        recordFailure(backoffKey);
+        return null;
+      }
+      
+      recordSuccess(backoffKey);
+      // Coinbase returns [time, low, high, open, close, volume] in descending order
+      return data.reverse().slice(-20).map((candle: number[]) => ({
+        time: formatTime(new Date(candle[0] * 1000)),
+        price: candle[4], // close
+        volume: candle[5],
+        positive: candle[4] >= candle[3], // close >= open
+      }));
+    } catch {
+      recordFailure(backoffKey);
+      return null;
     }
+  }, [symbol]);
+
+  // Fetch historical data from Kraken
+  const fetchKrakenData = useCallback(async (krakenSymbol: string): Promise<ChartDataPoint[] | null> => {
+    const backoffKey = getBackoffKey(symbol, "kraken");
+    if (!canRetry(backoffKey)) return null;
+
+    try {
+      const pair = krakenSymbol.replace("/", "");
+      const response = await fetchWithTimeout(
+        `https://api.kraken.com/0/public/OHLC?pair=${pair}&interval=1`
+      );
+      
+      if (!response.ok) {
+        recordFailure(backoffKey);
+        return null;
+      }
+      
+      const data = await response.json();
+      if (data.error?.length > 0) {
+        recordFailure(backoffKey);
+        return null;
+      }
+      
+      const resultKey = Object.keys(data.result).find(k => k !== "last");
+      if (!resultKey || !Array.isArray(data.result[resultKey])) {
+        recordFailure(backoffKey);
+        return null;
+      }
+      
+      recordSuccess(backoffKey);
+      const ohlc = data.result[resultKey].slice(-20);
+      return ohlc.map((candle: any[]) => ({
+        time: formatTime(new Date(candle[0] * 1000)),
+        price: parseFloat(candle[4]), // close
+        volume: parseFloat(candle[6]),
+        positive: parseFloat(candle[4]) >= parseFloat(candle[1]), // close >= open
+      }));
+    } catch {
+      recordFailure(backoffKey);
+      return null;
+    }
+  }, [symbol]);
+
+  // Fetch from CoinGecko (no WebSocket, polling only)
+  const fetchCoinGeckoData = useCallback(async (cgId: string): Promise<ChartDataPoint[] | null> => {
+    const backoffKey = getBackoffKey(symbol, "coingecko");
+    if (!canRetry(backoffKey)) return null;
 
     try {
       const response = await fetchWithTimeout(
@@ -331,118 +495,102 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
       );
 
       if (!response.ok) {
-        recordFailure(cgId);
-        if (!cached) {
-          setError(`CoinGecko error (${response.status})`);
-        }
-        return cached ? true : false; // Return true if we have cache
+        recordFailure(backoffKey);
+        return null;
       }
       
       const data = await response.json();
-      
       if (!data.prices || data.prices.length === 0) {
-        recordFailure(cgId);
-        if (!cached) {
-          setError("CoinGecko returned no data");
-        }
-        return cached ? true : false;
+        recordFailure(backoffKey);
+        return null;
       }
 
-      // Take the last 20 data points
+      recordSuccess(backoffKey);
       const recentPrices = data.prices.slice(-20);
       const recentVolumes = data.total_volumes?.slice(-20) || [];
       
-      const historicalData: ChartDataPoint[] = recentPrices.map((pricePoint: [number, number], index: number) => {
+      return recentPrices.map((pricePoint: [number, number], index: number) => {
         const [timestamp, price] = pricePoint;
         const prevPrice = index > 0 ? recentPrices[index - 1][1] : price;
-        const volume = recentVolumes[index]?.[1] || 0;
-        
         return {
           time: formatTime(new Date(timestamp)),
-          price: price,
-          volume: volume,
+          price,
+          volume: recentVolumes[index]?.[1] || 0,
           positive: price >= prevPrice,
         };
       });
-      
-      let change = 0;
-      if (historicalData.length > 0) {
-        lastPriceRef.current = historicalData[0].price;
-        const latestPrice = historicalData[historicalData.length - 1].price;
-        change = ((latestPrice - historicalData[0].price) / historicalData[0].price) * 100;
-        setPriceChange(change);
-      }
-      
-      // Update cache
-      setCacheData(cgId, historicalData, change);
-      recordSuccess(cgId);
-      
-      setChartData(historicalData);
-      setIsSupported(true);
-      setDataSource("coingecko");
-      setError(null);
-      return true;
-    } catch (error) {
-      recordFailure(cgId);
-      const msg = error instanceof DOMException && error.name === "AbortError"
-        ? "CoinGecko request timed out"
-        : "Failed to fetch CoinGecko data";
-      console.error(msg, error);
-      
-      // If we have cached data, use it and don't show error
-      if (cached) {
-        return true;
-      }
-      
-      setError(msg);
-      return false;
+    } catch {
+      recordFailure(backoffKey);
+      return null;
     }
-  }, []);
+  }, [symbol]);
 
-  const connectWebSocket = useCallback((binanceSymbol: string) => {
-    if (isConnectedRef.current) return;
+  // Connect WebSocket to exchange
+  const connectWebSocket = useCallback((exchange: Exchange, exchangeSymbol: string) => {
+    if (isConnectedRef.current || symbolRef.current !== symbol) return;
     
-    const wsUrl = `wss://stream.binance.com:9443/ws/${binanceSymbol.toLowerCase()}usdt@kline_1m`;
+    let wsUrl: string;
+    let subscribeMessage: string | null = null;
+
+    switch (exchange) {
+      case "binance":
+        wsUrl = `wss://stream.binance.com:9443/ws/${exchangeSymbol.toLowerCase()}usdt@kline_1m`;
+        break;
+      case "coinbase":
+        wsUrl = "wss://ws-feed.exchange.coinbase.com";
+        subscribeMessage = JSON.stringify({
+          type: "subscribe",
+          product_ids: [exchangeSymbol],
+          channels: ["ticker"],
+        });
+        break;
+      case "kraken":
+        wsUrl = "wss://ws.kraken.com";
+        subscribeMessage = JSON.stringify({
+          event: "subscribe",
+          pair: [exchangeSymbol],
+          subscription: { name: "ticker" },
+        });
+        break;
+      default:
+        return;
+    }
     
     try {
       const ws = new WebSocket(wsUrl);
+      currentExchangeRef.current = exchange;
       
       ws.onopen = () => {
         isConnectedRef.current = true;
         setError(null);
+        if (subscribeMessage) {
+          ws.send(subscribeMessage);
+        }
       };
       
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          const parsed = parseWebSocketMessage(exchange, data);
           
-          if (data.k) {
-            const kline = data.k;
-            const closePrice = parseFloat(kline.c);
-            const openPrice = parseFloat(kline.o);
-            const volume = parseFloat(kline.v);
-            const closeTime = new Date(kline.T);
+          if (parsed) {
+            const timeStr = formatTime(parsed.time);
             
-            const isPositive = closePrice >= openPrice;
-            const timeStr = formatTime(closeTime);
-            
-            // Calculate price change from first data point
             if (lastPriceRef.current === null) {
-              lastPriceRef.current = closePrice;
+              lastPriceRef.current = parsed.price;
             }
             
-            const change = ((closePrice - lastPriceRef.current) / lastPriceRef.current) * 100;
+            const change = ((parsed.price - lastPriceRef.current) / lastPriceRef.current) * 100;
             setPriceChange(change);
             
             setChartData((prev) => {
               const newPoint: ChartDataPoint = {
                 time: timeStr,
-                price: closePrice,
-                volume: volume,
-                positive: isPositive,
+                price: parsed.price,
+                volume: parsed.volume,
+                positive: parsed.price >= (prev[prev.length - 1]?.price || parsed.price),
               };
               
-              // Check if we already have this time, update it
               const existingIndex = prev.findIndex(p => p.time === timeStr);
               if (existingIndex !== -1) {
                 const updated = [...prev];
@@ -450,11 +598,9 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
                 return updated;
               }
               
-              // Add new point, keep last 20 points
               const updated = [...prev, newPoint];
               if (updated.length > 20) {
                 updated.shift();
-                // Update reference price to oldest point
                 if (updated.length > 0) {
                   lastPriceRef.current = updated[0].price;
                 }
@@ -463,107 +609,77 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
             });
           }
         } catch (e) {
-          console.error("Chart WebSocket parse error:", e);
+          console.error(`${exchange} WebSocket parse error:`, e);
         }
       };
       
       ws.onerror = () => {
-        setError("WebSocket connection failed");
+        console.warn(`${exchange} WebSocket error`);
       };
       
       ws.onclose = () => {
         isConnectedRef.current = false;
         
-        // Only reconnect if using Binance source
-        if (dataSource === "binance" && reconnectTimeoutRef.current === null) {
+        // Reconnect if still on same symbol
+        if (symbolRef.current === symbol && reconnectTimeoutRef.current === null) {
           reconnectTimeoutRef.current = window.setTimeout(() => {
             reconnectTimeoutRef.current = null;
-            const binSym = getBinanceSymbol(symbol);
-            if (binSym) connectWebSocket(binSym);
+            const sym = getExchangeSymbol(symbol, exchange);
+            if (sym) connectWebSocket(exchange, sym);
           }, 5000);
         }
       };
       
       wsRef.current = ws;
     } catch (error) {
-      console.error("Failed to create WebSocket:", error);
-      setError("Failed to connect");
+      console.error(`Failed to create ${exchange} WebSocket:`, error);
     }
-  }, [symbol, getBinanceSymbol, dataSource]);
+  }, [symbol, parseWebSocketMessage, getExchangeSymbol]);
 
-  // Fetch initial historical data from Binance
-  const fetchBinanceData = useCallback(async (binanceSymbol: string): Promise<boolean> => {
-    try {
-      const response = await fetchWithTimeout(
-        `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}USDT&interval=1m&limit=20`
-      );
-      
-      if (!response.ok) {
-        return false;
-      }
-      
-      const data = await response.json();
-      
-      // Check if we got valid data
-      if (!Array.isArray(data) || data.length === 0) {
-        return false;
-      }
-      
-      const historicalData: ChartDataPoint[] = data.map((kline: any[]) => {
-        const closeTime = new Date(kline[6]);
-        const openPrice = parseFloat(kline[1]);
-        const closePrice = parseFloat(kline[4]);
-        const volume = parseFloat(kline[5]);
-        
-        return {
-          time: formatTime(closeTime),
-          price: closePrice,
-          volume: volume,
-          positive: closePrice >= openPrice,
-        };
-      });
-      
-      if (historicalData.length > 0) {
-        lastPriceRef.current = historicalData[0].price;
-        const latestPrice = historicalData[historicalData.length - 1].price;
-        const change = ((latestPrice - historicalData[0].price) / historicalData[0].price) * 100;
-        setPriceChange(change);
-      }
-      
-      setChartData(historicalData);
-      setIsSupported(true);
-      setDataSource("binance");
-      setError(null);
-      return true;
-    } catch (error) {
-      console.error("Failed to fetch Binance data:", error);
-      return false;
-    }
-  }, []);
-
-  // Setup periodic refresh for CoinGecko data (since no WebSocket)
+  // Setup CoinGecko polling
   const setupCoinGeckoRefresh = useCallback((cgId: string) => {
     if (refreshIntervalRef.current) {
       clearInterval(refreshIntervalRef.current);
     }
     
-    // Refresh every 60 seconds, with backoff handling built into fetchCoinGeckoData
-    refreshIntervalRef.current = window.setInterval(() => {
-      fetchCoinGeckoData(cgId, true); // force refresh attempt
+    refreshIntervalRef.current = window.setInterval(async () => {
+      const data = await fetchCoinGeckoData(cgId);
+      if (data && data.length > 0) {
+        setChartData(data);
+        const change = ((data[data.length - 1].price - data[0].price) / data[0].price) * 100;
+        setPriceChange(change);
+        setCacheData(symbol, data, change, "coingecko");
+      }
     }, 60000);
-  }, [fetchCoinGeckoData]);
+  }, [fetchCoinGeckoData, symbol]);
+
+  // Cleanup function
+  const cleanup = useCallback(() => {
+    isConnectedRef.current = false;
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
-    // Check for cached CoinGecko data first before resetting
-    const cgId = getCoinGeckoId(symbol);
-    const cached = cgId ? getCachedData(cgId) : null;
+    symbolRef.current = symbol;
     
-    // Reset state when symbol changes, but use cache if available
-    if (cached) {
+    // Check cache first
+    const cached = getCachedData(symbol);
+    if (cached && isCacheValid(symbol)) {
       setChartData(cached.data);
       setPriceChange(cached.priceChange);
+      setDataSource(cached.exchange);
       setIsLoading(false);
-      setDataSource("coingecko");
       if (cached.data.length > 0) {
         lastPriceRef.current = cached.data[0].price;
       }
@@ -576,72 +692,66 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
     
     setIsSupported(true);
     setError(null);
-    isConnectedRef.current = false;
-
-    // Close existing connections and intervals
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    if (refreshIntervalRef.current) {
-      clearInterval(refreshIntervalRef.current);
-      refreshIntervalRef.current = null;
-    }
+    cleanup();
 
     const loadData = async () => {
-      try {
-        // Try Binance first
-        const binanceSymbol = getBinanceSymbol(symbol);
-
-        if (binanceSymbol) {
-          const binanceSuccess = await fetchBinanceData(binanceSymbol);
-          if (binanceSuccess) {
-            setDataSource("binance");
-            connectWebSocket(binanceSymbol);
-            return;
-          }
+      const exchanges: Exchange[] = ["binance", "coinbase", "kraken", "coingecko"];
+      
+      for (const exchange of exchanges) {
+        if (symbolRef.current !== symbol) return; // Symbol changed, abort
+        
+        const exchangeSymbol = getExchangeSymbol(symbol, exchange);
+        if (!exchangeSymbol) continue;
+        
+        let data: ChartDataPoint[] | null = null;
+        
+        switch (exchange) {
+          case "binance":
+            data = await fetchBinanceData(exchangeSymbol);
+            break;
+          case "coinbase":
+            data = await fetchCoinbaseData(exchangeSymbol);
+            break;
+          case "kraken":
+            data = await fetchKrakenData(exchangeSymbol);
+            break;
+          case "coingecko":
+            data = await fetchCoinGeckoData(exchangeSymbol);
+            break;
         }
-
-        // Fallback to CoinGecko
-        const cgId = getCoinGeckoId(symbol);
-        if (cgId) {
-          const cgSuccess = await fetchCoinGeckoData(cgId);
-          if (cgSuccess) {
-            setupCoinGeckoRefresh(cgId);
-            return;
+        
+        if (data && data.length > 0) {
+          const change = ((data[data.length - 1].price - data[0].price) / data[0].price) * 100;
+          setChartData(data);
+          setPriceChange(change);
+          setDataSource(exchange);
+          setIsLoading(false);
+          setCacheData(symbol, data, change, exchange);
+          
+          if (data.length > 0) {
+            lastPriceRef.current = data[0].price;
           }
+          
+          // Connect WebSocket for live updates (not for CoinGecko)
+          if (exchange !== "coingecko") {
+            connectWebSocket(exchange, exchangeSymbol);
+          } else {
+            setupCoinGeckoRefresh(exchangeSymbol);
+          }
+          return;
         }
-
-        // Neither worked
-        setIsSupported(false);
-        setError((prev) => prev || "Data not available for this asset");
-      } finally {
-        setIsLoading(false);
       }
+      
+      // All exchanges failed
+      setIsSupported(false);
+      setError("Data not available for this asset");
+      setIsLoading(false);
     };
 
     loadData();
     
-    return () => {
-      isConnectedRef.current = false;
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-        refreshIntervalRef.current = null;
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    };
-  }, [symbol, fetchBinanceData, fetchCoinGeckoData, connectWebSocket, getBinanceSymbol, getCoinGeckoId, setupCoinGeckoRefresh]);
+    return cleanup;
+  }, [symbol, cleanup, fetchBinanceData, fetchCoinbaseData, fetchKrakenData, fetchCoinGeckoData, getExchangeSymbol, connectWebSocket, setupCoinGeckoRefresh]);
 
   return { chartData, priceChange, isLoading, isSupported, error, dataSource };
 };
