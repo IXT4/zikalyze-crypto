@@ -7,6 +7,98 @@ export interface ChartDataPoint {
   positive: boolean;
 }
 
+// Map CoinGecko symbols to Binance symbols
+const BINANCE_SYMBOL_MAP: Record<string, string> = {
+  BTC: "BTC",
+  ETH: "ETH",
+  SOL: "SOL",
+  XRP: "XRP",
+  DOGE: "DOGE",
+  BNB: "BNB",
+  ADA: "ADA",
+  AVAX: "AVAX",
+  DOT: "DOT",
+  MATIC: "MATIC",
+  LINK: "LINK",
+  UNI: "UNI",
+  ATOM: "ATOM",
+  LTC: "LTC",
+  BCH: "BCH",
+  NEAR: "NEAR",
+  APT: "APT",
+  FIL: "FIL",
+  ARB: "ARB",
+  OP: "OP",
+  INJ: "INJ",
+  SUI: "SUI",
+  TIA: "TIA",
+  SEI: "SEI",
+  PEPE: "PEPE",
+  SHIB: "SHIB",
+  WIF: "WIF",
+  BONK: "BONK",
+  FLOKI: "FLOKI",
+  RENDER: "RENDER",
+  FET: "FET",
+  AAVE: "AAVE",
+  MKR: "MKR",
+  GRT: "GRT",
+  IMX: "IMX",
+  STX: "STX",
+  RUNE: "RUNE",
+  SAND: "SAND",
+  MANA: "MANA",
+  AXS: "AXS",
+  GALA: "GALA",
+  APE: "APE",
+  CRV: "CRV",
+  SNX: "SNX",
+  COMP: "COMP",
+  LDO: "LDO",
+  ENS: "ENS",
+  ALGO: "ALGO",
+  XLM: "XLM",
+  VET: "VET",
+  ICP: "ICP",
+  HBAR: "HBAR",
+  ETC: "ETC",
+  FTM: "FTM",
+  TRX: "TRX",
+  XMR: "XMR",
+  EOS: "EOS",
+  THETA: "THETA",
+  XTZ: "XTZ",
+  NEO: "NEO",
+  KAVA: "KAVA",
+  ZEC: "ZEC",
+  DASH: "DASH",
+  EGLD: "EGLD",
+  FLOW: "FLOW",
+  MINA: "MINA",
+  ROSE: "ROSE",
+  ONE: "ONE",
+  ZIL: "ZIL",
+  ENJ: "ENJ",
+  CHZ: "CHZ",
+  BAT: "BAT",
+  CAKE: "CAKE",
+  SUSHI: "SUSHI",
+  YFI: "YFI",
+  DYDX: "DYDX",
+  GMT: "GMT",
+  BLUR: "BLUR",
+  MASK: "MASK",
+  WLD: "WLD",
+  JTO: "JTO",
+  PYTH: "PYTH",
+  JUP: "JUP",
+  STRK: "STRK",
+  DYM: "DYM",
+  ALT: "ALT",
+  PIXEL: "PIXEL",
+  ORDI: "ORDI",
+};
+
 const formatTime = (date: Date): string => {
   return date.toLocaleTimeString("en-US", {
     hour: "2-digit",
@@ -18,23 +110,38 @@ const formatTime = (date: Date): string => {
 export const useRealtimeChartData = (symbol: string) => {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [priceChange, setPriceChange] = useState(0);
+  const [isSupported, setIsSupported] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const lastPriceRef = useRef<number | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const isConnectedRef = useRef(false);
 
-  const connectWebSocket = useCallback(() => {
+  // Get Binance-compatible symbol
+  const getBinanceSymbol = useCallback((sym: string): string | null => {
+    const upperSym = sym.toUpperCase();
+    // Check mapping first
+    if (BINANCE_SYMBOL_MAP[upperSym]) {
+      return BINANCE_SYMBOL_MAP[upperSym];
+    }
+    // Only allow alphanumeric symbols (no underscores, etc.)
+    if (/^[A-Z0-9]+$/.test(upperSym) && upperSym.length <= 10) {
+      return upperSym;
+    }
+    return null;
+  }, []);
+
+  const connectWebSocket = useCallback((binanceSymbol: string) => {
     if (isConnectedRef.current) return;
     
-    const wsSymbol = symbol.toLowerCase();
-    const wsUrl = `wss://stream.binance.com:9443/ws/${wsSymbol}usdt@kline_1m`;
+    const wsUrl = `wss://stream.binance.com:9443/ws/${binanceSymbol.toLowerCase()}usdt@kline_1m`;
     
     try {
       const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
         isConnectedRef.current = true;
-        console.log(`Chart WebSocket connected for ${symbol}`);
+        setError(null);
       };
       
       ws.onmessage = (event) => {
@@ -92,38 +199,53 @@ export const useRealtimeChartData = (symbol: string) => {
         }
       };
       
-      ws.onerror = (error) => {
-        console.error(`Chart WebSocket error for ${symbol}:`, error);
+      ws.onerror = () => {
+        setError("WebSocket connection failed");
       };
       
       ws.onclose = () => {
         isConnectedRef.current = false;
-        console.log(`Chart WebSocket closed for ${symbol}`);
         
-        // Reconnect after 3 seconds
+        // Only reconnect if still supported
         if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = window.setTimeout(() => {
-          connectWebSocket();
-        }, 3000);
+          const binSym = getBinanceSymbol(symbol);
+          if (binSym) connectWebSocket(binSym);
+        }, 5000);
       };
       
       wsRef.current = ws;
     } catch (error) {
       console.error("Failed to create WebSocket:", error);
+      setError("Failed to connect");
     }
-  }, [symbol]);
+  }, [symbol, getBinanceSymbol]);
 
   // Fetch initial historical data
-  const fetchHistoricalData = useCallback(async () => {
+  const fetchHistoricalData = useCallback(async (binanceSymbol: string) => {
     try {
-      const wsSymbol = symbol.toUpperCase();
       const response = await fetch(
-        `https://api.binance.com/api/v3/klines?symbol=${wsSymbol}USDT&interval=1m&limit=20`
+        `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}USDT&interval=1m&limit=20`
       );
       
-      if (!response.ok) throw new Error("Failed to fetch historical data");
+      if (!response.ok) {
+        if (response.status === 400) {
+          // Symbol not found on Binance
+          setIsSupported(false);
+          setError("Not available on Binance");
+          return false;
+        }
+        throw new Error("Failed to fetch historical data");
+      }
       
       const data = await response.json();
+      
+      // Check if we got valid data
+      if (!Array.isArray(data) || data.length === 0) {
+        setIsSupported(false);
+        setError("No data available");
+        return false;
+      }
       
       const historicalData: ChartDataPoint[] = data.map((kline: any[]) => {
         const closeTime = new Date(kline[6]);
@@ -147,16 +269,24 @@ export const useRealtimeChartData = (symbol: string) => {
       }
       
       setChartData(historicalData);
+      setIsSupported(true);
+      setError(null);
+      return true;
     } catch (error) {
       console.error("Failed to fetch historical data:", error);
+      setIsSupported(false);
+      setError("Failed to load data");
+      return false;
     }
-  }, [symbol]);
+  }, []);
 
   useEffect(() => {
     // Reset state when symbol changes
     setChartData([]);
     lastPriceRef.current = null;
     setPriceChange(0);
+    setIsSupported(true);
+    setError(null);
     isConnectedRef.current = false;
     
     // Close existing connection
@@ -168,9 +298,20 @@ export const useRealtimeChartData = (symbol: string) => {
       clearTimeout(reconnectTimeoutRef.current);
     }
     
+    // Get Binance-compatible symbol
+    const binanceSymbol = getBinanceSymbol(symbol);
+    
+    if (!binanceSymbol) {
+      setIsSupported(false);
+      setError("Symbol not supported");
+      return;
+    }
+    
     // Fetch historical data first, then connect WebSocket
-    fetchHistoricalData().then(() => {
-      connectWebSocket();
+    fetchHistoricalData(binanceSymbol).then((success) => {
+      if (success) {
+        connectWebSocket(binanceSymbol);
+      }
     });
     
     return () => {
@@ -181,7 +322,7 @@ export const useRealtimeChartData = (symbol: string) => {
         wsRef.current = null;
       }
     };
-  }, [symbol, fetchHistoricalData, connectWebSocket]);
+  }, [symbol, fetchHistoricalData, connectWebSocket, getBinanceSymbol]);
 
-  return { chartData, priceChange };
+  return { chartData, priceChange, isSupported, error };
 };
