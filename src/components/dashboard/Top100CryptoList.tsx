@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCryptoPrices, CryptoPrice } from "@/hooks/useCryptoPrices";
-import { TrendingUp, TrendingDown, Bell, X } from "lucide-react";
+import { usePriceAlerts } from "@/hooks/usePriceAlerts";
+import { TrendingUp, TrendingDown, Bell, X, BellRing } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,29 +11,26 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
 
 interface Top100CryptoListProps {
   onSelect: (symbol: string) => void;
   selected: string;
 }
 
-interface PriceAlert {
-  id: string;
-  symbol: string;
-  name: string;
-  targetPrice: number;
-  condition: "above" | "below";
-  currentPrice: number;
-}
-
 const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
-  const { prices, loading } = useCryptoPrices();
+  const { prices, loading: pricesLoading } = useCryptoPrices();
+  const { alerts, loading: alertsLoading, createAlert, removeAlert, checkAlerts } = usePriceAlerts();
   const [alertDialogOpen, setAlertDialogOpen] = useState(false);
   const [selectedCryptoForAlert, setSelectedCryptoForAlert] = useState<CryptoPrice | null>(null);
   const [targetPrice, setTargetPrice] = useState("");
   const [alertCondition, setAlertCondition] = useState<"above" | "below">("above");
-  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
+
+  // Check alerts whenever prices update
+  useEffect(() => {
+    if (prices.length > 0 && alerts.length > 0) {
+      checkAlerts(prices);
+    }
+  }, [prices, alerts, checkAlerts]);
 
   const handleOpenAlertDialog = (crypto: CryptoPrice, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -41,29 +39,27 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
     setAlertDialogOpen(true);
   };
 
-  const handleCreateAlert = () => {
+  const handleCreateAlert = async () => {
     if (!selectedCryptoForAlert || !targetPrice) return;
 
-    const newAlert: PriceAlert = {
-      id: Date.now().toString(),
-      symbol: selectedCryptoForAlert.symbol.toUpperCase(),
-      name: selectedCryptoForAlert.name,
-      targetPrice: parseFloat(targetPrice),
-      condition: alertCondition,
-      currentPrice: selectedCryptoForAlert.current_price,
-    };
+    const success = await createAlert(
+      selectedCryptoForAlert.symbol,
+      selectedCryptoForAlert.name,
+      parseFloat(targetPrice),
+      alertCondition,
+      selectedCryptoForAlert.current_price
+    );
 
-    setAlerts([...alerts, newAlert]);
-    setAlertDialogOpen(false);
-    toast.success(`Alert set for ${selectedCryptoForAlert.symbol.toUpperCase()} ${alertCondition} $${targetPrice}`);
+    if (success) {
+      setAlertDialogOpen(false);
+    }
   };
 
-  const removeAlert = (alertId: string) => {
-    setAlerts(alerts.filter(a => a.id !== alertId));
-    toast.info("Alert removed");
+  const handleRemoveAlert = async (alertId: string) => {
+    await removeAlert(alertId);
   };
 
-  if (loading) {
+  if (pricesLoading) {
     return (
       <div className="rounded-2xl border border-border bg-card p-6">
         <h3 className="text-lg font-bold text-foreground mb-4">Top 100 Cryptocurrencies</h3>
@@ -78,40 +74,70 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
     <>
       <div className="rounded-2xl border border-border bg-card p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-foreground">Top 100 Cryptocurrencies</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-bold text-foreground">Top 100 Cryptocurrencies</h3>
+            <span className="rounded bg-success/20 px-1.5 py-0.5 text-[10px] font-medium text-success flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+              Live
+            </span>
+          </div>
           <div className="flex items-center gap-2">
             {alerts.length > 0 && (
-              <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded-full">
+              <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded-full flex items-center gap-1">
+                <BellRing className="w-3 h-3" />
                 {alerts.length} Alert{alerts.length > 1 ? "s" : ""}
               </span>
             )}
-            <span className="text-xs text-muted-foreground">By Market Cap (excl. stablecoins)</span>
+            <span className="text-xs text-muted-foreground hidden sm:inline">By Market Cap</span>
           </div>
         </div>
 
         {/* Active Alerts */}
         {alerts.length > 0 && (
           <div className="mb-4 p-3 bg-secondary/50 rounded-lg">
-            <div className="text-xs font-medium text-muted-foreground mb-2">Active Alerts</div>
+            <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+              <BellRing className="w-3 h-3" />
+              Active Price Alerts
+            </div>
             <div className="flex flex-wrap gap-2">
-              {alerts.map((alert) => (
-                <div
-                  key={alert.id}
-                  className="flex items-center gap-2 bg-card border border-border rounded-full px-3 py-1 text-xs"
-                >
-                  <Bell className="w-3 h-3 text-primary" />
-                  <span className="font-medium">{alert.symbol}</span>
-                  <span className="text-muted-foreground">
-                    {alert.condition} ${alert.targetPrice.toLocaleString()}
-                  </span>
-                  <button
-                    onClick={() => removeAlert(alert.id)}
-                    className="text-muted-foreground hover:text-destructive"
+              {alerts.map((alert) => {
+                const crypto = prices.find(p => p.symbol.toUpperCase() === alert.symbol);
+                const currentPrice = crypto?.current_price || 0;
+                const progressPercent = alert.condition === "above"
+                  ? Math.min(100, (currentPrice / alert.target_price) * 100)
+                  : Math.min(100, (alert.target_price / currentPrice) * 100);
+
+                return (
+                  <div
+                    key={alert.id}
+                    className="relative flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2 text-xs overflow-hidden"
                   >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
+                    {/* Progress bar background */}
+                    <div 
+                      className="absolute left-0 top-0 bottom-0 bg-primary/10 transition-all duration-500"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                    <div className="relative flex items-center gap-2">
+                      <Bell className="w-3 h-3 text-primary" />
+                      <span className="font-medium">{alert.symbol}</span>
+                      <span className="text-muted-foreground">
+                        {alert.condition} ${alert.target_price.toLocaleString()}
+                      </span>
+                      {crypto && (
+                        <span className="text-muted-foreground">
+                          (now: ${currentPrice.toLocaleString()})
+                        </span>
+                      )}
+                      <button
+                        onClick={() => handleRemoveAlert(alert.id)}
+                        className="text-muted-foreground hover:text-destructive ml-1"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -207,7 +233,10 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
       <Dialog open={alertDialogOpen} onOpenChange={setAlertDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Set Price Alert</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <BellRing className="w-5 h-5 text-primary" />
+              Set Price Alert
+            </DialogTitle>
             <DialogDescription>
               Get notified when {selectedCryptoForAlert?.name} ({selectedCryptoForAlert?.symbol.toUpperCase()}) reaches your target price.
             </DialogDescription>
@@ -239,6 +268,7 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                   className="flex-1"
                   onClick={() => setAlertCondition("above")}
                 >
+                  <TrendingUp className="w-3 h-3 mr-1" />
                   Price Above
                 </Button>
                 <Button
@@ -247,6 +277,7 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                   className="flex-1"
                   onClick={() => setAlertCondition("below")}
                 >
+                  <TrendingDown className="w-3 h-3 mr-1" />
                   Price Below
                 </Button>
               </div>
@@ -267,6 +298,10 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
               <Bell className="w-4 h-4 mr-2" />
               Create Alert
             </Button>
+
+            <p className="text-xs text-muted-foreground text-center">
+              You'll receive a browser notification when the price target is hit.
+            </p>
           </div>
         </DialogContent>
       </Dialog>
