@@ -209,6 +209,59 @@ const fetchWithTimeout = async (url: string, timeoutMs = 12000) => {
   }
 };
 
+// CoinGecko cache with 5-minute TTL
+interface CacheEntry {
+  data: ChartDataPoint[];
+  priceChange: number;
+  timestamp: number;
+}
+
+const coinGeckoCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Exponential backoff state per coin
+const backoffState = new Map<string, { attempts: number; nextRetry: number }>();
+const BASE_BACKOFF = 5000; // 5 seconds
+const MAX_BACKOFF = 5 * 60 * 1000; // 5 minutes max
+
+const getBackoffDelay = (attempts: number): number => {
+  return Math.min(BASE_BACKOFF * Math.pow(2, attempts), MAX_BACKOFF);
+};
+
+const canRetry = (cgId: string): boolean => {
+  const state = backoffState.get(cgId);
+  if (!state) return true;
+  return Date.now() >= state.nextRetry;
+};
+
+const recordFailure = (cgId: string) => {
+  const state = backoffState.get(cgId) || { attempts: 0, nextRetry: 0 };
+  state.attempts += 1;
+  state.nextRetry = Date.now() + getBackoffDelay(state.attempts);
+  backoffState.set(cgId, state);
+};
+
+const recordSuccess = (cgId: string) => {
+  backoffState.delete(cgId);
+};
+
+const getCachedData = (cgId: string): CacheEntry | null => {
+  const cached = coinGeckoCache.get(cgId);
+  if (!cached) return null;
+  // Return cached data even if expired (will be refreshed in background)
+  return cached;
+};
+
+const isCacheValid = (cgId: string): boolean => {
+  const cached = coinGeckoCache.get(cgId);
+  if (!cached) return false;
+  return Date.now() - cached.timestamp < CACHE_TTL;
+};
+
+const setCacheData = (cgId: string, data: ChartDataPoint[], priceChange: number) => {
+  coinGeckoCache.set(cgId, { data, priceChange, timestamp: Date.now() });
+};
+
 export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [priceChange, setPriceChange] = useState(0);
@@ -243,23 +296,56 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
     return COINGECKO_ID_MAP[upperSym] || null;
   }, [coinGeckoId]);
 
-  // Fetch data from CoinGecko as fallback
-  const fetchCoinGeckoData = useCallback(async (cgId: string): Promise<boolean> => {
+  // Fetch data from CoinGecko as fallback with caching and backoff
+  const fetchCoinGeckoData = useCallback(async (cgId: string, forceRefresh = false): Promise<boolean> => {
+    // Check cache first (use cached data immediately if available)
+    const cached = getCachedData(cgId);
+    if (cached && !forceRefresh) {
+      // Use cached data immediately
+      setChartData(cached.data);
+      setPriceChange(cached.priceChange);
+      setIsSupported(true);
+      setDataSource("coingecko");
+      setError(null);
+      
+      if (cached.data.length > 0) {
+        lastPriceRef.current = cached.data[0].price;
+      }
+      
+      // If cache is still valid, don't fetch
+      if (isCacheValid(cgId)) {
+        return true;
+      }
+      // Cache expired but we have data - fetch in background
+    }
+
+    // Check if we're in backoff period
+    if (!canRetry(cgId) && cached) {
+      // Use stale cache during backoff
+      return true;
+    }
+
     try {
       const response = await fetchWithTimeout(
         `https://api.coingecko.com/api/v3/coins/${cgId}/market_chart?vs_currency=usd&days=1`
       );
 
       if (!response.ok) {
-        setError(`CoinGecko error (${response.status})`);
-        return false;
+        recordFailure(cgId);
+        if (!cached) {
+          setError(`CoinGecko error (${response.status})`);
+        }
+        return cached ? true : false; // Return true if we have cache
       }
       
       const data = await response.json();
       
       if (!data.prices || data.prices.length === 0) {
-        setError("CoinGecko returned no data");
-        return false;
+        recordFailure(cgId);
+        if (!cached) {
+          setError("CoinGecko returned no data");
+        }
+        return cached ? true : false;
       }
 
       // Take the last 20 data points
@@ -279,12 +365,17 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
         };
       });
       
+      let change = 0;
       if (historicalData.length > 0) {
         lastPriceRef.current = historicalData[0].price;
         const latestPrice = historicalData[historicalData.length - 1].price;
-        const change = ((latestPrice - historicalData[0].price) / historicalData[0].price) * 100;
+        change = ((latestPrice - historicalData[0].price) / historicalData[0].price) * 100;
         setPriceChange(change);
       }
+      
+      // Update cache
+      setCacheData(cgId, historicalData, change);
+      recordSuccess(cgId);
       
       setChartData(historicalData);
       setIsSupported(true);
@@ -292,10 +383,17 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
       setError(null);
       return true;
     } catch (error) {
+      recordFailure(cgId);
       const msg = error instanceof DOMException && error.name === "AbortError"
         ? "CoinGecko request timed out"
         : "Failed to fetch CoinGecko data";
       console.error(msg, error);
+      
+      // If we have cached data, use it and don't show error
+      if (cached) {
+        return true;
+      }
+      
       setError(msg);
       return false;
     }
@@ -449,21 +547,35 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
       clearInterval(refreshIntervalRef.current);
     }
     
-    // Refresh every 60 seconds (CoinGecko rate limits)
+    // Refresh every 60 seconds, with backoff handling built into fetchCoinGeckoData
     refreshIntervalRef.current = window.setInterval(() => {
-      fetchCoinGeckoData(cgId);
+      fetchCoinGeckoData(cgId, true); // force refresh attempt
     }, 60000);
   }, [fetchCoinGeckoData]);
 
   useEffect(() => {
-    // Reset state when symbol changes
-    setChartData([]);
-    lastPriceRef.current = null;
-    setPriceChange(0);
-    setIsLoading(true);
+    // Check for cached CoinGecko data first before resetting
+    const cgId = getCoinGeckoId(symbol);
+    const cached = cgId ? getCachedData(cgId) : null;
+    
+    // Reset state when symbol changes, but use cache if available
+    if (cached) {
+      setChartData(cached.data);
+      setPriceChange(cached.priceChange);
+      setIsLoading(false);
+      setDataSource("coingecko");
+      if (cached.data.length > 0) {
+        lastPriceRef.current = cached.data[0].price;
+      }
+    } else {
+      setChartData([]);
+      lastPriceRef.current = null;
+      setPriceChange(0);
+      setIsLoading(true);
+    }
+    
     setIsSupported(true);
     setError(null);
-    setDataSource(null);
     isConnectedRef.current = false;
 
     // Close existing connections and intervals
