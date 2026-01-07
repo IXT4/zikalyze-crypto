@@ -34,21 +34,34 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     "Generating insights..."
   ];
 
-  // Typewriter effect
+  // Typewriter effect - fixed to properly track and update displayed text
   useEffect(() => {
-    if (fullAnalysis.length > charIndexRef.current) {
+    // Clear any existing interval
+    if (typewriterRef.current) {
+      clearInterval(typewriterRef.current);
+      typewriterRef.current = null;
+    }
+    
+    // Only start typewriter if there's new content to display
+    if (fullAnalysis.length > 0 && charIndexRef.current < fullAnalysis.length) {
       typewriterRef.current = setInterval(() => {
         if (charIndexRef.current < fullAnalysis.length) {
-          setDisplayedText(fullAnalysis.slice(0, charIndexRef.current + 1));
           charIndexRef.current++;
+          setDisplayedText(fullAnalysis.slice(0, charIndexRef.current));
         } else {
-          if (typewriterRef.current) clearInterval(typewriterRef.current);
+          if (typewriterRef.current) {
+            clearInterval(typewriterRef.current);
+            typewriterRef.current = null;
+          }
         }
       }, TYPEWRITER_SPEED);
     }
 
     return () => {
-      if (typewriterRef.current) clearInterval(typewriterRef.current);
+      if (typewriterRef.current) {
+        clearInterval(typewriterRef.current);
+        typewriterRef.current = null;
+      }
     };
   }, [fullAnalysis]);
 
