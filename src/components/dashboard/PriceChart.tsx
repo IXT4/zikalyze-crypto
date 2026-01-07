@@ -112,9 +112,14 @@ const PriceChart = ({ crypto, coinGeckoId }: PriceChartProps) => {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-lg font-semibold text-foreground">Price Chart</h3>
-          {dataSource === "coingecko" && (
-            <span className="rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-medium text-warning">
-              Delayed
+          {dataSource && (
+            <span className={cn(
+              "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase",
+              dataSource === "coingecko" 
+                ? "bg-warning/20 text-warning" 
+                : "bg-primary/20 text-primary"
+            )}>
+              {dataSource === "coingecko" ? "Delayed" : dataSource}
             </span>
           )}
         </div>
