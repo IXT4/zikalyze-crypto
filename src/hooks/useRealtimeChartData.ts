@@ -91,7 +91,7 @@ const formatTime = (date: Date): string => {
   });
 };
 
-const fetchWithTimeout = async (url: string, timeoutMs = 10000): Promise<Response> => {
+const fetchWithTimeout = async (url: string, timeoutMs = 5000): Promise<Response> => {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -114,8 +114,8 @@ const CACHE_TTL = 5 * 60 * 1000;
 
 // Backoff state
 const backoffState = new Map<string, { attempts: number; nextRetry: number }>();
-const BASE_BACKOFF = 3000;
-const MAX_BACKOFF = 2 * 60 * 1000;
+const BASE_BACKOFF = 1000;
+const MAX_BACKOFF = 30 * 1000;
 
 const getBackoffKey = (symbol: string, exchange: Exchange) => `${symbol}-${exchange}`;
 const getBackoffDelay = (attempts: number) => Math.min(BASE_BACKOFF * Math.pow(2, attempts), MAX_BACKOFF);
@@ -390,7 +390,7 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
             reconnectTimeoutRef.current = window.setTimeout(() => {
               reconnectTimeoutRef.current = null;
               connectWebSocket(exchange, exchangeSymbol);
-            }, 5000);
+            }, 500);
           }
         };
 
