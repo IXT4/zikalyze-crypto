@@ -5,10 +5,11 @@ import { AlertCircle } from "lucide-react";
 
 interface PriceChartProps {
   crypto: string;
+  coinGeckoId?: string;
 }
 
-const PriceChart = ({ crypto }: PriceChartProps) => {
-  const { chartData, priceChange, isLoading, isSupported, error, isLive } = useRealtimeChartData(crypto);
+const PriceChart = ({ crypto, coinGeckoId }: PriceChartProps) => {
+  const { chartData, priceChange, isLoading, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
   
   const isPositive = priceChange >= 0;
   const strokeColor = isPositive ? "hsl(142, 76%, 46%)" : "hsl(0, 84%, 60%)";
@@ -27,6 +28,11 @@ const PriceChart = ({ crypto }: PriceChartProps) => {
         <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
           <AlertCircle className="h-8 w-8 text-warning" />
           <span className="text-sm">{error || `Chart not available for ${crypto}`}</span>
+          {dataSource === "coingecko" ? (
+            <span className="text-xs text-muted-foreground/70">Using delayed data</span>
+          ) : (
+            <span className="text-xs text-muted-foreground/70">Trying alternative sources…</span>
+          )}
         </div>
       );
     }
@@ -106,10 +112,14 @@ const PriceChart = ({ crypto }: PriceChartProps) => {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-lg font-semibold text-foreground">Price Chart</h3>
-          {isLive && (
-            <span className="flex items-center gap-1 rounded bg-success/20 px-1.5 py-0.5 text-[10px] font-medium text-success">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
-              Live
+          {dataSource && (
+            <span className={cn(
+              "rounded px-1.5 py-0.5 text-[10px] font-medium",
+              dataSource === "coingecko" 
+                ? "bg-warning/20 text-warning" 
+                : "bg-success/20 text-success"
+            )}>
+              {dataSource === "coingecko" ? "Delayed" : "Live"}
             </span>
           )}
         </div>

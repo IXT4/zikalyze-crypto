@@ -1,13 +1,15 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useRealtimeChartData } from "@/hooks/useRealtimeChartData";
+import { cn } from "@/lib/utils";
 import { AlertCircle } from "lucide-react";
 
 interface VolumeChartProps {
   crypto: string;
+  coinGeckoId?: string;
 }
 
-const VolumeChart = ({ crypto }: VolumeChartProps) => {
-  const { chartData, isLoading, isSupported, error, isLive } = useRealtimeChartData(crypto);
+const VolumeChart = ({ crypto, coinGeckoId }: VolumeChartProps) => {
+  const { chartData, isLoading, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
 
   // Format volume for display (convert to K, M, B)
   const formatVolume = (value: number) => {
@@ -89,10 +91,14 @@ const VolumeChart = ({ crypto }: VolumeChartProps) => {
     <div className="rounded-2xl border border-border bg-card p-6">
       <div className="mb-4 flex items-center gap-2">
         <h3 className="text-lg font-semibold text-foreground">Volume</h3>
-        {isLive && (
-          <span className="flex items-center gap-1 rounded bg-success/20 px-1.5 py-0.5 text-[10px] font-medium text-success">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
-            Live
+        {dataSource && (
+          <span className={cn(
+            "rounded px-1.5 py-0.5 text-[10px] font-medium",
+            dataSource === "coingecko" 
+              ? "bg-warning/20 text-warning" 
+              : "bg-success/20 text-success"
+          )}>
+            {dataSource === "coingecko" ? "Delayed" : "Live"}
           </span>
         )}
       </div>
