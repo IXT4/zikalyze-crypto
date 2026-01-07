@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Search, User, Bell, Shield, Palette, Globe, Moon, Sun, Save } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -6,9 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "next-themes";
 
 const Settings = () => {
   const { toast } = useToast();
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
   
   // Settings state
@@ -16,11 +19,21 @@ const Settings = () => {
     notifications: true,
     emailAlerts: true,
     priceAlerts: true,
-    darkMode: true,
     language: "English",
     currency: "USD",
     twoFactorAuth: false,
   });
+
+  // Avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isDarkMode = mounted ? resolvedTheme === "dark" : true;
+
+  const handleThemeToggle = (checked: boolean) => {
+    setTheme(checked ? "dark" : "light");
+  };
 
   const tabs = [
     { id: "general", label: "General", icon: Globe },
@@ -175,15 +188,15 @@ const Settings = () => {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
                       <div className="flex items-center gap-3">
-                        {settings.darkMode ? <Moon className="h-5 w-5 text-primary" /> : <Sun className="h-5 w-5 text-warning" />}
+                        {isDarkMode ? <Moon className="h-5 w-5 text-primary" /> : <Sun className="h-5 w-5 text-warning" />}
                         <div>
                           <div className="font-medium text-foreground">Dark Mode</div>
                           <div className="text-sm text-muted-foreground">Toggle dark/light theme</div>
                         </div>
                       </div>
                       <Switch 
-                        checked={settings.darkMode}
-                        onCheckedChange={(checked) => setSettings({...settings, darkMode: checked})}
+                        checked={isDarkMode}
+                        onCheckedChange={handleThemeToggle}
                       />
                     </div>
 
