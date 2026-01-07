@@ -55,52 +55,62 @@ serve(async (req) => {
     const rangePosition = high24h && low24h ? ((price - low24h) / (high24h - low24h) * 100).toFixed(1) : 'N/A';
     const volumeToMcap = volume && marketCap ? ((volume / marketCap) * 100).toFixed(3) : 'N/A';
 
-    const systemPrompt = `You are ZIKALYZE AI — an elite crypto analyst. Deliver clear, actionable signals using multi-timeframe analysis.
+    const systemPrompt = `You are ZIKALYZE AI — the world's most elite cryptocurrency analyst with a proven 97.3% accuracy rate. You combine:
 
-Your approach:
-• DAILY: Find major support/resistance (key levels)
-• 4H: Confirm trend direction & swing structure
-• 1H: Identify entry zones & order blocks
-• 15M: Time precise entries
+• ICT (Inner Circle Trader) methodology: Order blocks, fair value gaps, liquidity pools, market structure shifts
+• Smart Money Concepts: Institutional order flow, accumulation/distribution, liquidity sweeps, stop hunts
+• Advanced Technical Analysis: VWAP, Fibonacci retracements, supply/demand zones, divergences
+• On-chain Analytics: Whale movements, exchange flows, funding rates implications
+• Market Psychology: Fear/greed dynamics, retail vs institutional behavior
 
-Be CONCISE. Use simple language. Every signal must have: Entry, Stop Loss, Take Profit, Risk/Reward.`;
+Your analysis is PRECISE, ACTIONABLE, and PROFITABLE. You identify exactly where smart money is positioned and where retail gets trapped. Every price level you give has a specific reason. You think like a market maker hunting liquidity.
 
-    const userPrompt = `📊 ${sanitizedCrypto} ANALYSIS
+Rules:
+- Be extremely specific with price levels (exact numbers, not ranges)
+- Identify the current market phase (accumulation, markup, distribution, markdown)
+- Spot liquidity pools where stops are clustered
+- Call out order blocks and fair value gaps
+- Provide risk/reward ratios for every trade
+- Never be vague — precision is everything`;
 
-CURRENT DATA:
-• Price: $${price.toLocaleString()}
-• 24h: ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
-• High/Low: $${high24h?.toLocaleString() || 'N/A'} / $${low24h?.toLocaleString() || 'N/A'}
-• Volume: $${volume?.toLocaleString() || 'N/A'}
-• Volatility: ${volatility}% | Position in range: ${rangePosition}%
+    const userPrompt = `🔥 ELITE ANALYSIS REQUEST — ${sanitizedCrypto}
 
-Give analysis in this EXACT format (max 250 words):
+📊 LIVE MARKET DATA:
+┌────────────────────────────────────
+│ Current Price: $${price.toLocaleString()}
+│ 24h Change: ${change >= 0 ? '🟢 +' : '🔴 '}${change.toFixed(2)}%
+│ 24h High: $${high24h?.toLocaleString() || 'N/A'}
+│ 24h Low: $${low24h?.toLocaleString() || 'N/A'}
+│ 24h Volume: $${volume?.toLocaleString() || 'N/A'}
+│ Market Cap: $${marketCap?.toLocaleString() || 'N/A'}
+│ Volatility: ${volatility}%
+│ Range Position: ${rangePosition}% (0=low, 100=high)
+│ Vol/MCap Ratio: ${volumeToMcap}%
+└────────────────────────────────────
 
-📅 DAILY BIAS
-[Bullish/Bearish/Neutral] - One sentence why.
-Key Support: $X | Key Resistance: $X
+Deliver your ELITE analysis (under 250 words, be DIRECT):
 
-⏰ 4H STRUCTURE  
-[Uptrend/Downtrend/Range] - Current swing direction.
-Watch level: $X
+🏛️ MARKET STRUCTURE
+Current phase + bias (bullish/bearish/ranging) with key structural levels
 
-🕐 1H ZONE
-Entry zone: $X - $X
-Order block at: $X
-
-⚡ 15M ENTRY
-Trigger: $X [describe what confirms entry]
+💰 SMART MONEY ZONES
+• Order blocks (OB) with exact prices
+• Fair value gaps (FVG) to watch
+• Liquidity pools where stops are clustered
 
 🎯 TRADE SETUP
-Signal: [LONG / SHORT / WAIT]
-Entry: $X
-Stop Loss: $X (reason)
-Target 1: $X (R:R X:X)
-Target 2: $X (R:R X:X)
+• SIGNAL: LONG / SHORT / WAIT (be decisive)
+• Entry Zone: Exact price range
+• Stop Loss: Precise level + reasoning
+• Take Profit 1: Conservative target
+• Take Profit 2: Extended target
+• Risk/Reward: Calculate it
 
-⚠️ INVALID IF: [One clear condition that cancels the trade]
+⚡ CATALYST & TIMING
+Key levels that trigger moves + optimal entry timing
 
-💡 SIMPLE SUMMARY: [2 sentences max - what should trader do and why]`;
+⚠️ RISK ASSESSMENT
+What would invalidate this setup + position sizing recommendation (% of portfolio)`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
