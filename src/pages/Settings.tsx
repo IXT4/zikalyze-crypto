@@ -60,28 +60,29 @@ const Settings = () => {
         </header>
 
         <div className="p-6">
-          <div className="flex flex-col lg:flex-row gap-6">
-            {/* Tabs Navigation */}
-            <div className="lg:w-64 space-y-2">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all text-left",
-                    activeTab === tab.id
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-card text-muted-foreground hover:bg-secondary hover:text-foreground border border-border"
-                  )}
-                >
-                  <tab.icon className="h-5 w-5" />
-                  <span className="font-medium">{tab.label}</span>
-                </button>
-              ))}
-            </div>
+          {/* Tabs Navigation - Stacked vertically */}
+          <div className="space-y-2 mb-6">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "w-full flex items-center gap-3 rounded-xl px-4 py-3.5 transition-all text-left",
+                  activeTab === tab.id
+                    ? "bg-primary text-primary-foreground font-medium"
+                    : "bg-card/50 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+              >
+                <tab.icon className="h-5 w-5" />
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-6">
 
             {/* Settings Content */}
-            <div className="flex-1 rounded-2xl border border-border bg-card p-6">
+            <div className="rounded-2xl border border-border bg-card p-6">
               {activeTab === "general" && (
                 <div className="space-y-6">
                   <div>
@@ -236,9 +237,9 @@ const Settings = () => {
                   <Save className="h-4 w-4" />
                   Save Changes
                 </Button>
-              </div>
             </div>
           </div>
+        </div>
         </div>
       </main>
     </div>
