@@ -228,45 +228,8 @@ const fetchBybitData = async (symbol: string, bybitSymbol: string): Promise<Char
   } catch { recordFailure(backoffKey); return null; }
 };
 
-const fetchMexcData = async (symbol: string, mexcSymbol: string): Promise<ChartDataPoint[] | null> => {
-  const backoffKey = getBackoffKey(symbol, "mexc");
-  if (!canRetry(backoffKey)) return null;
-  try {
-    const response = await fetchWithTimeout(
-      `https://api.mexc.com/api/v3/klines?symbol=${mexcSymbol}&interval=1m&limit=20`
-    );
-    if (!response.ok) { recordFailure(backoffKey); return null; }
-    const data = await response.json();
-    if (!Array.isArray(data) || data.length === 0) { recordFailure(backoffKey); return null; }
-    recordSuccess(backoffKey);
-    return data.map((kline: any[]) => ({
-      time: formatTime(new Date(kline[6])),
-      price: parseFloat(kline[4]),
-      volume: parseFloat(kline[5]),
-      positive: parseFloat(kline[4]) >= parseFloat(kline[1]),
-    }));
-  } catch { recordFailure(backoffKey); return null; }
-};
-
-const fetchGateioData = async (symbol: string, gateioSymbol: string): Promise<ChartDataPoint[] | null> => {
-  const backoffKey = getBackoffKey(symbol, "gateio");
-  if (!canRetry(backoffKey)) return null;
-  try {
-    const response = await fetchWithTimeout(
-      `https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${gateioSymbol}&interval=1m&limit=20`
-    );
-    if (!response.ok) { recordFailure(backoffKey); return null; }
-    const data = await response.json();
-    if (!Array.isArray(data) || data.length === 0) { recordFailure(backoffKey); return null; }
-    recordSuccess(backoffKey);
-    return data.map((candle: string[]) => ({
-      time: formatTime(new Date(parseInt(candle[0]) * 1000)),
-      price: parseFloat(candle[2]),
-      volume: parseFloat(candle[1]),
-      positive: parseFloat(candle[2]) >= parseFloat(candle[5]),
-    }));
-  } catch { recordFailure(backoffKey); return null; }
-};
+// MEXC and Gate.io use WebSocket-only - no REST fetch needed
+// They will be handled directly via WebSocket connection
 
 const fetchCoinbaseData = async (symbol: string, coinbaseSymbol: string): Promise<ChartDataPoint[] | null> => {
   const backoffKey = getBackoffKey(symbol, "coinbase");
@@ -332,6 +295,12 @@ const parseWebSocketMessage = (exchange: Exchange, data: any): { price: number; 
         }
         break;
       case "mexc":
+        // Kline/candlestick data
+        if (data.d?.k) {
+          const k = data.d.k;
+          return { price: parseFloat(k.c), volume: parseFloat(k.v || "0"), time: new Date(k.t) };
+        }
+        // Deals/trades data
         if (data.d?.deals?.[0]) {
           const d = data.d.deals[0];
           return { price: parseFloat(d.p), volume: parseFloat(d.v || "0"), time: new Date(d.t) };
@@ -341,11 +310,17 @@ const parseWebSocketMessage = (exchange: Exchange, data: any): { price: number; 
         }
         break;
       case "gateio":
-        if (data.result?.last) {
-          return { price: parseFloat(data.result.last), volume: parseFloat(data.result.base_volume || "0"), time: new Date() };
+        // Candlestick data: [timestamp, volume, close, high, low, open]
+        if (data.channel === "spot.candlesticks" && data.result) {
+          const r = data.result;
+          return { price: parseFloat(r.c), volume: parseFloat(r.v || r.a || "0"), time: new Date(parseInt(r.t) * 1000) };
         }
+        // Ticker data
         if (data.channel === "spot.tickers" && data.result) {
           return { price: parseFloat(data.result.last), volume: parseFloat(data.result.base_volume || "0"), time: new Date(parseInt(data.time) * 1000) };
+        }
+        if (data.result?.last) {
+          return { price: parseFloat(data.result.last), volume: parseFloat(data.result.base_volume || "0"), time: new Date() };
         }
         break;
       case "coinbase":
@@ -508,10 +483,132 @@ export const useRealtimeChartData = (symbol: string) => {
       } catch {}
     };
 
-    const loadData = async () => {
-      const exchanges: Exchange[] = ["binance", "okx", "bybit", "mexc", "gateio", "coinbase", "kraken"];
+    // Try WebSocket-only connection with timeout for MEXC/Gate.io
+    const tryWebSocketConnection = (exchange: Exchange, exchangeSymbol: string): Promise<boolean> => {
+      return new Promise((resolve) => {
+        if (!mountedRef.current) { resolve(false); return; }
 
-      for (const exchange of exchanges) {
+        let wsUrl: string;
+        let subscribeMessage: string;
+
+        switch (exchange) {
+          case "mexc":
+            wsUrl = "wss://wbs.mexc.com/ws";
+            subscribeMessage = JSON.stringify({ method: "SUBSCRIPTION", params: [`spot@public.kline.v3.api@${exchangeSymbol}@Min1`] });
+            break;
+          case "gateio":
+            wsUrl = "wss://api.gateio.ws/ws/v4/";
+            subscribeMessage = JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: "spot.candlesticks", event: "subscribe", payload: ["1m", exchangeSymbol] });
+            break;
+          default:
+            resolve(false);
+            return;
+        }
+
+        const timeout = setTimeout(() => {
+          ws.close();
+          resolve(false);
+        }, 5000);
+
+        const ws = new WebSocket(wsUrl);
+        let gotData = false;
+
+        ws.onopen = () => {
+          if (!mountedRef.current) { ws.close(); clearTimeout(timeout); resolve(false); return; }
+          ws.send(subscribeMessage);
+        };
+
+        ws.onmessage = (event) => {
+          if (!mountedRef.current) return;
+          try {
+            const data = JSON.parse(event.data);
+            const parsed = parseWebSocketMessage(exchange, data);
+            if (parsed && !gotData) {
+              gotData = true;
+              clearTimeout(timeout);
+              setIsLoading(false);
+              setIsLive(true);
+              lastPriceRef.current = parsed.price;
+              
+              const timeStr = formatTime(parsed.time);
+              setChartData([{
+                time: timeStr,
+                price: parsed.price,
+                volume: parsed.volume,
+                positive: true,
+              }]);
+              
+              wsRef.current = ws;
+              
+              // Continue receiving messages
+              ws.onmessage = (event) => {
+                if (!mountedRef.current) return;
+                try {
+                  const data = JSON.parse(event.data);
+                  const parsed = parseWebSocketMessage(exchange, data);
+                  if (parsed) {
+                    const timeStr = formatTime(parsed.time);
+                    if (lastPriceRef.current === null) lastPriceRef.current = parsed.price;
+                    const change = ((parsed.price - lastPriceRef.current) / lastPriceRef.current) * 100;
+                    setPriceChange(change);
+                    setChartData((prev) => {
+                      const newPoint: ChartDataPoint = {
+                        time: timeStr,
+                        price: parsed.price,
+                        volume: parsed.volume,
+                        positive: parsed.price >= (prev[prev.length - 1]?.price || parsed.price),
+                      };
+                      const existingIndex = prev.findIndex(p => p.time === timeStr);
+                      if (existingIndex !== -1) {
+                        const updated = [...prev];
+                        updated[existingIndex] = newPoint;
+                        return updated;
+                      }
+                      const updated = [...prev, newPoint];
+                      if (updated.length > 20) {
+                        updated.shift();
+                        lastPriceRef.current = updated[0]?.price || null;
+                      }
+                      return updated;
+                    });
+                  }
+                } catch {}
+              };
+              
+              ws.onclose = () => {
+                setIsLive(false);
+                if (mountedRef.current && !reconnectTimeoutRef.current) {
+                  reconnectTimeoutRef.current = window.setTimeout(() => {
+                    reconnectTimeoutRef.current = null;
+                    tryWebSocketConnection(exchange, exchangeSymbol);
+                  }, 5000);
+                }
+              };
+              
+              resolve(true);
+            }
+          } catch {}
+        };
+
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          resolve(false);
+        };
+
+        ws.onclose = () => {
+          if (!gotData) {
+            clearTimeout(timeout);
+            resolve(false);
+          }
+        };
+      });
+    };
+
+    const loadData = async () => {
+      // REST-based exchanges first
+      const restExchanges: Exchange[] = ["binance", "okx", "bybit", "coinbase", "kraken"];
+
+      for (const exchange of restExchanges) {
         if (!mountedRef.current) return;
 
         const exchangeSymbol = getExchangeSymbol(symbol, exchange);
@@ -523,8 +620,6 @@ export const useRealtimeChartData = (symbol: string) => {
           case "binance": data = await fetchBinanceData(symbol, exchangeSymbol); break;
           case "okx": data = await fetchOkxData(symbol, exchangeSymbol); break;
           case "bybit": data = await fetchBybitData(symbol, exchangeSymbol); break;
-          case "mexc": data = await fetchMexcData(symbol, exchangeSymbol); break;
-          case "gateio": data = await fetchGateioData(symbol, exchangeSymbol); break;
           case "coinbase": data = await fetchCoinbaseData(symbol, exchangeSymbol); break;
           case "kraken": data = await fetchKrakenData(symbol, exchangeSymbol); break;
         }
@@ -539,6 +634,19 @@ export const useRealtimeChartData = (symbol: string) => {
           connectWebSocket(exchange, exchangeSymbol);
           return;
         }
+      }
+
+      // Try WebSocket-only exchanges (MEXC, Gate.io) as fallback
+      const wsOnlyExchanges: Exchange[] = ["mexc", "gateio"];
+      for (const exchange of wsOnlyExchanges) {
+        if (!mountedRef.current) return;
+        
+        const exchangeSymbol = getExchangeSymbol(symbol, exchange);
+        if (!exchangeSymbol) continue;
+
+        // Try connecting via WebSocket directly - success will be determined by receiving data
+        const success = await tryWebSocketConnection(exchange, exchangeSymbol);
+        if (success) return;
       }
 
       if (mountedRef.current) {
