@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "@/components/dashboard/Sidebar";
-import { Search, User, Bell, BellRing, Trash2, Clock, CheckCircle, AlertCircle } from "lucide-react";
+import { Search, User, Bell, BellRing, Trash2, Clock, CheckCircle, AlertCircle, Volume2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useState as useStateReact } from "react";
 import { cn } from "@/lib/utils";
+import { alertSound } from "@/lib/alertSound";
+import { toast } from "sonner";
 
 interface TriggeredAlert {
   id: string;
@@ -83,6 +84,11 @@ const Alerts = () => {
     return new Date(dateString).toLocaleString();
   };
 
+  const handleTestSound = () => {
+    alertSound.playAlertSound();
+    toast.info("Testing alert sound...");
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
@@ -149,37 +155,43 @@ const Alerts = () => {
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setActiveTab("active")}
-              className={cn(
-                "rounded-lg px-4 py-2 text-sm font-medium transition-all flex items-center gap-2",
-                activeTab === "active"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Bell className="h-4 w-4" />
-              Active Alerts
-              {alerts.length > 0 && (
-                <span className="bg-primary-foreground/20 text-primary-foreground px-1.5 py-0.5 rounded text-xs">
-                  {alerts.length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("history")}
-              className={cn(
-                "rounded-lg px-4 py-2 text-sm font-medium transition-all flex items-center gap-2",
-                activeTab === "history"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Clock className="h-4 w-4" />
-              Alert History
-            </button>
+          {/* Tabs and Test Sound */}
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveTab("active")}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium transition-all flex items-center gap-2",
+                  activeTab === "active"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Bell className="h-4 w-4" />
+                Active Alerts
+                {alerts.length > 0 && (
+                  <span className="bg-primary-foreground/20 text-primary-foreground px-1.5 py-0.5 rounded text-xs">
+                    {alerts.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("history")}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium transition-all flex items-center gap-2",
+                  activeTab === "history"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Clock className="h-4 w-4" />
+                Alert History
+              </button>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleTestSound} className="gap-2">
+              <Volume2 className="h-4 w-4" />
+              Test Sound
+            </Button>
           </div>
 
           {/* Content */}

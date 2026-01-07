@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { alertSound } from "@/lib/alertSound";
 
 export interface PriceAlert {
   id: string;
@@ -165,6 +166,9 @@ export const usePriceAlerts = () => {
 
         if (shouldTrigger) {
           triggeredAlerts.push(alert);
+
+          // Play alert sound
+          alertSound.playAlertSound();
 
           // Show browser notification
           if (
