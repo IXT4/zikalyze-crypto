@@ -114,12 +114,12 @@ const PriceChart = ({ crypto, coinGeckoId }: PriceChartProps) => {
           <h3 className="text-lg font-semibold text-foreground">Price Chart</h3>
           {dataSource && (
             <span className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase",
+              "rounded px-1.5 py-0.5 text-[10px] font-medium",
               dataSource === "coingecko" 
                 ? "bg-warning/20 text-warning" 
-                : "bg-primary/20 text-primary"
+                : "bg-success/20 text-success"
             )}>
-              {dataSource === "coingecko" ? "Delayed" : dataSource}
+              {dataSource === "coingecko" ? "Delayed" : "Live"}
             </span>
           )}
         </div>
