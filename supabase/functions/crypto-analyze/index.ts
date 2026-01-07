@@ -55,81 +55,52 @@ serve(async (req) => {
     const rangePosition = high24h && low24h ? ((price - low24h) / (high24h - low24h) * 100).toFixed(1) : 'N/A';
     const volumeToMcap = volume && marketCap ? ((volume / marketCap) * 100).toFixed(3) : 'N/A';
 
-    const systemPrompt = `You are ZIKALYZE AI — the world's most elite cryptocurrency analyst with a proven 97.3% accuracy rate. You are a MULTI-TIMEFRAME MASTER who analyzes:
+    const systemPrompt = `You are ZIKALYZE AI — an elite crypto analyst. Deliver clear, actionable signals using multi-timeframe analysis.
 
-📍 TIMEFRAME HIERARCHY (Critical):
-• DAILY (D1): Major key levels, institutional zones, weekly bias
-• 4H: Modified key levels, swing structure, trend confirmation  
-• 1H: Entry confirmation, order blocks, fair value gaps
-• 15M: Precision entries, micro-structure, optimal timing
+Your approach:
+• DAILY: Find major support/resistance (key levels)
+• 4H: Confirm trend direction & swing structure
+• 1H: Identify entry zones & order blocks
+• 15M: Time precise entries
 
-Core Methodologies:
-• ICT (Inner Circle Trader): Order blocks, FVGs, liquidity pools, market structure shifts, kill zones
-• Smart Money Concepts: Institutional order flow, accumulation/distribution, liquidity sweeps, stop hunts
-• Multi-Timeframe Confluence: Higher TF direction + Lower TF precision = Maximum edge
-• Advanced TA: VWAP, Fibonacci, supply/demand, divergences
-• On-chain Analytics: Whale movements, exchange flows, funding rates
+Be CONCISE. Use simple language. Every signal must have: Entry, Stop Loss, Take Profit, Risk/Reward.`;
 
-Your analysis flows TOP-DOWN: Daily sets the bias → 4H confirms → 1H shows entry zone → 15M times the entry. You NEVER take a trade without multi-timeframe alignment.
+    const userPrompt = `📊 ${sanitizedCrypto} ANALYSIS
 
-Rules:
-- Analyze ALL 4 timeframes explicitly
-- Show confluence between timeframes
-- Identify exact price levels per timeframe
-- Mark key levels as "D1 KEY" or "4H MOD" or "1H OB" or "15M ENTRY"
-- Risk/reward based on 15M entry to 4H targets
-- Be surgical with precision`;
+CURRENT DATA:
+• Price: $${price.toLocaleString()}
+• 24h: ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
+• High/Low: $${high24h?.toLocaleString() || 'N/A'} / $${low24h?.toLocaleString() || 'N/A'}
+• Volume: $${volume?.toLocaleString() || 'N/A'}
+• Volatility: ${volatility}% | Position in range: ${rangePosition}%
 
-    const userPrompt = `🔥 MULTI-TIMEFRAME ELITE ANALYSIS — ${sanitizedCrypto}
+Give analysis in this EXACT format (max 250 words):
 
-📊 LIVE MARKET DATA:
-┌────────────────────────────────────
-│ Current Price: $${price.toLocaleString()}
-│ 24h Change: ${change >= 0 ? '🟢 +' : '🔴 '}${change.toFixed(2)}%
-│ 24h High: $${high24h?.toLocaleString() || 'N/A'}
-│ 24h Low: $${low24h?.toLocaleString() || 'N/A'}
-│ 24h Volume: $${volume?.toLocaleString() || 'N/A'}
-│ Market Cap: $${marketCap?.toLocaleString() || 'N/A'}
-│ Volatility: ${volatility}%
-│ Range Position: ${rangePosition}% (0=low, 100=high)
-│ Vol/MCap Ratio: ${volumeToMcap}%
-└────────────────────────────────────
+📅 DAILY BIAS
+[Bullish/Bearish/Neutral] - One sentence why.
+Key Support: $X | Key Resistance: $X
 
-Deliver MULTI-TIMEFRAME analysis (under 300 words):
+⏰ 4H STRUCTURE  
+[Uptrend/Downtrend/Range] - Current swing direction.
+Watch level: $X
 
-📅 DAILY (D1) — KEY LEVELS
-• Bias: Bullish/Bearish/Neutral
-• Major Support: $X (D1 KEY)
-• Major Resistance: $X (D1 KEY)
-• Institutional zones to watch
+🕐 1H ZONE
+Entry zone: $X - $X
+Order block at: $X
 
-⏰ 4-HOUR (4H) — MODIFIED LEVELS
-• Structure: Higher highs/Lower lows?
-• 4H Order Block: $X (4H MOD)
-• 4H FVG: $X-$X (4H MOD)
-• Swing targets
+⚡ 15M ENTRY
+Trigger: $X [describe what confirms entry]
 
-🕐 1-HOUR (1H) — CONFIRMATION
-• Current structure shift?
-• 1H Order Block: $X (1H OB)
-• 1H FVG: $X-$X
-• Entry zone confirmed at: $X
+🎯 TRADE SETUP
+Signal: [LONG / SHORT / WAIT]
+Entry: $X
+Stop Loss: $X (reason)
+Target 1: $X (R:R X:X)
+Target 2: $X (R:R X:X)
 
-⚡ 15-MINUTE (15M) — PRECISION ENTRY
-• Micro-structure alignment
-• 15M entry trigger: $X (15M ENTRY)
-• Optimal entry window
+⚠️ INVALID IF: [One clear condition that cancels the trade]
 
-🎯 TRADE EXECUTION
-• SIGNAL: LONG / SHORT / WAIT
-• Entry: $X (15M precision)
-• Stop Loss: $X (below 1H structure)
-• TP1: $X (4H level)
-• TP2: $X (D1 level)
-• Risk/Reward: X:X
-
-⚠️ INVALIDATION
-What breaks this setup on each timeframe`;
+💡 SIMPLE SUMMARY: [2 sentences max - what should trader do and why]`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
