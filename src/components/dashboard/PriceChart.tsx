@@ -9,7 +9,7 @@ interface PriceChartProps {
 }
 
 const PriceChart = ({ crypto, coinGeckoId }: PriceChartProps) => {
-  const { chartData, priceChange, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
+  const { chartData, priceChange, isLoading, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
   
   const isPositive = priceChange >= 0;
   const strokeColor = isPositive ? "hsl(142, 76%, 46%)" : "hsl(0, 84%, 60%)";
@@ -27,20 +27,34 @@ const PriceChart = ({ crypto, coinGeckoId }: PriceChartProps) => {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
           <AlertCircle className="h-8 w-8 text-warning" />
-          <span className="text-sm">Chart not available for {crypto}</span>
-          <span className="text-xs text-muted-foreground/70">This asset is not traded on Binance</span>
+          <span className="text-sm">{error || `Chart not available for ${crypto}`}</span>
+          {dataSource === "coingecko" ? (
+            <span className="text-xs text-muted-foreground/70">Using delayed data</span>
+          ) : (
+            <span className="text-xs text-muted-foreground/70">Trying alternative sources…</span>
+          )}
         </div>
       );
     }
 
     // Loading state
-    if (chartData.length === 0) {
+    if (isLoading) {
       return (
         <div className="flex h-full items-center justify-center">
           <div className="flex items-center gap-2 text-muted-foreground">
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <span>Loading live data...</span>
+            <span>Loading data...</span>
           </div>
+        </div>
+      );
+    }
+
+    // No data after loading
+    if (chartData.length === 0) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+          <AlertCircle className="h-8 w-8 text-warning" />
+          <span className="text-sm">No chart data available</span>
         </div>
       );
     }

@@ -8,7 +8,7 @@ interface VolumeChartProps {
 }
 
 const VolumeChart = ({ crypto, coinGeckoId }: VolumeChartProps) => {
-  const { chartData, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
+  const { chartData, isLoading, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
 
   // Format volume for display (convert to K, M, B)
   const formatVolume = (value: number) => {
@@ -24,19 +24,29 @@ const VolumeChart = ({ crypto, coinGeckoId }: VolumeChartProps) => {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-1 text-muted-foreground">
           <AlertCircle className="h-5 w-5 text-warning" />
-          <span className="text-xs">Not available</span>
+          <span className="text-xs">{error || "Not available"}</span>
         </div>
       );
     }
 
     // Loading state
-    if (chartData.length === 0) {
+    if (isLoading) {
       return (
         <div className="flex h-full items-center justify-center">
           <div className="flex items-center gap-2 text-muted-foreground">
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
             <span>Loading...</span>
           </div>
+        </div>
+      );
+    }
+
+    // No data after loading
+    if (chartData.length === 0) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-1 text-muted-foreground">
+          <AlertCircle className="h-5 w-5 text-warning" />
+          <span className="text-xs">No data</span>
         </div>
       );
     }
