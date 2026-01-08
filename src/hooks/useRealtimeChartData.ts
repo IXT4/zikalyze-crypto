@@ -32,8 +32,10 @@ const COINGECKO_ID_MAP: Record<string, string> = {
   BAT: "basic-attention-token", CAKE: "pancakeswap-token", SUSHI: "sushi",
   YFI: "yearn-finance", STETH: "staked-ether", WBTC: "wrapped-bitcoin",
   TON: "the-open-network", LEO: "leo-token", OKB: "okb", KCS: "kucoin-shares",
-  CRO: "crypto-com-chain", TUSD: "true-usd", USDD: "usdd", USDC: "usd-coin",
-  BUSD: "binance-usd", DAI: "dai",
+  CRO: "crypto-com-chain", GOMINING: "gomining", GOMI: "gomining",
+  WLD: "worldcoin", JUP: "jupiter", JTO: "jito-governance-token", KAS: "kaspa",
+  TAO: "bittensor", PYTH: "pyth-network", TRB: "tellor", ORDI: "ordi",
+  STG: "stargate-finance", BLUR: "blur", PENDLE: "pendle", DYDX: "dydx-chain",
 };
 
 const COINBASE_SYMBOL_MAP: Record<string, string> = {
