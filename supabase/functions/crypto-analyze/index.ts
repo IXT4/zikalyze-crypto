@@ -61,53 +61,69 @@ serve(async (req) => {
     };
 
     try {
-      // Fetch BTC ETF flow data from CoinGlass public API
+      // Fetch BTC ETF flow data from CoinGlass public API with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
       const etfResponse = await fetch('https://api.coinglass.com/api/etf/v3/inflow?symbol=BTC&interval=d1', {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
           'User-Agent': 'Zikalyze-AI/1.0'
-        }
+        },
+        signal: controller.signal
       });
       
+      clearTimeout(timeoutId);
+      
       if (etfResponse.ok) {
-        const etfData = await etfResponse.json();
-        console.log('ETF Flow data received:', JSON.stringify(etfData).substring(0, 300));
-        
-        if (etfData.data && Array.isArray(etfData.data) && etfData.data.length > 0) {
-          const latestFlow = etfData.data[etfData.data.length - 1];
-          const previousFlow = etfData.data.length > 1 ? etfData.data[etfData.data.length - 2] : null;
+        const responseText = await etfResponse.text();
+        // Validate it's actually JSON before parsing
+        if (responseText.startsWith('{') || responseText.startsWith('[')) {
+          const etfData = JSON.parse(responseText);
+          console.log('ETF Flow data received:', JSON.stringify(etfData).substring(0, 300));
           
-          const netFlow = latestFlow.totalNetAsset || latestFlow.netAsset || latestFlow.inflow || 0;
-          etfFlowData.btcNetFlow = `$${(netFlow / 1e6).toFixed(1)}M`;
-          etfFlowData.totalNetFlow = etfFlowData.btcNetFlow;
-          
-          // Determine flow trend
-          if (previousFlow) {
-            const prevFlow = previousFlow.totalNetAsset || previousFlow.netAsset || previousFlow.inflow || 0;
-            const flowChange = netFlow - prevFlow;
-            etfFlowData.dailyChange = `$${(flowChange / 1e6).toFixed(1)}M`;
+          if (etfData.data && Array.isArray(etfData.data) && etfData.data.length > 0) {
+            const latestFlow = etfData.data[etfData.data.length - 1];
+            const previousFlow = etfData.data.length > 1 ? etfData.data[etfData.data.length - 2] : null;
             
-            if (netFlow > 100e6) etfFlowData.flowTrend = 'STRONG_INFLOW';
-            else if (netFlow > 0) etfFlowData.flowTrend = 'STEADY_INFLOW';
-            else if (netFlow < -100e6) etfFlowData.flowTrend = 'STRONG_OUTFLOW';
-            else if (netFlow < 0) etfFlowData.flowTrend = 'STEADY_OUTFLOW';
-            else etfFlowData.flowTrend = 'NEUTRAL';
+            const netFlow = latestFlow.totalNetAsset || latestFlow.netAsset || latestFlow.inflow || 0;
+            etfFlowData.btcNetFlow = `$${(netFlow / 1e6).toFixed(1)}M`;
+            etfFlowData.totalNetFlow = etfFlowData.btcNetFlow;
+            
+            // Determine flow trend
+            if (previousFlow) {
+              const prevFlow = previousFlow.totalNetAsset || previousFlow.netAsset || previousFlow.inflow || 0;
+              const flowChange = netFlow - prevFlow;
+              etfFlowData.dailyChange = `$${(flowChange / 1e6).toFixed(1)}M`;
+              
+              if (netFlow > 100e6) etfFlowData.flowTrend = 'STRONG_INFLOW';
+              else if (netFlow > 0) etfFlowData.flowTrend = 'STEADY_INFLOW';
+              else if (netFlow < -100e6) etfFlowData.flowTrend = 'STRONG_OUTFLOW';
+              else if (netFlow < 0) etfFlowData.flowTrend = 'STEADY_OUTFLOW';
+              else etfFlowData.flowTrend = 'NEUTRAL';
+            }
+            
+            // Calculate sentiment based on flow magnitude
+            if (netFlow > 200e6) etfFlowData.sentiment = 'EXTREME_BULLISH';
+            else if (netFlow > 100e6) etfFlowData.sentiment = 'STRONG_BULLISH';
+            else if (netFlow > 0) etfFlowData.sentiment = 'BULLISH';
+            else if (netFlow < -200e6) etfFlowData.sentiment = 'EXTREME_BEARISH';
+            else if (netFlow < -100e6) etfFlowData.sentiment = 'STRONG_BEARISH';
+            else if (netFlow < 0) etfFlowData.sentiment = 'BEARISH';
           }
-          
-          // Calculate sentiment based on flow magnitude
-          if (netFlow > 200e6) etfFlowData.sentiment = 'EXTREME_BULLISH';
-          else if (netFlow > 100e6) etfFlowData.sentiment = 'STRONG_BULLISH';
-          else if (netFlow > 0) etfFlowData.sentiment = 'BULLISH';
-          else if (netFlow < -200e6) etfFlowData.sentiment = 'EXTREME_BEARISH';
-          else if (netFlow < -100e6) etfFlowData.sentiment = 'STRONG_BEARISH';
-          else if (netFlow < 0) etfFlowData.sentiment = 'BEARISH';
+        } else {
+          console.log('ETF API returned non-JSON response');
         }
       } else {
         console.log('ETF API response status:', etfResponse.status);
       }
-    } catch (etfError) {
-      console.log('ETF flow fetch error (non-critical):', etfError);
+    } catch (etfError: unknown) {
+      if (etfError instanceof Error && etfError.name === 'AbortError') {
+        console.log('ETF API request timed out');
+      } else {
+        console.log('ETF flow fetch error (non-critical):', etfError);
+      }
     }
 
     // Fallback: Alternative CoinGlass endpoint
@@ -298,14 +314,17 @@ ICT CORE CONCEPTS:
 - Premium/Discount Zones: Smart money buy/sell areas
 - BOS/CHoCH: Structure shifts for timing
 
-CRITICAL RULES:
-1. ALWAYS start with "🔮 ZIKALYZE AI ANALYSIS"
-2. Provide BOTH bull and bear scenarios with specific targets
-3. Include volume, RSI, and macro context in analysis
-4. Narrow zones to precise high-volume clusters
-5. Calculate confidence with data substantiation
-6. 15M SECTION IS MANDATORY — always provide micro OB, micro FVG, and exact entry with structure context
-7. Keep analysis under 500 words — elite precision with depth`;
+CRITICAL RULES FOR CONSISTENCY:
+1. ALWAYS start with "🔮 ZIKALYZE AI ANALYSIS" header exactly as shown
+2. ALWAYS provide BOTH bull and bear scenarios with specific price targets
+3. ALWAYS include all sections in the EXACT order shown in the template
+4. ALWAYS use the exact emoji headers provided (📡, 📊, 🌐, 📅, ⏰, 🕐, ⏱️, 🟢, 🔴, ⚠️, 🔄)
+5. ALWAYS fill in concrete price values — never use placeholders like "[price]"
+6. 15M SECTION IS MANDATORY — always provide micro OB, micro FVG, and exact entry
+7. Keep analysis between 400-500 words — elite precision with depth
+8. Use consistent formatting: levels as "$XX,XXX.XX", percentages as "+X.XX%"
+9. NEVER skip sections — if data unavailable, state "Awaiting confirmation"
+10. End with INVALIDATION section showing specific invalidation prices`;
 
     const userPrompt = `🔮 ZIKALYZE AI ANALYSIS — ${sanitizedCrypto}
 
