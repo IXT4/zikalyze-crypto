@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Search, User, TrendingUp, TrendingDown, BarChart3, Activity, PieChart } from "lucide-react";
+import { PageTransition } from "@/components/PageTransition";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
@@ -29,8 +30,9 @@ const Analytics = () => {
   const topLosers = [...prices].sort((a, b) => (a.price_change_percentage_24h || 0) - (b.price_change_percentage_24h || 0)).slice(0, 3);
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
+    <PageTransition>
+      <div className="min-h-screen bg-background">
+        <Sidebar />
 
       <main className="ml-16 lg:ml-64">
         {/* Header */}
@@ -194,7 +196,8 @@ const Analytics = () => {
           </div>
         </div>
       </main>
-    </div>
+      </div>
+    </PageTransition>
   );
 };
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Trash2, TrendingUp, TrendingDown, Wallet, RefreshCw } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
+import { PageTransition } from "@/components/PageTransition";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,8 +108,9 @@ const Portfolio = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
+    <PageTransition>
+      <div className="min-h-screen bg-background">
+        <Sidebar />
 
       <main className="ml-16 lg:ml-64">
         <header className="flex items-center justify-between border-b border-border px-6 py-4">
@@ -320,7 +322,8 @@ const Portfolio = () => {
           </Card>
         </div>
       </main>
-    </div>
+      </div>
+    </PageTransition>
   );
 };
 
