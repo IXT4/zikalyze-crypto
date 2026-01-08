@@ -80,10 +80,17 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
     }
   }, [prices]);
 
-  // Check alerts whenever prices update
+  // Check alerts whenever prices update - use a ref to track last check time
+  const lastAlertCheckRef = useRef<number>(0);
+  
   useEffect(() => {
     if (prices.length > 0 && alerts.length > 0) {
-      checkAlerts(prices);
+      // Throttle alert checks to every 2 seconds to prevent spam
+      const now = Date.now();
+      if (now - lastAlertCheckRef.current > 2000) {
+        lastAlertCheckRef.current = now;
+        checkAlerts(prices);
+      }
     }
   }, [prices, alerts, checkAlerts]);
 

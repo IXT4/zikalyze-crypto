@@ -2,16 +2,23 @@
 
 class AlertSoundPlayer {
   private audioContext: AudioContext | null = null;
+  private isPlaying = false;
 
   private getAudioContext(): AudioContext {
-    if (!this.audioContext) {
-      this.audioContext = new AudioContext();
+    if (!this.audioContext || this.audioContext.state === "closed") {
+      // Use webkitAudioContext for Safari compatibility
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.audioContext = new AudioContextClass();
     }
     return this.audioContext;
   }
 
   // Play a success/alert chime sound
   async playAlertSound(): Promise<void> {
+    // Prevent overlapping sounds
+    if (this.isPlaying) return;
+    this.isPlaying = true;
+
     try {
       const ctx = this.getAudioContext();
       
@@ -52,8 +59,14 @@ class AlertSoundPlayer {
         this.playSecondChime(ctx);
       }, 300);
 
+      // Reset isPlaying after sound completes
+      setTimeout(() => {
+        this.isPlaying = false;
+      }, 800);
+
     } catch (error) {
       console.error("Error playing alert sound:", error);
+      this.isPlaying = false;
     }
   }
 

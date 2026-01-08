@@ -159,15 +159,18 @@ export const usePriceAlerts = () => {
   // Check prices and trigger alerts
   const checkAlerts = useCallback(
     async (prices: { symbol: string; current_price: number }[]) => {
-      if (alerts.length === 0) return;
+      if (alerts.length === 0 || prices.length === 0) return;
 
       const triggeredAlerts: PriceAlert[] = [];
 
       for (const alert of alerts) {
+        // Normalize symbol comparison - alerts store uppercase, prices might be lowercase
+        const alertSymbol = alert.symbol.toUpperCase();
         const crypto = prices.find(
-          (p) => p.symbol.toUpperCase() === alert.symbol
+          (p) => p.symbol.toUpperCase() === alertSymbol
         );
-        if (!crypto) continue;
+        
+        if (!crypto || !crypto.current_price) continue;
 
         const currentPrice = crypto.current_price;
         let shouldTrigger = false;
@@ -185,8 +188,12 @@ export const usePriceAlerts = () => {
           triggeredAlerts.push(alert);
 
           // Play alert sound if enabled
-          if (isSoundEnabled()) {
-            alertSound.playAlertSound();
+          try {
+            if (isSoundEnabled()) {
+              await alertSound.playAlertSound();
+            }
+          } catch (err) {
+            console.error("Error playing alert sound:", err);
           }
 
           // Show browser notification
@@ -194,11 +201,15 @@ export const usePriceAlerts = () => {
             "Notification" in window &&
             notificationPermission.current === "granted"
           ) {
-            new Notification(`🚨 ${alert.symbol} Price Alert!`, {
-              body: `${alert.symbol} is now ${alert.condition === "above" ? "above" : "below"} $${alert.target_price.toLocaleString()}. Current price: $${currentPrice.toLocaleString()}`,
-              icon: "/favicon.ico",
-              tag: alert.id,
-            });
+            try {
+              new Notification(`🚨 ${alert.symbol} Price Alert!`, {
+                body: `${alert.symbol} is now ${alert.condition === "above" ? "above" : "below"} $${alert.target_price.toLocaleString()}. Current price: $${currentPrice.toLocaleString()}`,
+                icon: "/favicon.ico",
+                tag: alert.id,
+              });
+            } catch (err) {
+              console.error("Error showing notification:", err);
+            }
           }
 
           // Show toast notification
@@ -210,13 +221,17 @@ export const usePriceAlerts = () => {
           );
 
           // Mark as triggered in database
-          await supabase
-            .from("price_alerts")
-            .update({
-              is_triggered: true,
-              triggered_at: new Date().toISOString(),
-            })
-            .eq("id", alert.id);
+          try {
+            await supabase
+              .from("price_alerts")
+              .update({
+                is_triggered: true,
+                triggered_at: new Date().toISOString(),
+              })
+              .eq("id", alert.id);
+          } catch (err) {
+            console.error("Error updating alert in database:", err);
+          }
         }
       }
 
