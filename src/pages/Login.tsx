@@ -17,6 +17,8 @@ const Login = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [navigateMessage, setNavigateMessage] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -40,6 +42,11 @@ const Login = () => {
     };
     checkSession();
   }, [navigate]);
+
+  // Show splash during navigation
+  if (isNavigating) {
+    return <ZikalyzeSplash message={navigateMessage} />;
+  }
 
   if (initialLoading) {
     return <ZikalyzeSplash message="Initializing secure access..." />;
@@ -158,10 +165,13 @@ const Login = () => {
 
       toast({
         title: "Welcome back!",
-        description: "Account recovered successfully. Loading your dashboard...",
+        description: "Account recovered successfully.",
       });
 
-      navigate("/dashboard");
+      // Show splash and navigate
+      setNavigateMessage("Welcome back! Loading dashboard...");
+      setIsNavigating(true);
+      setTimeout(() => navigate("/dashboard"), 800);
     } catch (error) {
       console.error("Recovery error:", error);
       toast({
@@ -175,7 +185,9 @@ const Login = () => {
   };
 
   const handleContinueToApp = () => {
-    navigate("/dashboard");
+    setNavigateMessage("Setting up your dashboard...");
+    setIsNavigating(true);
+    setTimeout(() => navigate("/dashboard"), 800);
   };
 
   const handleAccessKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
