@@ -266,7 +266,10 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               <Brain className={cn("h-5 w-5 text-primary", isAnalyzing && "animate-spin")} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-foreground">Zikalyze AI Brain</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">v9.0</span>
+              </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">{displayedAccuracy.toFixed(0)}% Accuracy</span>
                 {learningStats && learningStats.total_feedback > 0 && (
