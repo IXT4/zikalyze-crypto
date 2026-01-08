@@ -240,19 +240,11 @@ export const useCryptoPrices = () => {
         !isUsdPrefixed(coin.symbol)
       );
       
-      // Separate priority tokens and others
-      const priorityCoins = cleanData.filter(coin => 
-        PRIORITY_TOKENS.includes(coin.id.toLowerCase())
-      );
-      const otherCoins = cleanData.filter(coin => 
-        !PRIORITY_TOKENS.includes(coin.id.toLowerCase())
-      );
+      // Sort by market cap descending to maintain accurate ranking
+      const sortedData = cleanData.sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
       
-      // Combine: priority tokens first, then fill remaining slots with other coins
-      const filteredData = [
-        ...priorityCoins,
-        ...otherCoins.slice(0, 100 - priorityCoins.length)
-      ].slice(0, 100);
+      // Take top 100 by market cap
+      const filteredData = sortedData.slice(0, 100);
       
       // Store the crypto list for WebSocket connections
       cryptoListRef.current = filteredData.map(coin => ({
@@ -272,7 +264,7 @@ export const useCryptoPrices = () => {
         low_24h: coin.low_24h || 0,
         total_volume: coin.total_volume || 0,
         market_cap: coin.market_cap || 0,
-        market_cap_rank: index + 1,
+        market_cap_rank: coin.market_cap_rank || (index + 1),
         circulating_supply: coin.circulating_supply || 0,
         lastUpdate: Date.now(),
         source: "CoinGecko",
