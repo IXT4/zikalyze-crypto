@@ -36,7 +36,18 @@ interface CoinGeckoCoin {
 const STABLECOINS = [
   "usdt", "usdc", "busd", "dai", "tusd", "usdp", "usdd", "gusd", 
   "frax", "lusd", "susd", "eurs", "usdj", "fdusd", "pyusd", "eurc",
-  "xaut", "paxg", "ustc"
+  "xaut", "paxg", "ustc", "usde", "susde", "ethena-usde", "first-digital-usd",
+  "paypal-usd", "true-usd", "gemini-dollar", "pax-gold", "tether-gold"
+];
+
+// Priority tokens to always include if available
+const PRIORITY_TOKENS = [
+  "gomining", "bitcoin", "ethereum", "solana", "ripple", "binancecoin",
+  "cardano", "dogecoin", "avalanche-2", "chainlink", "polkadot", "sui",
+  "near", "aptos", "arbitrum", "optimism", "injective-protocol", "celestia",
+  "render-token", "fetch-ai", "worldcoin", "jupiter", "jito-governance-token",
+  "kaspa", "fantom", "hedera-hashgraph", "vechain", "algorand", "toncoin",
+  "internet-computer", "filecoin", "cosmos", "the-graph", "aave", "maker"
 ];
 
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
@@ -46,7 +57,6 @@ let cachedData: CryptoPrice[] | null = null;
 let cacheTimestamp = 0;
 const CACHE_DURATION = 300000; // 5 minute cache
 
-// Fallback data for when APIs fail
 const FALLBACK_CRYPTOS: CryptoPrice[] = [
   { id: "bitcoin", symbol: "btc", name: "Bitcoin", image: "https://assets.coingecko.com/coins/images/1/large/bitcoin.png", current_price: 97500, price_change_percentage_24h: 2.5, high_24h: 98000, low_24h: 95000, total_volume: 45000000000, market_cap: 1920000000000, market_cap_rank: 1, circulating_supply: 19600000, lastUpdate: Date.now(), source: "Fallback" },
   { id: "ethereum", symbol: "eth", name: "Ethereum", image: "https://assets.coingecko.com/coins/images/279/large/ethereum.png", current_price: 3450, price_change_percentage_24h: 1.8, high_24h: 3500, low_24h: 3380, total_volume: 18000000000, market_cap: 415000000000, market_cap_rank: 2, circulating_supply: 120000000, lastUpdate: Date.now(), source: "Fallback" },
@@ -58,11 +68,11 @@ const FALLBACK_CRYPTOS: CryptoPrice[] = [
   { id: "avalanche-2", symbol: "avax", name: "Avalanche", image: "https://assets.coingecko.com/coins/images/12559/large/Avalanche_Circle_RedWhite_Trans.png", current_price: 42, price_change_percentage_24h: 1.9, high_24h: 43, low_24h: 40, total_volume: 650000000, market_cap: 17000000000, market_cap_rank: 8, circulating_supply: 405000000, lastUpdate: Date.now(), source: "Fallback" },
   { id: "chainlink", symbol: "link", name: "Chainlink", image: "https://assets.coingecko.com/coins/images/877/large/chainlink-new-logo.png", current_price: 23, price_change_percentage_24h: 0.8, high_24h: 24, low_24h: 22, total_volume: 580000000, market_cap: 14500000000, market_cap_rank: 9, circulating_supply: 630000000, lastUpdate: Date.now(), source: "Fallback" },
   { id: "polkadot", symbol: "dot", name: "Polkadot", image: "https://assets.coingecko.com/coins/images/12171/large/polkadot.png", current_price: 8.5, price_change_percentage_24h: -0.5, high_24h: 8.8, low_24h: 8.2, total_volume: 320000000, market_cap: 12500000000, market_cap_rank: 10, circulating_supply: 1470000000, lastUpdate: Date.now(), source: "Fallback" },
-  { id: "polygon", symbol: "matic", name: "Polygon", image: "https://assets.coingecko.com/coins/images/4713/large/polygon.png", current_price: 0.58, price_change_percentage_24h: 1.2, high_24h: 0.60, low_24h: 0.56, total_volume: 280000000, market_cap: 5800000000, market_cap_rank: 11, circulating_supply: 10000000000, lastUpdate: Date.now(), source: "Fallback" },
-  { id: "litecoin", symbol: "ltc", name: "Litecoin", image: "https://assets.coingecko.com/coins/images/2/large/litecoin.png", current_price: 115, price_change_percentage_24h: 0.3, high_24h: 118, low_24h: 112, total_volume: 650000000, market_cap: 8600000000, market_cap_rank: 12, circulating_supply: 75000000, lastUpdate: Date.now(), source: "Fallback" },
-  { id: "uniswap", symbol: "uni", name: "Uniswap", image: "https://assets.coingecko.com/coins/images/12504/large/uniswap.png", current_price: 14.5, price_change_percentage_24h: 2.8, high_24h: 15, low_24h: 14, total_volume: 280000000, market_cap: 10900000000, market_cap_rank: 13, circulating_supply: 753000000, lastUpdate: Date.now(), source: "Fallback" },
-  { id: "stellar", symbol: "xlm", name: "Stellar", image: "https://assets.coingecko.com/coins/images/100/large/Stellar_symbol_black_RGB.png", current_price: 0.45, price_change_percentage_24h: 1.5, high_24h: 0.47, low_24h: 0.43, total_volume: 180000000, market_cap: 13500000000, market_cap_rank: 14, circulating_supply: 30000000000, lastUpdate: Date.now(), source: "Fallback" },
-  { id: "cosmos", symbol: "atom", name: "Cosmos", image: "https://assets.coingecko.com/coins/images/1481/large/cosmos_hub.png", current_price: 9.2, price_change_percentage_24h: 0.9, high_24h: 9.5, low_24h: 8.9, total_volume: 210000000, market_cap: 3600000000, market_cap_rank: 15, circulating_supply: 390000000, lastUpdate: Date.now(), source: "Fallback" },
+  { id: "sui", symbol: "sui", name: "Sui", image: "https://assets.coingecko.com/coins/images/26375/large/sui_asset.jpeg", current_price: 4.2, price_change_percentage_24h: 5.2, high_24h: 4.35, low_24h: 3.95, total_volume: 1200000000, market_cap: 13000000000, market_cap_rank: 11, circulating_supply: 3100000000, lastUpdate: Date.now(), source: "Fallback" },
+  { id: "toncoin", symbol: "ton", name: "Toncoin", image: "https://assets.coingecko.com/coins/images/17980/large/ton_symbol.png", current_price: 5.8, price_change_percentage_24h: 1.5, high_24h: 5.95, low_24h: 5.65, total_volume: 280000000, market_cap: 14500000000, market_cap_rank: 12, circulating_supply: 2500000000, lastUpdate: Date.now(), source: "Fallback" },
+  { id: "gomining", symbol: "gomining", name: "GoMining", image: "https://assets.coingecko.com/coins/images/21085/large/gomining.png", current_price: 0.85, price_change_percentage_24h: 3.8, high_24h: 0.88, low_24h: 0.81, total_volume: 15000000, market_cap: 180000000, market_cap_rank: 13, circulating_supply: 212000000, lastUpdate: Date.now(), source: "Fallback" },
+  { id: "kaspa", symbol: "kas", name: "Kaspa", image: "https://assets.coingecko.com/coins/images/25751/large/kaspa-icon-exchanges.png", current_price: 0.12, price_change_percentage_24h: 2.3, high_24h: 0.125, low_24h: 0.115, total_volume: 85000000, market_cap: 2900000000, market_cap_rank: 14, circulating_supply: 24000000000, lastUpdate: Date.now(), source: "Fallback" },
+  { id: "render-token", symbol: "render", name: "Render", image: "https://assets.coingecko.com/coins/images/11636/large/rndr.png", current_price: 8.5, price_change_percentage_24h: 4.1, high_24h: 8.75, low_24h: 8.1, total_volume: 320000000, market_cap: 4400000000, market_cap_rank: 15, circulating_supply: 520000000, lastUpdate: Date.now(), source: "Fallback" },
 ];
 
 // Exchange WebSocket endpoints
