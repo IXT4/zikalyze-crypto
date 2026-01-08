@@ -9,6 +9,7 @@ import { CurrencyProvider } from "@/hooks/useCurrency";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { PWAInstallBanner } from "./components/PWAInstallBanner";
 import { useSessionTracking } from "./hooks/useSessionTracking";
+import zikalyzeLogo from "@/assets/zikalyze-logo.png";
 
 // Session tracking wrapper component - non-critical feature
 function SessionTracker({ children }: { children: React.ReactNode }) {
@@ -30,10 +31,10 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
-// Minimal loading fallback that doesn't affect UX
+// Loading fallback with Zikalyze logo
 const PageLoader = () => (
   <div className="min-h-screen bg-background flex items-center justify-center">
-    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+    <img src={zikalyzeLogo} alt="Loading" className="h-16 w-16 animate-pulse" />
   </div>
 );
 
