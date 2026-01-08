@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   TrendingUp, TrendingDown, MessageCircle, Users, 
-  Newspaper, RefreshCw, Twitter, AlertCircle, Flame, ExternalLink
+  Newspaper, RefreshCw, Twitter, AlertCircle, Flame, ExternalLink, Search
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -424,38 +424,63 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
           <TabsContent value="influencers" className="mt-4">
             <div className="space-y-3">
               {data.social.influencerMentions.map((influencer, i) => (
-                <a 
+                <div 
                   key={i} 
-                  href={influencer.handle ? `https://x.com/${influencer.handle}` : undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`block rounded-lg border border-border p-3 transition-all ${
-                    influencer.handle 
-                      ? 'hover:bg-primary/10 hover:border-primary/50 cursor-pointer group' 
-                      : ''
-                  }`}
+                  className="rounded-lg border border-border p-3 transition-all hover:bg-secondary/30"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center group-hover:from-[#1DA1F2] group-hover:to-[#1DA1F2]/50 transition-colors">
-                        <span className="text-primary-foreground font-bold text-sm">
-                          {influencer.name.charAt(0)}
-                        </span>
-                      </div>
-                      <div>
-                        <div className="font-medium text-sm flex items-center gap-2">
+                      {/* Avatar with Unavatar.io for real Twitter pictures */}
+                      <a
+                        href={influencer.handle ? `https://x.com/${influencer.handle}` : undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group/avatar"
+                      >
+                        <div className="relative h-10 w-10 rounded-full overflow-hidden bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center">
+                          {influencer.handle ? (
+                            <img 
+                              src={`https://unavatar.io/twitter/${influencer.handle}`}
+                              alt={influencer.name}
+                              className="h-full w-full object-cover group-hover/avatar:scale-110 transition-transform"
+                              onError={(e) => {
+                                // Fallback to initial if image fails
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                              }}
+                            />
+                          ) : null}
+                          <span className={`text-primary-foreground font-bold text-sm absolute ${influencer.handle ? 'hidden' : ''}`}>
+                            {influencer.name.charAt(0)}
+                          </span>
+                        </div>
+                      </a>
+                      <div className="flex-1">
+                        <a
+                          href={influencer.handle ? `https://x.com/${influencer.handle}` : undefined}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-sm flex items-center gap-2 hover:text-primary transition-colors"
+                        >
                           {influencer.name}
                           {influencer.handle && (
-                            <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                            <ExternalLink className="h-3 w-3 text-muted-foreground" />
                           )}
-                        </div>
+                        </a>
                         <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                           <span className="flex items-center gap-1">
                             <Users className="h-3 w-3" />
                             {influencer.followers}
                           </span>
                           {influencer.handle && (
-                            <span className="text-[#1DA1F2] group-hover:underline">@{influencer.handle}</span>
+                            <a 
+                              href={`https://x.com/${influencer.handle}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#1DA1F2] hover:underline"
+                            >
+                              @{influencer.handle}
+                            </a>
                           )}
                           {influencer.relevance && (
                             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
@@ -465,18 +490,34 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
                         </div>
                       </div>
                     </div>
-                    <Badge 
-                      variant="outline"
-                      className={`${
-                        influencer.sentiment.toLowerCase().includes('bullish') ? 'border-success text-success' :
-                        influencer.sentiment.toLowerCase().includes('bearish') || influencer.sentiment.toLowerCase().includes('cautious') ? 'border-destructive text-destructive' :
-                        'border-muted-foreground text-muted-foreground'
-                      }`}
-                    >
-                      {influencer.sentiment}
-                    </Badge>
+                    
+                    <div className="flex items-center gap-2">
+                      {/* Search tweets button */}
+                      {influencer.handle && (
+                        <a
+                          href={`https://x.com/search?q=from%3A${influencer.handle}%20%24${crypto}&src=typed_query&f=live`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#1DA1F2]/10 text-[#1DA1F2] hover:bg-[#1DA1F2]/20 transition-colors text-xs"
+                          title={`View ${influencer.name}'s tweets about ${crypto}`}
+                        >
+                          <Search className="h-3 w-3" />
+                          <span className="hidden sm:inline">Tweets</span>
+                        </a>
+                      )}
+                      <Badge 
+                        variant="outline"
+                        className={`${
+                          influencer.sentiment.toLowerCase().includes('bullish') ? 'border-success text-success' :
+                          influencer.sentiment.toLowerCase().includes('bearish') || influencer.sentiment.toLowerCase().includes('cautious') ? 'border-destructive text-destructive' :
+                          'border-muted-foreground text-muted-foreground'
+                        }`}
+                      >
+                        {influencer.sentiment}
+                      </Badge>
+                    </div>
                   </div>
-                </a>
+                </div>
               ))}
             </div>
           </TabsContent>
