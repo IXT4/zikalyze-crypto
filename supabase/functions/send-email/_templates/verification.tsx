@@ -25,7 +25,8 @@ export const VerificationEmail = ({
   redirect_to,
   email_action_type,
 }: VerificationEmailProps) => {
-  const verificationUrl = `${supabase_url}/auth/v1/verify?token=${token_hash}&type=${email_action_type}&redirect_to=${redirect_to}`
+  const encodedRedirect = encodeURIComponent(redirect_to)
+  const verificationUrl = `${supabase_url}/auth/v1/verify?token=${token_hash}&type=${email_action_type}&redirect_to=${encodedRedirect}`
 
   return React.createElement(Html, null,
     React.createElement(Head),

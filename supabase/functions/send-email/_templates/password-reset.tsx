@@ -25,7 +25,8 @@ export const PasswordResetEmail = ({
   redirect_to,
   email_action_type,
 }: PasswordResetEmailProps) => {
-  const resetUrl = `${supabase_url}/auth/v1/verify?token=${token_hash}&type=${email_action_type}&redirect_to=${redirect_to}`
+  const encodedRedirect = encodeURIComponent(redirect_to)
+  const resetUrl = `${supabase_url}/auth/v1/verify?token=${token_hash}&type=${email_action_type}&redirect_to=${encodedRedirect}`
 
   return React.createElement(Html, null,
     React.createElement(Head),
