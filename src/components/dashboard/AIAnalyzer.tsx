@@ -15,8 +15,8 @@ interface AIAnalyzerProps {
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crypto-analyze`;
-const CHARS_PER_FRAME = 4; // Fast like Grok
-const FRAME_INTERVAL = 8; // ~120fps for smooth + fast
+const CHARS_PER_FRAME = 12; // Much faster rendering
+const FRAME_INTERVAL = 8; // 120fps smooth
 
 const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap }: AIAnalyzerProps) => {
   const [displayedText, setDisplayedText] = useState("");
