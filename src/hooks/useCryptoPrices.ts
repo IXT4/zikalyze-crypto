@@ -106,26 +106,34 @@ export const useCryptoPrices = () => {
   const reconnectTimeoutsRef = useRef<Record<string, number>>({});
   const cryptoListRef = useRef<{ symbol: string; name: string; id: string }[]>([]);
   const pricesRef = useRef<Map<string, CryptoPrice>>(new Map());
+  const lastUpdateTimeRef = useRef<Map<string, number>>(new Map());
+  
+  // Throttle interval - minimum 2 seconds between updates per coin for readable UI
+  const UPDATE_THROTTLE_MS = 2000;
 
-  // Update price with source tracking (prefer most recent update)
+  // Update price with source tracking and throttling for readable updates
   const updatePrice = useCallback((symbol: string, updates: Partial<CryptoPrice>, source: string) => {
     const normalizedSymbol = symbol.toLowerCase();
     const now = Date.now();
     
+    // Throttle updates - only update if enough time has passed
+    const lastUpdate = lastUpdateTimeRef.current.get(normalizedSymbol) || 0;
+    if (now - lastUpdate < UPDATE_THROTTLE_MS) {
+      return; // Skip this update, too soon
+    }
+    
+    lastUpdateTimeRef.current.set(normalizedSymbol, now);
+    
     setPrices(prev => prev.map(coin => {
       if (coin.symbol === normalizedSymbol) {
-        // Only update if this is newer data or first update
-        const lastUpdate = coin.lastUpdate || 0;
-        if (now >= lastUpdate) {
-          const updated = {
-            ...coin,
-            ...updates,
-            lastUpdate: now,
-            source,
-          };
-          pricesRef.current.set(normalizedSymbol, updated);
-          return updated;
-        }
+        const updated = {
+          ...coin,
+          ...updates,
+          lastUpdate: now,
+          source,
+        };
+        pricesRef.current.set(normalizedSymbol, updated);
+        return updated;
       }
       return coin;
     }));
