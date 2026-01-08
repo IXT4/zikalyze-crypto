@@ -1,17 +1,36 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, User } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import CryptoTicker from "@/components/dashboard/CryptoTicker";
-import PriceChart from "@/components/dashboard/PriceChart";
-import VolumeChart from "@/components/dashboard/VolumeChart";
-import AIMetrics from "@/components/dashboard/AIMetrics";
-import AIAnalyzer from "@/components/dashboard/AIAnalyzer";
-import Top100CryptoList from "@/components/dashboard/Top100CryptoList";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
 import { useCurrency } from "@/hooks/useCurrency";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Lazy load heavy chart components to reduce initial bundle
+const PriceChart = lazy(() => import("@/components/dashboard/PriceChart"));
+const VolumeChart = lazy(() => import("@/components/dashboard/VolumeChart"));
+const AIMetrics = lazy(() => import("@/components/dashboard/AIMetrics"));
+const AIAnalyzer = lazy(() => import("@/components/dashboard/AIAnalyzer"));
+const Top100CryptoList = lazy(() => import("@/components/dashboard/Top100CryptoList"));
+
+// Skeleton loaders for lazy components
+const ChartSkeleton = () => (
+  <div className="rounded-2xl border border-border bg-card p-6">
+    <Skeleton className="h-6 w-32 mb-4" />
+    <Skeleton className="h-[300px] w-full" />
+  </div>
+);
+
+const MetricsSkeleton = () => (
+  <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
+    <Skeleton className="h-6 w-24" />
+    <Skeleton className="h-20 w-full" />
+    <Skeleton className="h-20 w-full" />
+  </div>
+);
 
 const Dashboard = () => {
   const [selectedCrypto, setSelectedCrypto] = useState("BTC");
@@ -143,36 +162,46 @@ const Dashboard = () => {
           </div>
 
           {/* AI Analyzer */}
-          <AIAnalyzer 
-            crypto={selectedCrypto} 
-            price={selected.price} 
-            change={selected.change}
-            high24h={liveData?.high_24h}
-            low24h={liveData?.low_24h}
-            volume={liveData?.total_volume}
-            marketCap={liveData?.market_cap}
-          />
+          <Suspense fallback={<ChartSkeleton />}>
+            <AIAnalyzer 
+              crypto={selectedCrypto} 
+              price={selected.price} 
+              change={selected.change}
+              high24h={liveData?.high_24h}
+              low24h={liveData?.low_24h}
+              volume={liveData?.total_volume}
+              marketCap={liveData?.market_cap}
+            />
+          </Suspense>
 
           {/* Charts Grid */}
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-6">
-              <PriceChart crypto={selectedCrypto} coinGeckoId={liveData?.id} />
-              <VolumeChart crypto={selectedCrypto} coinGeckoId={liveData?.id} />
+              <Suspense fallback={<ChartSkeleton />}>
+                <PriceChart crypto={selectedCrypto} coinGeckoId={liveData?.id} />
+              </Suspense>
+              <Suspense fallback={<ChartSkeleton />}>
+                <VolumeChart crypto={selectedCrypto} coinGeckoId={liveData?.id} />
+              </Suspense>
             </div>
             <div className="space-y-6">
-              <AIMetrics 
-                price={selected.price}
-                change={selected.change}
-                high24h={liveData?.high_24h}
-                low24h={liveData?.low_24h}
-                volume={liveData?.total_volume}
-                marketCap={liveData?.market_cap}
-              />
+              <Suspense fallback={<MetricsSkeleton />}>
+                <AIMetrics 
+                  price={selected.price}
+                  change={selected.change}
+                  high24h={liveData?.high_24h}
+                  low24h={liveData?.low_24h}
+                  volume={liveData?.total_volume}
+                  marketCap={liveData?.market_cap}
+                />
+              </Suspense>
             </div>
           </div>
 
           {/* Top 100 Crypto List */}
-          <Top100CryptoList selected={selectedCrypto} onSelect={setSelectedCrypto} />
+          <Suspense fallback={<ChartSkeleton />}>
+            <Top100CryptoList selected={selectedCrypto} onSelect={setSelectedCrypto} />
+          </Suspense>
         </div>
       </main>
     </div>
