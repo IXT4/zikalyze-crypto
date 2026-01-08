@@ -1,14 +1,12 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { TrendingUp, Sparkles, ArrowRight, BarChart3, Brain, Shield, Activity, Zap, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import zikalyzeLogo from "@/assets/zikalyze-logo.png";
 
 const Landing = () => {
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, loading: authLoading } = useAuth();
@@ -19,40 +17,20 @@ const Landing = () => {
   useEffect(() => {
     const hash = location.hash;
     if (hash && hash.includes('access_token')) {
-      // User has been verified and logged in via email link
       toast({
         title: t("landing.emailVerified"),
         description: t("landing.emailVerifiedDesc"),
       });
-      // Clear the hash from URL
       window.history.replaceState(null, '', location.pathname);
     }
   }, [location, toast, t]);
 
+  // Redirect to dashboard if already logged in (non-blocking)
   useEffect(() => {
-    // Check if already logged in via Supabase Auth
     if (!authLoading && user) {
       navigate("/dashboard");
-      return;
-    }
-    
-    // Skip splash - go directly to content
-    if (!authLoading) {
-      setLoading(false);
     }
   }, [navigate, user, authLoading]);
-
-  if (loading || authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <img 
-          src={zikalyzeLogo} 
-          alt="Loading" 
-          className="h-16 w-16 animate-pulse"
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background overflow-hidden">
