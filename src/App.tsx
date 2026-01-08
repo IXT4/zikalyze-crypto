@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import zikalyzeLogo from "@/assets/zikalyze-logo.png";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
@@ -32,9 +33,19 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
-// Minimal loading fallback - just background to prevent flash
+// Seamless loading fallback with Zikalyze logo - no flash
 const PageLoader = () => (
-  <div className="min-h-screen bg-background" />
+  <div 
+    className="fixed inset-0 flex items-center justify-center"
+    style={{ backgroundColor: '#0a0f1a' }}
+  >
+    <img 
+      src={zikalyzeLogo} 
+      alt="" 
+      className="h-16 w-16 animate-pulse opacity-80"
+      style={{ animation: 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
+    />
+  </div>
 );
 
 const App = () => (
