@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { TrendingUp, Sparkles, ArrowRight, BarChart3, Brain, Shield, Activity, Zap, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import ZikalyzeSplash from "@/components/ZikalyzeSplash";
+
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -36,14 +36,18 @@ const Landing = () => {
       return;
     }
     
-    // Reduced splash for faster LCP - only show briefly for branding
+    // Skip splash - go directly to content
     if (!authLoading) {
-      setTimeout(() => setLoading(false), 400);
+      setLoading(false);
     }
   }, [navigate, user, authLoading]);
 
   if (loading || authLoading) {
-    return <ZikalyzeSplash message={t("landing.welcome")} />;
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (

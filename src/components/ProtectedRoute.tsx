@@ -2,7 +2,6 @@ import { useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useSessionTimeout } from "@/hooks/useSessionTimeout";
-import ZikalyzeSplash from "@/components/ZikalyzeSplash";
 import SessionTimeoutModal from "@/components/SessionTimeoutModal";
 import { toast } from "sonner";
 
@@ -33,7 +32,11 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   }, [user, loading, navigate]);
 
   if (loading) {
-    return <ZikalyzeSplash message="Loading your dashboard..." />;
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
   if (!user) return null;
