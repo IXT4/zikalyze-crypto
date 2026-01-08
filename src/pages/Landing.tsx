@@ -292,7 +292,7 @@ const Landing = () => {
           </div>
           
           <p className="text-sm text-muted-foreground">
-            © 2024 Zikalyze. AI-Powered Crypto Analysis.
+            © 2025 Zikalyze. AI-Powered Crypto Analysis.
           </p>
         </div>
       </footer>
