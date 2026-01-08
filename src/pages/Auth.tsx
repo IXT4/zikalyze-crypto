@@ -33,6 +33,7 @@ const Auth = () => {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const [captchaDisabled, setCaptchaDisabled] = useState(false);
 
   // Load Turnstile site key
   useEffect(() => {
@@ -45,8 +46,11 @@ const Auth = () => {
   }, []);
 
   const handleCaptchaError = useCallback(() => {
+    // Disable CAPTCHA on error (e.g., invalid domain) - proceed with rate limiting only
     setCaptchaToken(null);
-    setCaptchaError("CAPTCHA failed to load. Please refresh the page.");
+    setCaptchaDisabled(true);
+    setCaptchaError(null);
+    console.warn('CAPTCHA disabled due to configuration error - proceeding with rate limiting only');
   }, []);
 
   const handleCaptchaExpire = useCallback(() => {
@@ -81,8 +85,8 @@ const Auth = () => {
     e.preventDefault();
     if (!validateForm()) return;
     
-    // Verify CAPTCHA if available
-    if (turnstileSiteKey && !captchaToken) {
+    // Verify CAPTCHA if available and not disabled
+    if (turnstileSiteKey && !captchaDisabled && !captchaToken) {
       setCaptchaError("Please complete the CAPTCHA verification.");
       toast({
         title: "CAPTCHA required",
@@ -96,8 +100,8 @@ const Auth = () => {
     setCaptchaError(null);
     setIsLoading(true);
     
-    // Verify CAPTCHA token with server
-    if (turnstileSiteKey && captchaToken) {
+    // Verify CAPTCHA token with server (skip if disabled)
+    if (turnstileSiteKey && !captchaDisabled && captchaToken) {
       const captchaResult = await verifyCaptcha(captchaToken);
       if (!captchaResult.success) {
         setIsLoading(false);
@@ -332,8 +336,8 @@ const Auth = () => {
                   </button>
                 </div>
 
-                {/* CAPTCHA Widget */}
-                {turnstileSiteKey && (
+                {/* CAPTCHA Widget - only show if not disabled due to config error */}
+                {turnstileSiteKey && !captchaDisabled && (
                   <div className="space-y-2">
                     <Turnstile
                       siteKey={turnstileSiteKey}

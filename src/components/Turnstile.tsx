@@ -35,14 +35,23 @@ export const Turnstile = ({
   const renderWidget = useCallback(() => {
     if (!containerRef.current || !window.turnstile || widgetIdRef.current) return;
 
-    widgetIdRef.current = window.turnstile.render(containerRef.current, {
-      sitekey: siteKey,
-      callback: onVerify,
-      "error-callback": onError,
-      "expired-callback": onExpire,
-      theme,
-      size,
-    });
+    try {
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        callback: onVerify,
+        "error-callback": () => {
+          // Clear widget on error so user can proceed without CAPTCHA
+          widgetIdRef.current = null;
+          onError?.();
+        },
+        "expired-callback": onExpire,
+        theme,
+        size,
+      });
+    } catch (err) {
+      console.error('Turnstile render error:', err);
+      onError?.();
+    }
   }, [siteKey, onVerify, onError, onExpire, theme, size]);
 
   useEffect(() => {
