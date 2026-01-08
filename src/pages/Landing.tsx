@@ -1,14 +1,31 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { TrendingUp, Sparkles, ArrowRight, BarChart3, Brain, Shield, Activity, Zap, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ZikalyzeSplash from "@/components/ZikalyzeSplash";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 const Landing = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, loading: authLoading } = useAuth();
+  const { toast } = useToast();
+
+  // Handle email verification callback
+  useEffect(() => {
+    const hash = location.hash;
+    if (hash && hash.includes('access_token')) {
+      // User has been verified and logged in via email link
+      toast({
+        title: "Email verified! 🎉",
+        description: "Your account has been verified. Welcome to Zikalyze!",
+      });
+      // Clear the hash from URL
+      window.history.replaceState(null, '', location.pathname);
+    }
+  }, [location, toast]);
 
   useEffect(() => {
     // Check if already logged in via Supabase Auth
