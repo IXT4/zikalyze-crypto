@@ -60,11 +60,13 @@ Deno.serve(async (req) => {
         break
 
       case 'recovery':
+        // Extract origin from redirect_to or use Supabase URL as fallback
+        const resetRedirect = redirect_to || `${supabaseUrl.replace('.supabase.co', '.lovableproject.com')}/reset-password`;
         html = render(
           React.createElement(PasswordResetEmail, {
             supabase_url: supabaseUrl,
             token_hash,
-            redirect_to: redirect_to || `${window?.location?.origin || ''}/reset-password`,
+            redirect_to: resetRedirect,
             email_action_type,
           })
         )
