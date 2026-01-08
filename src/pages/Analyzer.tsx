@@ -46,7 +46,7 @@ const Analyzer = () => {
 
         <div className="p-6 space-y-6">
           {/* Crypto Selection */}
-          <CryptoTicker selected={selectedCrypto} onSelect={setSelectedCrypto} />
+          <CryptoTicker selected={selectedCrypto} onSelect={setSelectedCrypto} getPriceBySymbol={getPriceBySymbol} loading={loading} />
 
           {/* Selected Crypto Info */}
           <div className="rounded-2xl border border-border bg-card p-6">
