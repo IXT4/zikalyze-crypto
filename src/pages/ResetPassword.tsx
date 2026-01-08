@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { TrendingUp, Lock, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,12 +9,13 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { z } from "zod";
 
-const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
-
 const ResetPassword = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const { updatePassword, session } = useAuth();
+  
+  const passwordSchema = z.string().min(6, t("validation.passwordMinLength"));
   
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -27,8 +29,8 @@ const ResetPassword = () => {
       const timeout = setTimeout(() => {
         if (!session) {
           toast({
-            title: "Invalid or expired link",
-            description: "Please request a new password reset link.",
+            title: t("auth.invalidLink"),
+            description: t("auth.requestNewLink"),
             variant: "destructive",
           });
           navigate("/auth");
@@ -36,7 +38,7 @@ const ResetPassword = () => {
       }, 2000);
       return () => clearTimeout(timeout);
     }
-  }, [session, navigate, toast]);
+  }, [session, navigate, toast, t]);
 
   const validateForm = (): boolean => {
     const newErrors: { password?: string; confirmPassword?: string } = {};
@@ -47,7 +49,7 @@ const ResetPassword = () => {
     }
     
     if (password !== confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
+      newErrors.confirmPassword = t("validation.passwordsNoMatch");
     }
     
     setErrors(newErrors);
@@ -64,7 +66,7 @@ const ResetPassword = () => {
 
     if (error) {
       toast({
-        title: "Password update failed",
+        title: t("settings.passwordUpdateFailed"),
         description: error.message,
         variant: "destructive",
       });
@@ -72,8 +74,8 @@ const ResetPassword = () => {
     }
 
     toast({
-      title: "Password updated!",
-      description: "Your password has been successfully reset.",
+      title: t("auth.passwordUpdated"),
+      description: t("auth.passwordResetSuccess"),
     });
     navigate("/dashboard");
   };
@@ -97,20 +99,20 @@ const ResetPassword = () => {
 
         {/* Reset Card */}
         <div className="rounded-2xl border border-border bg-card/80 backdrop-blur-xl p-8 shadow-2xl">
-          <h2 className="text-2xl font-bold text-center mb-2">Reset Password</h2>
+          <h2 className="text-2xl font-bold text-center mb-2">{t("auth.resetPassword")}</h2>
           <p className="text-muted-foreground text-center mb-6">
-            Enter your new password below
+            {t("auth.enterNewPasswordBelow")}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="password">New Password</Label>
+              <Label htmlFor="password">{t("auth.newPassword")}</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Enter new password"
+                  placeholder={t("auth.enterNewPassword")}
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
@@ -125,13 +127,13 @@ const ResetPassword = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Label htmlFor="confirmPassword">{t("auth.confirmPassword")}</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="confirmPassword"
                   type="password"
-                  placeholder="Confirm new password"
+                  placeholder={t("auth.confirmNewPassword")}
                   value={confirmPassword}
                   onChange={(e) => {
                     setConfirmPassword(e.target.value);
@@ -154,7 +156,7 @@ const ResetPassword = () => {
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <>
-                  Update Password <ArrowRight className="ml-2 h-4 w-4" />
+                  {t("auth.updatePassword")} <ArrowRight className="ml-2 h-4 w-4" />
                 </>
               )}
             </Button>

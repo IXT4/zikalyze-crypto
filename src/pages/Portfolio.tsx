@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Plus, Trash2, TrendingUp, TrendingDown, Wallet, RefreshCw } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +35,7 @@ const STORAGE_KEY = "zikalyze_portfolio_holdings";
 
 const Portfolio = () => {
   const { prices, loading, getPriceBySymbol, getPriceById, refetch } = useCryptoPrices();
+  const { t } = useTranslation();
   
   // Load holdings from localStorage on mount
   const [holdings, setHoldings] = useState<Holding[]>(() => {
@@ -109,10 +111,10 @@ const Portfolio = () => {
       <main className="ml-16 lg:ml-64">
         <header className="flex items-center justify-between border-b border-border px-6 py-4">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold text-foreground">Portfolio</h1>
+            <h1 className="text-2xl font-bold text-foreground">{t("portfolio.title")}</h1>
             <div className="flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${loading ? "bg-warning" : "bg-success"} animate-pulse`} />
-              <span className="text-xs text-muted-foreground">{loading ? "Updating..." : "Live Prices"}</span>
+              <span className="text-xs text-muted-foreground">{loading ? t("portfolio.updating") : t("portfolio.livePrices")}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -123,12 +125,12 @@ const Portfolio = () => {
               <DialogTrigger asChild>
                 <Button className="gap-2">
                   <Plus className="h-4 w-4" />
-                  Add Holding
+                  {t("portfolio.addHolding")}
                 </Button>
               </DialogTrigger>
               <DialogContent className="bg-card border-border">
                 <DialogHeader>
-                  <DialogTitle className="text-foreground">Add New Holding</DialogTitle>
+                  <DialogTitle className="text-foreground">{t("portfolio.addNewHolding")}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 pt-4">
                   <Select
@@ -138,7 +140,7 @@ const Portfolio = () => {
                     }
                   >
                     <SelectTrigger className="bg-secondary border-border">
-                      <SelectValue placeholder="Select crypto" />
+                      <SelectValue placeholder={t("portfolio.selectCrypto")} />
                     </SelectTrigger>
                     <SelectContent className="bg-card border-border max-h-[300px]">
                       <ScrollArea className="h-[250px]">
@@ -155,7 +157,7 @@ const Portfolio = () => {
                   </Select>
                   <Input
                     type="number"
-                    placeholder="Amount"
+                    placeholder={t("portfolio.amount")}
                     value={newHolding.amount}
                     onChange={(e) =>
                       setNewHolding({ ...newHolding, amount: e.target.value })
@@ -164,7 +166,7 @@ const Portfolio = () => {
                   />
                   <Input
                     type="number"
-                    placeholder="Buy Price (USD)"
+                    placeholder={t("portfolio.buyPrice")}
                     value={newHolding.buyPrice}
                     onChange={(e) =>
                       setNewHolding({ ...newHolding, buyPrice: e.target.value })
@@ -172,7 +174,7 @@ const Portfolio = () => {
                     className="bg-secondary border-border"
                   />
                   <Button onClick={addHolding} className="w-full">
-                    Add to Portfolio
+                    {t("portfolio.addToPortfolio")}
                   </Button>
                 </div>
               </DialogContent>
@@ -186,7 +188,7 @@ const Portfolio = () => {
             <Card className="bg-card border-border">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Value
+                  {t("portfolio.totalValue")}
                 </CardTitle>
                 <Wallet className="h-4 w-4 text-primary" />
               </CardHeader>
@@ -200,7 +202,7 @@ const Portfolio = () => {
             <Card className="bg-card border-border">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Cost
+                  {t("portfolio.totalCost")}
                 </CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -214,7 +216,7 @@ const Portfolio = () => {
             <Card className="bg-card border-border">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total P&L
+                  {t("portfolio.totalPnL")}
                 </CardTitle>
                 {totalPnL >= 0 ? (
                   <TrendingUp className="h-4 w-4 text-success" />
@@ -236,20 +238,20 @@ const Portfolio = () => {
           {/* Holdings Table */}
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-foreground">Your Holdings</CardTitle>
+              <CardTitle className="text-foreground">{t("portfolio.yourHoldings")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border">
-                      <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Asset</th>
-                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">Amount</th>
-                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">Buy Price</th>
-                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">Current Price</th>
-                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">Value</th>
-                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">P&L</th>
-                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">Actions</th>
+                      <th className="pb-3 text-left text-sm font-medium text-muted-foreground">{t("portfolio.asset")}</th>
+                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">{t("portfolio.amount")}</th>
+                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">{t("portfolio.buyPrice")}</th>
+                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">{t("portfolio.currentPrice")}</th>
+                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">{t("portfolio.value")}</th>
+                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">{t("portfolio.pnl")}</th>
+                      <th className="pb-3 text-right text-sm font-medium text-muted-foreground">{t("portfolio.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -308,7 +310,7 @@ const Portfolio = () => {
                 </table>
                 {holdings.length === 0 && (
                   <div className="py-12 text-center text-muted-foreground">
-                    No holdings yet. Add your first crypto holding to get started.
+                    {t("portfolio.noHoldings")}
                   </div>
                 )}
               </div>

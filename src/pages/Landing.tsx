@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { TrendingUp, Sparkles, ArrowRight, BarChart3, Brain, Shield, Activity, Zap, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ZikalyzeSplash from "@/components/ZikalyzeSplash";
@@ -12,6 +13,7 @@ const Landing = () => {
   const location = useLocation();
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   // Handle email verification callback
   useEffect(() => {
@@ -19,13 +21,13 @@ const Landing = () => {
     if (hash && hash.includes('access_token')) {
       // User has been verified and logged in via email link
       toast({
-        title: "Email verified! 🎉",
-        description: "Your account has been verified. Welcome to Zikalyze!",
+        title: t("landing.emailVerified"),
+        description: t("landing.emailVerifiedDesc"),
       });
       // Clear the hash from URL
       window.history.replaceState(null, '', location.pathname);
     }
-  }, [location, toast]);
+  }, [location, toast, t]);
 
   useEffect(() => {
     // Check if already logged in via Supabase Auth
@@ -41,7 +43,7 @@ const Landing = () => {
   }, [navigate, user, authLoading]);
 
   if (loading || authLoading) {
-    return <ZikalyzeSplash message="Welcome to Zikalyze AI..." />;
+    return <ZikalyzeSplash message={t("landing.welcome")} />;
   }
 
   return (
@@ -63,7 +65,7 @@ const Landing = () => {
         </div>
         <Link to="/login">
           <Button className="bg-primary hover:bg-primary/90 glow-cyan text-primary-foreground">
-            Get Started <ArrowRight className="ml-2 h-4 w-4" />
+            {t("common.getStarted")} <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </Link>
       </header>
@@ -72,27 +74,27 @@ const Landing = () => {
       <main className="relative z-10 flex flex-col items-center justify-center px-6 py-16 text-center md:py-24">
         <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 backdrop-blur-sm">
           <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm text-primary">AI-Powered Crypto Analysis</span>
+          <span className="text-sm text-primary">{t("landing.heroTagline")}</span>
         </div>
 
         <h1 className="mb-6 max-w-4xl text-5xl font-bold leading-tight text-foreground md:text-7xl">
-          Predict Tomorrow.{" "}
-          <span className="gradient-text">Trade Today.</span>
+          {t("landing.heroTitle")}{" "}
+          <span className="gradient-text">{t("landing.heroTitleHighlight")}</span>
         </h1>
 
         <p className="mb-12 max-w-2xl text-lg text-muted-foreground md:text-xl">
-          AI-driven crypto forecasting with Smart Money Concepts, ICT analysis, and VWAP indicators. Make informed decisions with real-time predictions.
+          {t("landing.heroDescription")}
         </p>
 
         <div className="flex flex-col gap-4 sm:flex-row">
           <Link to="/login">
             <Button size="lg" className="bg-primary hover:bg-primary/90 glow-cyan text-primary-foreground px-8">
-              Start Free Trial <ArrowRight className="ml-2 h-5 w-5" />
+              {t("landing.startFreeTrial")} <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </Link>
           <Link to="/dashboard">
             <Button size="lg" variant="outline" className="border-primary/30 hover:bg-primary/10 hover:border-primary/50">
-              Launch App <Zap className="ml-2 h-5 w-5" />
+              {t("landing.launchApp")} <Zap className="ml-2 h-5 w-5" />
             </Button>
           </Link>
         </div>
@@ -107,7 +109,7 @@ const Landing = () => {
                 <div className="h-3 w-3 rounded-full bg-warning" />
                 <div className="h-3 w-3 rounded-full bg-success" />
               </div>
-              <span className="text-sm text-muted-foreground">Zikalyze AI Dashboard</span>
+              <span className="text-sm text-muted-foreground">{t("landing.dashboardPreview")}</span>
             </div>
 
             {/* Dashboard Grid */}
@@ -115,16 +117,16 @@ const Landing = () => {
               {/* AI Generated Card */}
               <div className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-foreground">AI Generated</span>
+                  <span className="text-sm font-medium text-foreground">{t("landing.aiGenerated")}</span>
                   <Brain className="h-4 w-4 text-primary" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-xs text-muted-foreground">Predictions</div>
+                    <div className="text-xs text-muted-foreground">{t("landing.predictions")}</div>
                     <div className="text-2xl font-bold text-primary">44.28</div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted-foreground">Confidence</div>
+                    <div className="text-xs text-muted-foreground">{t("landing.confidence")}</div>
                     <div className="text-2xl font-bold text-accent">2,595</div>
                   </div>
                 </div>
@@ -141,7 +143,7 @@ const Landing = () => {
               {/* Analytics Card */}
               <div className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-foreground">Analytics</span>
+                  <span className="text-sm font-medium text-foreground">{t("landing.analytics")}</span>
                   <Activity className="h-4 w-4 text-primary" />
                 </div>
                 <div className="h-20 flex items-end gap-1">
@@ -158,7 +160,7 @@ const Landing = () => {
               {/* Predictive Card */}
               <div className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-foreground">Predictive</span>
+                  <span className="text-sm font-medium text-foreground">{t("landing.predictive")}</span>
                   <LineChart className="h-4 w-4 text-accent" />
                 </div>
                 <div className="space-y-2">
@@ -180,10 +182,10 @@ const Landing = () => {
             {/* Candlestick Preview */}
             <div className="mt-4 rounded-xl border border-border bg-card p-4">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-foreground">Candlesticks</span>
+                <span className="text-sm font-medium text-foreground">{t("landing.candlesticks")}</span>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground">Indicator</Button>
-                  <Button size="sm" className="h-6 px-2 text-xs bg-primary text-primary-foreground">Dashboard</Button>
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground">{t("landing.indicator")}</Button>
+                  <Button size="sm" className="h-6 px-2 text-xs bg-primary text-primary-foreground">{t("landing.dashboard")}</Button>
                 </div>
               </div>
               <div className="h-32 flex items-end justify-around">
@@ -225,9 +227,9 @@ const Landing = () => {
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/20 group-hover:glow-cyan transition-all">
               <Brain className="h-7 w-7 text-primary" />
             </div>
-            <h3 className="mb-2 text-xl font-semibold text-foreground">Smart Money Concepts</h3>
+            <h3 className="mb-2 text-xl font-semibold text-foreground">{t("landing.smartMoneyConcepts")}</h3>
             <p className="text-muted-foreground">
-              Advanced ICT analysis powered by machine learning algorithms for precise market structure detection.
+              {t("landing.smartMoneyDesc")}
             </p>
           </div>
 
@@ -235,9 +237,9 @@ const Landing = () => {
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-accent/20 group-hover:glow-purple transition-all">
               <BarChart3 className="h-7 w-7 text-accent" />
             </div>
-            <h3 className="mb-2 text-xl font-semibold text-foreground">VWAP Analysis</h3>
+            <h3 className="mb-2 text-xl font-semibold text-foreground">{t("landing.vwapAnalysis")}</h3>
             <p className="text-muted-foreground">
-              Volume-weighted average price indicators for institutional-grade entry and exit signals.
+              {t("landing.vwapDesc")}
             </p>
           </div>
 
@@ -245,9 +247,9 @@ const Landing = () => {
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/20 group-hover:glow-cyan transition-all">
               <Shield className="h-7 w-7 text-primary" />
             </div>
-            <h3 className="mb-2 text-xl font-semibold text-foreground">Risk Management</h3>
+            <h3 className="mb-2 text-xl font-semibold text-foreground">{t("landing.riskManagement")}</h3>
             <p className="text-muted-foreground">
-              AI-powered risk assessment and position sizing recommendations for optimal portfolio protection.
+              {t("landing.riskDesc")}
             </p>
           </div>
         </div>
@@ -255,10 +257,10 @@ const Landing = () => {
         {/* Stats */}
         <div className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8 w-full max-w-4xl">
           {[
-            { label: "Accuracy Rate", value: "94.2%", icon: Activity },
-            { label: "Active Users", value: "12K+", icon: TrendingUp },
-            { label: "Predictions/Day", value: "50K+", icon: Brain },
-            { label: "Markets Tracked", value: "200+", icon: BarChart3 },
+            { label: t("landing.accuracyRate"), value: "94.2%", icon: Activity },
+            { label: t("landing.activeUsers"), value: "12K+", icon: TrendingUp },
+            { label: t("landing.predictionsPerDay"), value: "50K+", icon: Brain },
+            { label: t("landing.marketsTracked"), value: "200+", icon: BarChart3 },
           ].map((stat, i) => (
             <div key={i} className="text-center">
               <stat.icon className="h-6 w-6 text-primary mx-auto mb-2" />
@@ -306,7 +308,7 @@ const Landing = () => {
           </div>
           
           <p className="text-sm text-muted-foreground">
-            © 2025 Zikalyze. AI-Powered Crypto Analysis.
+            {t("landing.footer")}
           </p>
         </div>
       </footer>
