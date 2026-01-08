@@ -373,7 +373,17 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
           <TabsContent value="news" className="mt-4">
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
               {data.news.map((item, i) => (
-                <div key={i} className="rounded-lg border border-border p-3 hover:bg-secondary/30 transition-colors">
+                <a 
+                  key={i} 
+                  href={item.url !== '#' ? item.url : undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`block rounded-lg border border-border p-3 transition-colors ${
+                    item.url !== '#' 
+                      ? 'hover:bg-primary/10 hover:border-primary/50 cursor-pointer' 
+                      : 'hover:bg-secondary/30'
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
@@ -381,8 +391,13 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
                         <span className="text-xs text-muted-foreground">{item.source}</span>
                         <span className="text-xs text-muted-foreground">•</span>
                         <span className="text-xs text-muted-foreground">{item.time}</span>
+                        {item.url !== '#' && (
+                          <span className="text-xs text-primary">↗</span>
+                        )}
                       </div>
-                      <p className="text-sm font-medium">{item.headline}</p>
+                      <p className={`text-sm font-medium ${item.url !== '#' ? 'hover:text-primary' : ''}`}>
+                        {item.headline}
+                      </p>
                     </div>
                     <Badge 
                       variant="outline" 
@@ -400,7 +415,7 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
                       {item.sentiment}
                     </Badge>
                   </div>
-                </div>
+                </a>
               ))}
             </div>
           </TabsContent>
