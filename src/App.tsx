@@ -7,7 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { CurrencyProvider } from "@/hooks/useCurrency";
 import ProtectedRoute from "./components/ProtectedRoute";
-
+import { PWAInstallBanner } from "./components/PWAInstallBanner";
 // Lazy load page components for code splitting
 const Landing = lazy(() => import("./pages/Landing"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -36,6 +36,7 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <PWAInstallBanner />
           <BrowserRouter>
             <Suspense fallback={<PageLoader />}>
               <Routes>
