@@ -60,6 +60,14 @@ const EXCHANGES = {
     url: "wss://ws.okx.com:8443/ws/v5/public",
     name: "OKX",
   },
+  coinbase: {
+    url: "wss://ws-feed.exchange.coinbase.com",
+    name: "Coinbase",
+  },
+  kraken: {
+    url: "wss://ws.kraken.com",
+    name: "Kraken",
+  },
 };
 
 export const useCryptoPrices = () => {
@@ -72,10 +80,13 @@ export const useCryptoPrices = () => {
   const binanceWsRefs = useRef<WebSocket[]>([]);
   const bybitWsRef = useRef<WebSocket | null>(null);
   const okxWsRef = useRef<WebSocket | null>(null);
+  const coinbaseWsRef = useRef<WebSocket | null>(null);
+  const krakenWsRef = useRef<WebSocket | null>(null);
   
   const reconnectTimeoutsRef = useRef<Record<string, number>>({});
   const cryptoListRef = useRef<{ symbol: string; name: string; id: string }[]>([]);
   const pricesRef = useRef<Map<string, CryptoPrice>>(new Map());
+  const [isLive, setIsLive] = useState(false);
 
   // Update price with source tracking (prefer most recent update)
   const updatePrice = useCallback((symbol: string, updates: Partial<CryptoPrice>, source: string) => {
@@ -248,7 +259,7 @@ export const useCryptoPrices = () => {
           // Silent - will reconnect on close
         };
         
-        ws.onclose = () => {
+          ws.onclose = () => {
           setConnectedExchanges(prev => prev.filter(e => e !== "Binance"));
           
           // Reconnect after delay
@@ -257,7 +268,7 @@ export const useCryptoPrices = () => {
           }
           reconnectTimeoutsRef.current.binance = window.setTimeout(() => {
             connectBinance();
-          }, 5000);
+          }, 2000);
         };
         
         binanceWsRefs.current.push(ws);
@@ -325,7 +336,7 @@ export const useCryptoPrices = () => {
         }
         reconnectTimeoutsRef.current.bybit = window.setTimeout(() => {
           connectBybit();
-        }, 10000); // Longer delay for Bybit
+        }, 3000);
       };
       
       bybitWsRef.current = ws;
@@ -399,10 +410,148 @@ export const useCryptoPrices = () => {
         }
         reconnectTimeoutsRef.current.okx = window.setTimeout(() => {
           connectOKX();
-        }, 10000); // Longer delay for OKX
+        }, 3000);
       };
       
       okxWsRef.current = ws;
+    } catch (err) {
+      // Silent connection errors
+    }
+  }, [updatePrice]);
+
+  // Connect to Coinbase WebSocket
+  const connectCoinbase = useCallback(() => {
+    if (cryptoListRef.current.length === 0) return;
+    
+    if (coinbaseWsRef.current) {
+      coinbaseWsRef.current.close();
+    }
+
+    try {
+      const ws = new WebSocket(EXCHANGES.coinbase.url);
+      
+      ws.onopen = () => {
+        setConnectedExchanges(prev => 
+          prev.includes("Coinbase") ? prev : [...prev, "Coinbase"]
+        );
+        
+        // Subscribe to ticker for top cryptos
+        const productIds = cryptoListRef.current.slice(0, 30).map(c => `${c.symbol}-USD`);
+        
+        ws.send(JSON.stringify({
+          type: "subscribe",
+          product_ids: productIds,
+          channels: ["ticker"],
+        }));
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === "ticker" && message.product_id) {
+            const symbol = message.product_id.replace("-USD", "");
+            
+            updatePrice(symbol, {
+              current_price: parseFloat(message.price || 0),
+              high_24h: parseFloat(message.high_24h || 0),
+              low_24h: parseFloat(message.low_24h || 0),
+              total_volume: parseFloat(message.volume_24h || 0),
+            }, "Coinbase");
+          }
+        } catch (e) {
+          // Silent parse errors
+        }
+      };
+      
+      ws.onerror = () => {
+        // Silent - will reconnect on close
+      };
+      
+      ws.onclose = () => {
+        setConnectedExchanges(prev => prev.filter(e => e !== "Coinbase"));
+        
+        if (reconnectTimeoutsRef.current.coinbase) {
+          clearTimeout(reconnectTimeoutsRef.current.coinbase);
+        }
+        reconnectTimeoutsRef.current.coinbase = window.setTimeout(() => {
+          connectCoinbase();
+        }, 3000);
+      };
+      
+      coinbaseWsRef.current = ws;
+    } catch (err) {
+      // Silent connection errors
+    }
+  }, [updatePrice]);
+
+  // Connect to Kraken WebSocket  
+  const connectKraken = useCallback(() => {
+    if (cryptoListRef.current.length === 0) return;
+    
+    if (krakenWsRef.current) {
+      krakenWsRef.current.close();
+    }
+
+    try {
+      const ws = new WebSocket(EXCHANGES.kraken.url);
+      
+      ws.onopen = () => {
+        setConnectedExchanges(prev => 
+          prev.includes("Kraken") ? prev : [...prev, "Kraken"]
+        );
+        
+        // Subscribe to ticker for top cryptos - Kraken uses XBT for BTC
+        const pairs = cryptoListRef.current.slice(0, 20).map(c => {
+          const symbol = c.symbol === "BTC" ? "XBT" : c.symbol;
+          return `${symbol}/USD`;
+        });
+        
+        ws.send(JSON.stringify({
+          event: "subscribe",
+          pair: pairs,
+          subscription: { name: "ticker" },
+        }));
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (Array.isArray(message) && message.length >= 4) {
+            const ticker = message[1];
+            const pair = message[3] as string;
+            
+            if (ticker && pair) {
+              let symbol = pair.replace("/USD", "").replace("XBT", "BTC");
+              
+              updatePrice(symbol, {
+                current_price: parseFloat(ticker.c?.[0] || 0),
+                high_24h: parseFloat(ticker.h?.[1] || 0),
+                low_24h: parseFloat(ticker.l?.[1] || 0),
+                total_volume: parseFloat(ticker.v?.[1] || 0),
+              }, "Kraken");
+            }
+          }
+        } catch (e) {
+          // Silent parse errors
+        }
+      };
+      
+      ws.onerror = () => {
+        // Silent - will reconnect on close
+      };
+      
+      ws.onclose = () => {
+        setConnectedExchanges(prev => prev.filter(e => e !== "Kraken"));
+        
+        if (reconnectTimeoutsRef.current.kraken) {
+          clearTimeout(reconnectTimeoutsRef.current.kraken);
+        }
+        reconnectTimeoutsRef.current.kraken = window.setTimeout(() => {
+          connectKraken();
+        }, 3000);
+      };
+      
+      krakenWsRef.current = ws;
     } catch (err) {
       // Silent connection errors
     }
@@ -418,8 +567,10 @@ export const useCryptoPrices = () => {
     if (prices.length > 0) {
       // Stagger connections to avoid overwhelming
       connectBinance();
-      setTimeout(() => connectBybit(), 1000);
-      setTimeout(() => connectOKX(), 2000);
+      setTimeout(() => connectBybit(), 500);
+      setTimeout(() => connectOKX(), 1000);
+      setTimeout(() => connectCoinbase(), 1500);
+      setTimeout(() => connectKraken(), 2000);
     }
     
     return () => {
@@ -431,8 +582,15 @@ export const useCryptoPrices = () => {
       binanceWsRefs.current.forEach(ws => ws.close());
       if (bybitWsRef.current) bybitWsRef.current.close();
       if (okxWsRef.current) okxWsRef.current.close();
+      if (coinbaseWsRef.current) coinbaseWsRef.current.close();
+      if (krakenWsRef.current) krakenWsRef.current.close();
     };
-  }, [prices.length, connectBinance, connectBybit, connectOKX]);
+  }, [prices.length, connectBinance, connectBybit, connectOKX, connectCoinbase, connectKraken]);
+
+  // Track live status
+  useEffect(() => {
+    setIsLive(connectedExchanges.length > 0);
+  }, [connectedExchanges]);
 
   // Periodic refresh from CoinGecko for market cap and other data
   useEffect(() => {
@@ -456,6 +614,7 @@ export const useCryptoPrices = () => {
     loading, 
     error, 
     connectedExchanges,
+    isLive,
     getPriceBySymbol, 
     getPriceById, 
     refetch: fetchPrices 
