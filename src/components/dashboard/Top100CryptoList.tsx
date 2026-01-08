@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useCryptoPrices, CryptoPrice } from "@/hooks/useCryptoPrices";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
-import { TrendingUp, TrendingDown, Bell, X, BellRing } from "lucide-react";
+import { TrendingUp, TrendingDown, Bell, X, BellRing, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,10 +27,22 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
   const [selectedCryptoForAlert, setSelectedCryptoForAlert] = useState<CryptoPrice | null>(null);
   const [targetPrice, setTargetPrice] = useState("");
   const [alertCondition, setAlertCondition] = useState<"above" | "below">("above");
+  const [searchQuery, setSearchQuery] = useState("");
   
   // Track previous prices for flash animation
   const prevPricesRef = useRef<Map<string, number>>(new Map());
   const [priceFlashes, setPriceFlashes] = useState<Map<string, PriceFlash>>(new Map());
+
+  // Filter prices based on search query
+  const filteredPrices = useMemo(() => {
+    if (!searchQuery.trim()) return prices;
+    const query = searchQuery.toLowerCase().trim();
+    return prices.filter(
+      (crypto) =>
+        crypto.name.toLowerCase().includes(query) ||
+        crypto.symbol.toLowerCase().includes(query)
+    );
+  }, [prices, searchQuery]);
 
   // Detect price changes and trigger flash animations
   useEffect(() => {
@@ -135,6 +147,26 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
           </div>
         </div>
 
+        {/* Search Bar */}
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search by name or symbol (e.g. GoMining, BTC)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 bg-secondary/50"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
         {/* Active Alerts */}
         {alerts.length > 0 && (
           <div className="mb-4 p-3 bg-secondary/50 rounded-lg">
@@ -202,7 +234,7 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
               </tr>
             </thead>
             <tbody>
-              {prices.map((crypto, index) => {
+              {filteredPrices.map((crypto, index) => {
                 const isPositive = crypto.price_change_percentage_24h >= 0;
                 const isSelected = crypto.symbol.toUpperCase() === selected;
                 const hasAlert = alerts.some(a => a.symbol === crypto.symbol.toUpperCase());
