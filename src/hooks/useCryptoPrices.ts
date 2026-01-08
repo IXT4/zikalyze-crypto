@@ -47,6 +47,8 @@ const STABLECOINS = [
   "ezeth", "rseth", "weeth", "eeth", "pufeth", "kelp", "renzo", "eigenlayer",
   "ether-fi", "puffer-finance", "kelp-dao", "restaked-eth", "restaked-ether",
   "eigenpie", "bedrock", "mantle-staked-ether", "meth", "sweth", "ankr-staked-eth",
+  // Stakewise
+  "stakewise", "oseth", "swise", "stakewise-staked-eth",
   // Gold/commodity backed
   "xaut", "paxg", "gold", "dgld", "pmgt",
   // Other stable/wrapped
