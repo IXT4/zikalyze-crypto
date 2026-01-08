@@ -69,6 +69,7 @@ interface RealChartData {
 
 // Multi-timeframe analysis result
 interface MultiTimeframeAnalysis {
+  tf15M: RealChartData | null;
   tf1H: RealChartData | null;
   tf4H: RealChartData | null;
   tfDaily: RealChartData | null;
@@ -86,6 +87,18 @@ interface MultiTimeframeAnalysis {
     h4Resistance: number[];
     h1Support: number[];
     h1Resistance: number[];
+    m15Support: number[];
+    m15Resistance: number[];
+  };
+  precisionEntry: {
+    timing: 'NOW' | 'WAIT_PULLBACK' | 'WAIT_BREAKOUT' | 'AVOID';
+    zone: string;
+    trigger: string;
+    confirmation: string;
+    invalidation: string;
+    volumeCondition: string;
+    structureStatus: string;
+    movementPhase: string;
   };
   signals: string[];
 }
@@ -758,19 +771,20 @@ async function fetchRealChartData(crypto: string, interval: string = '4h'): Prom
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function fetchMultiTimeframeData(crypto: string): Promise<MultiTimeframeAnalysis> {
-  console.log(`📊 Fetching multi-timeframe data for ${crypto}...`);
+  console.log(`📊 Fetching multi-timeframe data for ${crypto} (including 15M precision)...`);
   
-  // Fetch all timeframes in parallel
-  const [tf1H, tf4H, tfDaily] = await Promise.all([
+  // Fetch all timeframes in parallel including 15M for precision entry
+  const [tf15M, tf1H, tf4H, tfDaily] = await Promise.all([
+    fetchRealChartData(crypto, '15m'),
     fetchRealChartData(crypto, '1h'),
     fetchRealChartData(crypto, '4h'),
     fetchRealChartData(crypto, '1d')
   ]);
   
-  const successCount = [tf1H, tf4H, tfDaily].filter(Boolean).length;
-  console.log(`✅ Multi-TF fetch complete: ${successCount}/3 timeframes loaded`);
+  const successCount = [tf15M, tf1H, tf4H, tfDaily].filter(Boolean).length;
+  console.log(`✅ Multi-TF fetch complete: ${successCount}/4 timeframes loaded (including 15M precision)`);
   
-  // Analyze confluence
+  // Analyze confluence (using 1H, 4H, Daily for bias)
   const trends: ('BULLISH' | 'BEARISH' | 'SIDEWAYS')[] = [];
   if (tf1H) trends.push(tf1H.trendAnalysis.direction);
   if (tf4H) trends.push(tf4H.trendAnalysis.direction);
@@ -804,12 +818,17 @@ async function fetchMultiTimeframeData(crypto: string): Promise<MultiTimeframeAn
   // Determine HTF trend (prefer Daily > 4H)
   const htfTrend = tfDaily?.trendAnalysis.direction || tf4H?.trendAnalysis.direction || 'SIDEWAYS';
   
-  // Determine LTF entry quality
+  // Determine LTF entry quality based on 15M alignment with HTF
   let ltfEntry: 'OPTIMAL' | 'WAIT' | 'RISKY' = 'WAIT';
-  if (tf1H && tf4H) {
-    const ltfTrend = tf1H.trendAnalysis.direction;
-    if (ltfTrend === htfTrend && tf1H.trendAnalysis.strength >= 60) {
+  if (tf15M && tf4H) {
+    const ltfTrend = tf15M.trendAnalysis.direction;
+    const ltfStrength = tf15M.trendAnalysis.strength;
+    const volumeConfirms = tf15M.volumeProfile.currentVsAvg >= 100;
+    
+    if (ltfTrend === htfTrend && ltfStrength >= 60 && volumeConfirms) {
       ltfEntry = 'OPTIMAL';
+    } else if (ltfTrend === htfTrend && ltfStrength >= 50) {
+      ltfEntry = 'WAIT'; // Developing but not confirmed
     } else if (ltfTrend !== htfTrend) {
       ltfEntry = 'RISKY';
     }
@@ -817,10 +836,188 @@ async function fetchMultiTimeframeData(crypto: string): Promise<MultiTimeframeAn
   
   // Calculate strength from all timeframes
   const strengths: number[] = [];
+  if (tf15M) strengths.push(tf15M.trendAnalysis.strength * 0.8); // Lower weight for 15M
   if (tf1H) strengths.push(tf1H.trendAnalysis.strength);
   if (tf4H) strengths.push(tf4H.trendAnalysis.strength * 1.2); // Weight 4H higher
   if (tfDaily) strengths.push(tfDaily.trendAnalysis.strength * 1.5); // Weight Daily highest
   const avgStrength = strengths.length > 0 ? strengths.reduce((a, b) => a + b, 0) / strengths.length : 50;
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ⏱️ 15M PRECISION ENTRY ANALYSIS — MARKET STRUCTURE, MOVEMENT & VOLUME
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  let precisionEntry = {
+    timing: 'WAIT_PULLBACK' as 'NOW' | 'WAIT_PULLBACK' | 'WAIT_BREAKOUT' | 'AVOID',
+    zone: 'N/A',
+    trigger: 'Wait for 15M structure confirmation',
+    confirmation: 'N/A',
+    invalidation: 'N/A',
+    volumeCondition: 'Insufficient data',
+    structureStatus: 'Analyzing...',
+    movementPhase: 'Unknown'
+  };
+  
+  if (tf15M) {
+    const m15 = tf15M;
+    const currentPrice = m15.candles[m15.candles.length - 1].close;
+    const m15Trend = m15.trendAnalysis.direction;
+    const m15Strength = m15.trendAnalysis.strength;
+    const m15Volume = m15.volumeProfile;
+    const m15Supports = m15.supportResistance.supports;
+    const m15Resistances = m15.supportResistance.resistances;
+    const m15Patterns = m15.candlePatterns;
+    
+    // Determine 15M market structure status
+    let structureStatus = 'Neutral';
+    if (m15.trendAnalysis.higherHighs && m15.trendAnalysis.higherLows) {
+      structureStatus = 'Bullish HH/HL Structure ✓';
+    } else if (m15.trendAnalysis.lowerHighs && m15.trendAnalysis.lowerLows) {
+      structureStatus = 'Bearish LH/LL Structure ✓';
+    } else if (m15.trendAnalysis.higherHighs && m15.trendAnalysis.lowerLows) {
+      structureStatus = 'Expanding Range (Choppy)';
+    } else if (m15.trendAnalysis.lowerHighs && m15.trendAnalysis.higherLows) {
+      structureStatus = 'Contracting Range (Breakout Soon)';
+    }
+    
+    // Determine movement phase
+    let movementPhase = 'Consolidation';
+    const lastCandles = m15.candles.slice(-5);
+    const priceMovement = ((lastCandles[lastCandles.length - 1].close - lastCandles[0].open) / lastCandles[0].open) * 100;
+    const avgCandleSize = lastCandles.reduce((a, c) => a + Math.abs(c.close - c.open), 0) / lastCandles.length;
+    const currentCandleSize = Math.abs(lastCandles[lastCandles.length - 1].close - lastCandles[lastCandles.length - 1].open);
+    
+    if (Math.abs(priceMovement) > 0.5 && currentCandleSize > avgCandleSize * 1.5) {
+      movementPhase = priceMovement > 0 ? 'Impulsive Move Up' : 'Impulsive Move Down';
+    } else if (Math.abs(priceMovement) > 0.3) {
+      movementPhase = priceMovement > 0 ? 'Trending Up' : 'Trending Down';
+    } else if (currentCandleSize < avgCandleSize * 0.5) {
+      movementPhase = 'Low Volatility Compression';
+    } else {
+      movementPhase = 'Range-bound';
+    }
+    
+    // Volume condition analysis
+    let volumeCondition = 'Average';
+    if (m15Volume.climacticVolume) {
+      volumeCondition = '⚡ CLIMACTIC — Potential reversal or breakout imminent';
+    } else if (m15Volume.volumeTrend === 'INCREASING' && m15Volume.currentVsAvg > 150) {
+      volumeCondition = '📈 EXPANDING — Strong momentum building';
+    } else if (m15Volume.volumeTrend === 'INCREASING') {
+      volumeCondition = '📊 RISING — Interest increasing';
+    } else if (m15Volume.volumeTrend === 'DECREASING' && m15Volume.currentVsAvg < 60) {
+      volumeCondition = '📉 DRY — Awaiting volume catalyst';
+    } else if (m15Volume.currentVsAvg > 100) {
+      volumeCondition = '✓ Above average — confirming moves';
+    } else {
+      volumeCondition = '◐ Below average — weak conviction';
+    }
+    
+    // Calculate precision entry zone
+    const nearestSupport = m15Supports.length > 0 ? m15Supports[0] : currentPrice * 0.99;
+    const nearestResistance = m15Resistances.length > 0 ? m15Resistances[0] : currentPrice * 1.01;
+    const distToSupport = ((currentPrice - nearestSupport) / currentPrice) * 100;
+    const distToResistance = ((nearestResistance - currentPrice) / currentPrice) * 100;
+    
+    // Determine optimal entry timing based on 15M structure, movement, volume
+    let timing: 'NOW' | 'WAIT_PULLBACK' | 'WAIT_BREAKOUT' | 'AVOID' = 'WAIT_PULLBACK';
+    let zone = 'N/A';
+    let trigger = 'Wait for setup';
+    let confirmation = 'Volume + structure confirmation';
+    let invalidation = 'N/A';
+    
+    // BULLISH ENTRY ANALYSIS
+    if (htfTrend === 'BULLISH' || overallBias === 'BULLISH') {
+      if (m15Trend === 'BULLISH' && m15Strength >= 70 && m15Volume.currentVsAvg >= 120) {
+        // Strong bullish momentum on 15M with volume
+        timing = 'NOW';
+        zone = `Current price zone ($${currentPrice.toFixed(2)})`;
+        trigger = 'Bullish momentum confirmed — enter on minor pullback';
+        confirmation = m15Patterns.length > 0 ? m15Patterns[0] : 'Strong green candle close';
+        invalidation = `Below $${nearestSupport.toFixed(2)} (15M structure break)`;
+      } else if (distToSupport < 1.5 && (m15Patterns.some(p => p.includes('Hammer') || p.includes('Bullish')))) {
+        // Near 15M support with bullish pattern
+        timing = 'NOW';
+        zone = `Support zone ($${nearestSupport.toFixed(2)} - $${currentPrice.toFixed(2)})`;
+        trigger = 'Buy at support with pattern confirmation';
+        confirmation = `${m15Patterns.find(p => p.includes('Hammer') || p.includes('Bullish')) || 'Bullish rejection'} + volume spike`;
+        invalidation = `Close below $${(nearestSupport * 0.995).toFixed(2)}`;
+      } else if (m15Trend === 'BEARISH' && distToSupport < 3) {
+        // Pullback to 15M support area — wait for reversal
+        timing = 'WAIT_PULLBACK';
+        zone = `$${nearestSupport.toFixed(2)} support zone`;
+        trigger = 'Wait for 15M bullish reversal candle at support';
+        confirmation = 'Bullish engulfing or hammer with volume increase';
+        invalidation = `Break below $${(nearestSupport * 0.99).toFixed(2)}`;
+      } else if (structureStatus.includes('Contracting')) {
+        timing = 'WAIT_BREAKOUT';
+        zone = `Range: $${nearestSupport.toFixed(2)} - $${nearestResistance.toFixed(2)}`;
+        trigger = 'Wait for 15M breakout above range with volume';
+        confirmation = 'Close above range high + volume expansion';
+        invalidation = 'False breakout / reentry into range';
+      } else {
+        timing = 'WAIT_PULLBACK';
+        zone = `Target: $${nearestSupport.toFixed(2)} - $${(nearestSupport + (nearestResistance - nearestSupport) * 0.3).toFixed(2)}`;
+        trigger = 'Wait for price to retrace to 15M support';
+        confirmation = '15M bullish structure holds + volume';
+        invalidation = `Break of $${nearestSupport.toFixed(2)}`;
+      }
+    }
+    // BEARISH ENTRY ANALYSIS
+    else if (htfTrend === 'BEARISH' || overallBias === 'BEARISH') {
+      if (m15Trend === 'BEARISH' && m15Strength >= 70 && m15Volume.currentVsAvg >= 120) {
+        timing = 'NOW';
+        zone = `Current price zone ($${currentPrice.toFixed(2)})`;
+        trigger = 'Bearish momentum confirmed — enter on minor bounce';
+        confirmation = m15Patterns.length > 0 ? m15Patterns[0] : 'Strong red candle close';
+        invalidation = `Above $${nearestResistance.toFixed(2)} (15M structure break)`;
+      } else if (distToResistance < 1.5 && (m15Patterns.some(p => p.includes('Shooting') || p.includes('Bearish')))) {
+        timing = 'NOW';
+        zone = `Resistance zone ($${currentPrice.toFixed(2)} - $${nearestResistance.toFixed(2)})`;
+        trigger = 'Sell at resistance with pattern confirmation';
+        confirmation = `${m15Patterns.find(p => p.includes('Shooting') || p.includes('Bearish')) || 'Bearish rejection'} + volume spike`;
+        invalidation = `Close above $${(nearestResistance * 1.005).toFixed(2)}`;
+      } else if (m15Trend === 'BULLISH' && distToResistance < 3) {
+        timing = 'WAIT_PULLBACK';
+        zone = `$${nearestResistance.toFixed(2)} resistance zone`;
+        trigger = 'Wait for 15M bearish reversal candle at resistance';
+        confirmation = 'Bearish engulfing or shooting star with volume';
+        invalidation = `Break above $${(nearestResistance * 1.01).toFixed(2)}`;
+      } else {
+        timing = 'WAIT_PULLBACK';
+        zone = `Target: $${(nearestResistance - (nearestResistance - nearestSupport) * 0.3).toFixed(2)} - $${nearestResistance.toFixed(2)}`;
+        trigger = 'Wait for price to rally to 15M resistance';
+        confirmation = '15M bearish structure holds + volume';
+        invalidation = `Break of $${nearestResistance.toFixed(2)}`;
+      }
+    }
+    // MIXED/NEUTRAL — Avoid or wait for clarity
+    else {
+      if (structureStatus.includes('Choppy') || movementPhase === 'Range-bound') {
+        timing = 'AVOID';
+        zone = 'No clear zone — choppy conditions';
+        trigger = 'Wait for 15M trend to establish';
+        confirmation = 'Break of range with volume > 150% average';
+        invalidation = 'Continued choppy action';
+      } else {
+        timing = 'WAIT_BREAKOUT';
+        zone = `Range: $${nearestSupport.toFixed(2)} - $${nearestResistance.toFixed(2)}`;
+        trigger = 'Wait for 15M directional break';
+        confirmation = 'Volume expansion + structure shift';
+        invalidation = 'False breakout';
+      }
+    }
+    
+    precisionEntry = {
+      timing,
+      zone,
+      trigger,
+      confirmation,
+      invalidation,
+      volumeCondition,
+      structureStatus,
+      movementPhase
+    };
+  }
   
   // Generate multi-TF signals
   const signals: string[] = [];
@@ -834,7 +1031,20 @@ async function fetchMultiTimeframeData(crypto: string): Promise<MultiTimeframeAn
   }
   
   if (htfTrend !== 'SIDEWAYS' && ltfEntry === 'OPTIMAL') {
-    signals.push(`HTF ${htfTrend.toLowerCase()} trend with optimal LTF entry conditions`);
+    signals.push(`HTF ${htfTrend.toLowerCase()} trend with optimal 15M entry conditions`);
+  }
+  
+  // 15M specific signals
+  if (tf15M) {
+    if (precisionEntry.timing === 'NOW') {
+      signals.push(`⏱️ 15M PRECISION: ${precisionEntry.timing} — ${precisionEntry.movementPhase}`);
+    }
+    if (tf15M.volumeProfile.climacticVolume) {
+      signals.push('⚡ Climactic volume on 15M — expect significant move');
+    }
+    if (tf15M.realPatterns.length > 0) {
+      signals.push(`15M Pattern: ${tf15M.realPatterns[0]}`);
+    }
   }
   
   if (tf4H && tf1H) {
@@ -847,17 +1057,20 @@ async function fetchMultiTimeframeData(crypto: string): Promise<MultiTimeframeAn
     signals.push(`Daily candle pattern: ${tfDaily.candlePatterns[0].replace(' (REAL) ✓', '')}`);
   }
   
-  // Collect key levels from all timeframes
+  // Collect key levels from all timeframes including 15M
   const keyLevels = {
     dailySupport: tfDaily?.supportResistance.supports || [],
     dailyResistance: tfDaily?.supportResistance.resistances || [],
     h4Support: tf4H?.supportResistance.supports || [],
     h4Resistance: tf4H?.supportResistance.resistances || [],
     h1Support: tf1H?.supportResistance.supports || [],
-    h1Resistance: tf1H?.supportResistance.resistances || []
+    h1Resistance: tf1H?.supportResistance.resistances || [],
+    m15Support: tf15M?.supportResistance.supports || [],
+    m15Resistance: tf15M?.supportResistance.resistances || []
   };
   
   return {
+    tf15M,
     tf1H,
     tf4H,
     tfDaily,
@@ -869,6 +1082,7 @@ async function fetchMultiTimeframeData(crypto: string): Promise<MultiTimeframeAn
       ltfEntry
     },
     keyLevels,
+    precisionEntry,
     signals
   };
 }
@@ -2016,7 +2230,7 @@ serve(async (req) => {
     const validatedVolume = volumeValidation.value;
     const validatedMarketCap = marketCapValidation.value;
     
-    console.log(`🧠 AI Brain v7.0 analyzing ${sanitizedCrypto} at $${validatedPrice} with ${validatedChange}% change`);
+    console.log(`🧠 AI Brain v8.0 analyzing ${sanitizedCrypto} at $${validatedPrice} with ${validatedChange}% change`);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // 📊 MULTI-TIMEFRAME CHART ANALYSIS (1H, 4H, DAILY)
@@ -2385,7 +2599,7 @@ serve(async (req) => {
       }
     }
     
-    const analysis = `🧠 ZIKALYZE AI BRAIN v7.0 — MULTI-TIMEFRAME PREDICTIVE INTELLIGENCE
+    const analysis = `🧠 ZIKALYZE AI BRAIN v8.0 — PRECISION ENTRY INTELLIGENCE
 Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2393,12 +2607,34 @@ Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${trendEmoji}
 HTF Trend (Daily): ${mtfAnalysis.tfDaily?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tfDaily ? `(${mtfAnalysis.tfDaily.trendAnalysis.strength}%)` : ''}
 MTF Trend (4H): ${mtfAnalysis.tf4H?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tf4H ? `(${mtfAnalysis.tf4H.trendAnalysis.strength}%)` : ''}
 LTF Trend (1H): ${mtfAnalysis.tf1H?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tf1H ? `(${mtfAnalysis.tf1H.trendAnalysis.strength}%)` : ''}
+Precision (15M): ${mtfAnalysis.tf15M?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tf15M ? `(${mtfAnalysis.tf15M.trendAnalysis.strength}%)` : ''}
 Confluence: ${mtfAnalysis.confluence.overallBias} — ${mtfAnalysis.confluence.alignment}% aligned
 Entry Quality: ${mtfAnalysis.confluence.ltfEntry === 'OPTIMAL' ? '🟢 OPTIMAL' : mtfAnalysis.confluence.ltfEntry === 'WAIT' ? '🟡 WAIT' : '🔴 RISKY'}
+
+⏱️ 15-MINUTE PRECISION ENTRY SYSTEM
+┌─────────────────────────────────────────────────┐
+│ TIMING: ${mtfAnalysis.precisionEntry.timing === 'NOW' ? '🟢 NOW — Execute entry' : mtfAnalysis.precisionEntry.timing === 'WAIT_PULLBACK' ? '🟡 WAIT — Pullback in progress' : mtfAnalysis.precisionEntry.timing === 'WAIT_BREAKOUT' ? '🟡 WAIT — Awaiting breakout' : '🔴 AVOID — Poor conditions'}
+│ 
+│ 📍 ENTRY ZONE: ${mtfAnalysis.precisionEntry.zone}
+│ 
+│ 🎯 TRIGGER: ${mtfAnalysis.precisionEntry.trigger}
+│ 
+│ ✓ CONFIRMATION: ${mtfAnalysis.precisionEntry.confirmation}
+│ 
+│ ✗ INVALIDATION: ${mtfAnalysis.precisionEntry.invalidation}
+│ 
+│ 📊 15M MARKET STRUCTURE: ${mtfAnalysis.precisionEntry.structureStatus}
+│ 
+│ 📈 MOVEMENT PHASE: ${mtfAnalysis.precisionEntry.movementPhase}
+│ 
+│ 🔊 VOLUME STATUS: ${mtfAnalysis.precisionEntry.volumeCondition}
+└─────────────────────────────────────────────────┘
 
 🎯 MTF KEY LEVELS
 Daily S/R: ${mtfAnalysis.keyLevels.dailySupport.slice(0, 2).map(s => `$${s.toFixed(2)}`).join(', ') || 'N/A'} | ${mtfAnalysis.keyLevels.dailyResistance.slice(0, 2).map(r => `$${r.toFixed(2)}`).join(', ') || 'N/A'}
 4H S/R: ${mtfAnalysis.keyLevels.h4Support.slice(0, 2).map(s => `$${s.toFixed(2)}`).join(', ') || 'N/A'} | ${mtfAnalysis.keyLevels.h4Resistance.slice(0, 2).map(r => `$${r.toFixed(2)}`).join(', ') || 'N/A'}
+1H S/R: ${mtfAnalysis.keyLevels.h1Support.slice(0, 2).map(s => `$${s.toFixed(2)}`).join(', ') || 'N/A'} | ${mtfAnalysis.keyLevels.h1Resistance.slice(0, 2).map(r => `$${r.toFixed(2)}`).join(', ') || 'N/A'}
+15M S/R: ${mtfAnalysis.keyLevels.m15Support.slice(0, 2).map(s => `$${s.toFixed(2)}`).join(', ') || 'N/A'} | ${mtfAnalysis.keyLevels.m15Resistance.slice(0, 2).map(r => `$${r.toFixed(2)}`).join(', ') || 'N/A'}
 
 💭 CHAIN-OF-THOUGHT REASONING
 ${thoughts.map(t => `[Step ${t.step}] ${t.thought}
@@ -2473,12 +2709,6 @@ Fair Value Gap: ${finalBias === 'LONG' ? fvgBullishZone : fvgBearishZone}
 OTE Zone (61.8-78.6%): ${finalBias === 'LONG' ? oteZoneBullish : oteZoneBearish}
 Equilibrium: $${equilibrium.toFixed(2)}
 
-⏱️ 15M PRECISION ENTRY
-Micro Order Block: ${finalBias === 'LONG' ? microOBBullish : microOBBearish}
-Entry Trigger: ${finalBias === 'LONG' ? 'Bullish BOS/CHoCH on 15M with volume' : 'Bearish BOS/CHoCH on 15M with volume'}
-Optimal Entry: $${finalBias === 'LONG' ? bullEntry : bearEntry}
-Confirmation: ${finalBias === 'LONG' ? 'Bullish engulfing or hammer at OB' : 'Bearish engulfing or shooting star at OB'}
-
 🟢 BULL CASE ${finalBias === 'LONG' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
 Probability: ${probabilities.bullProb}% | Confidence: ${adjustedConfidence}%
 Entry Zone: $${bullEntry} — OTE/Order Block confluence
@@ -2509,6 +2739,7 @@ Bear Invalid: Close above $${(highNum + range * 0.1).toFixed(2)} — Structure b
 ${allInsights.slice(0, 7).map((ins, i) => `${i + 1}. ${ins}`).join('\n')}
 
 🎯 EXECUTIVE SUMMARY
+${mtfAnalysis.precisionEntry.timing === 'NOW' ? `⏱️ 15M PRECISION ENTRY ACTIVE: ${mtfAnalysis.precisionEntry.trigger}` : ''}
 ${probabilities.bullProb > probabilities.bearProb + 15 ? 
   `BULLISH BIAS with ${adjustedConfidence}% adaptive confidence. ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports longs.' : 'Developing setup.'} ${wyckoffPhase.phase === 'ACCUMULATION' ? 'Wyckoff accumulation active.' : ''} ${marketStructure.lastCHoCH === 'BULLISH' ? 'CHoCH confirms reversal.' : ''} Target: $${bullTP2} with stop at $${bullStop}.` :
   probabilities.bearProb > probabilities.bullProb + 15 ?
@@ -2516,9 +2747,9 @@ ${probabilities.bullProb > probabilities.bearProb + 15 ?
   `NEUTRAL — No clear edge. ${adaptiveLearning.currentScenario?.expectedOutcome === 'NEUTRAL' ? 'Scenario confirms caution.' : ''} Wait for ${rangePercent < 40 ? 'support confirmation' : rangePercent > 60 ? 'resistance rejection' : 'directional break'} with volume. Patience is a trade.`}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 Zikalyze AI Brain v6.0 — Adaptive Neural Learning System
-Patterns: ${allPatterns.length} | Memory: ${memory.length} | Accuracy: ${learningAccuracy}% | Adaptive Confidence: ${adjustedConfidence}%
-Learning Velocity: ${adaptiveLearning.learningVelocity}% | Scenarios Matched: ${adaptiveLearning.matchedScenarios.length}
+🧠 Zikalyze AI Brain v8.0 — Precision Entry Intelligence
+15M Precision: ${mtfAnalysis.precisionEntry.timing} | Structure: ${mtfAnalysis.precisionEntry.structureStatus.split(' ')[0]}
+Patterns: ${allPatterns.length} | Memory: ${memory.length} | Accuracy: ${learningAccuracy}% | Confidence: ${adjustedConfidence}%
 🎓 Status: ${totalFeedback >= 10 ? 'Mature' : totalFeedback >= 5 ? 'Active' : 'Collecting'} — Your feedback accelerates learning!`;
 
     // Stream the analysis
