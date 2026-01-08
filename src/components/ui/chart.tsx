@@ -35,9 +35,12 @@ const ChartContainer = React.forwardRef<
     config: ChartConfig;
     children: React.ComponentProps<typeof RechartsPrimitive.ResponsiveContainer>["children"];
   }
->(({ id, className, children, config, ...props }, ref) => {
+>(({ id, className, children, config, style, ...props }, ref) => {
   const uniqueId = React.useId();
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`;
+  
+  // Get CSS variables from config using the safe hook
+  const chartStyles = useChartStyles(config);
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -48,6 +51,7 @@ const ChartContainer = React.forwardRef<
           "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
           className,
         )}
+        style={{ ...chartStyles, ...style }}
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
@@ -87,38 +91,38 @@ const sanitizeCSSColor = (color: string): string | null => {
   return null;
 };
 
-const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  const colorConfig = Object.entries(config).filter(([_, config]) => config.theme || config.color);
+// Build CSS variables as a style object (eliminates dangerouslySetInnerHTML)
+const useChartStyles = (config: ChartConfig): React.CSSProperties => {
+  return React.useMemo(() => {
+    const colorConfig = Object.entries(config).filter(([_, cfg]) => cfg.theme || cfg.color);
+    
+    if (!colorConfig.length) {
+      return {};
+    }
 
-  if (!colorConfig.length) {
-    return null;
-  }
-
-  // Build CSS using sanitized values
-  const cssContent = Object.entries(THEMES)
-    .map(([theme, prefix]) => {
-      const cssVars = colorConfig
-        .map(([key, itemConfig]) => {
-          const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
-          const sanitizedColor = color ? sanitizeCSSColor(color) : null;
-          // Sanitize key to only allow alphanumeric and hyphens
-          const sanitizedKey = key.replace(/[^a-zA-Z0-9-]/g, '');
-          return sanitizedColor ? `  --color-${sanitizedKey}: ${sanitizedColor};` : null;
-        })
-        .filter(Boolean)
-        .join("\n");
+    const cssVars: Record<string, string> = {};
+    
+    colorConfig.forEach(([key, itemConfig]) => {
+      // For theme-based colors, we use the dark theme since app is forced dark mode
+      const color = itemConfig.theme?.dark || itemConfig.color;
+      const sanitizedColor = color ? sanitizeCSSColor(color) : null;
+      // Sanitize key to only allow alphanumeric and hyphens
+      const sanitizedKey = key.replace(/[^a-zA-Z0-9-]/g, '');
       
-      return `${prefix} [data-chart=${id}] {\n${cssVars}\n}`;
-    })
-    .join("\n");
+      if (sanitizedColor) {
+        cssVars[`--color-${sanitizedKey}`] = sanitizedColor;
+      }
+    });
 
-  return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: cssContent,
-      }}
-    />
-  );
+    return cssVars as React.CSSProperties;
+  }, [config]);
+};
+
+// ChartStyle component is now a no-op - styles are applied directly to container
+const ChartStyle = ({ id: _id, config: _config }: { id: string; config: ChartConfig }) => {
+  // CSS variables are now applied directly to the container element
+  // This eliminates the need for dangerouslySetInnerHTML
+  return null;
 };
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
