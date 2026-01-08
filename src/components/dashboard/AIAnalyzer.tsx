@@ -246,7 +246,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               "flex h-10 w-10 items-center justify-center rounded-xl transition-all",
               isAnalyzing ? "bg-primary/30 animate-pulse" : "bg-primary/20"
             )}>
-              <Brain className={cn("h-5 w-5 text-primary", isAnalyzing && "animate-spin")} />
+              <Brain className="h-5 w-5 text-primary animate-spin-slow" />
             </div>
             <div>
               <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
