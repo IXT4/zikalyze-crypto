@@ -88,7 +88,7 @@ const Sidebar = () => {
       </nav>
 
       {/* Bottom Actions */}
-      <div className="flex flex-col gap-1.5 px-2 mt-2 lg:gap-2 lg:px-3 safe-area-inset-bottom">
+      <div className="flex flex-col gap-1.5 px-2 mt-2 mb-4 lg:gap-2 lg:px-3 pb-safe">
         <button className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-muted-foreground transition-all hover:bg-secondary hover:text-foreground active:scale-95 lg:rounded-xl lg:px-3 lg:py-3">
           <Search className="h-4 w-4 lg:h-5 lg:w-5" />
           <span className="hidden lg:block text-sm">{t("sidebar.search")}</span>
