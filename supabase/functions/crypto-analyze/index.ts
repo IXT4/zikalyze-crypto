@@ -26,7 +26,7 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🧠 ZIKALYZE AI BRAIN v6.0 — ADAPTIVE NEURAL LEARNING SYSTEM
+// 🧠 ZIKALYZE AI BRAIN v7.0 — MULTI-TIMEFRAME PREDICTIVE INTELLIGENCE
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Real candlestick data from exchanges
@@ -65,6 +65,38 @@ interface RealChartData {
     supports: number[];
     resistances: number[];
   };
+}
+
+// Multi-timeframe analysis result
+interface MultiTimeframeAnalysis {
+  tf1H: RealChartData | null;
+  tf4H: RealChartData | null;
+  tfDaily: RealChartData | null;
+  confluence: {
+    overallBias: 'BULLISH' | 'BEARISH' | 'MIXED' | 'NEUTRAL';
+    strength: number;
+    alignment: number; // 0-100% how aligned the timeframes are
+    htfTrend: 'BULLISH' | 'BEARISH' | 'SIDEWAYS';
+    ltfEntry: 'OPTIMAL' | 'WAIT' | 'RISKY';
+  };
+  keyLevels: {
+    dailySupport: number[];
+    dailyResistance: number[];
+    h4Support: number[];
+    h4Resistance: number[];
+    h1Support: number[];
+    h1Resistance: number[];
+  };
+  signals: string[];
+}
+
+// Enhanced memory with prediction tracking
+interface PredictiveMemory {
+  pastPatterns: { pattern: string; outcome: 'WIN' | 'LOSS' | 'PENDING'; priceChange: number }[];
+  priceHistory: { price: number; timestamp: string }[];
+  predictionAccuracy: number;
+  trendConsistency: number;
+  futurePredictions: { target: number; probability: number; timeframe: string; basis: string }[];
 }
 
 interface MarketMemory {
@@ -686,36 +718,26 @@ const BINANCE_SYMBOL_MAP: Record<string, string> = {
   POL: 'POLUSDT', W: 'WUSDT', ETHFI: 'ETHFIUSDT', ENA: 'ENAUSDT', NOT: 'NOTUSDT',
 };
 
-async function fetchRealChartData(crypto: string): Promise<RealChartData | null> {
+async function fetchRealChartData(crypto: string, interval: string = '4h'): Promise<RealChartData | null> {
   const symbol = BINANCE_SYMBOL_MAP[crypto];
   if (!symbol) {
-    console.log(`⚠️ No Binance symbol mapping for ${crypto}, using fallback analysis`);
     return null;
   }
   
   try {
-    // Fetch 4H candles (100 candles = ~16 days of data)
     const response = await fetch(
-      `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=4h&limit=100`,
+      `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=100`,
       { 
         headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(8000) 
+        signal: AbortSignal.timeout(6000) 
       }
     );
     
-    if (!response.ok) {
-      console.log(`⚠️ Binance API error: ${response.status}`);
-      return null;
-    }
+    if (!response.ok) return null;
     
     const data = await response.json() as number[][];
+    if (!Array.isArray(data) || data.length < 20) return null;
     
-    if (!Array.isArray(data) || data.length < 20) {
-      console.log(`⚠️ Insufficient candle data for ${crypto}`);
-      return null;
-    }
-    
-    // Parse candles
     const candles: Candle[] = data.map((k: number[]) => ({
       timestamp: k[0],
       open: parseFloat(String(k[1])),
@@ -725,18 +747,251 @@ async function fetchRealChartData(crypto: string): Promise<RealChartData | null>
       volume: parseFloat(String(k[5]))
     }));
     
-    console.log(`✅ Fetched ${candles.length} real candles for ${crypto} from Binance`);
-    
-    // Analyze the real chart data
-    return analyzeRealChart(candles, crypto);
-    
-  } catch (error) {
-    console.log(`⚠️ Failed to fetch real chart data: ${error}`);
+    return analyzeRealChart(candles, crypto, interval);
+  } catch {
     return null;
   }
 }
 
-function analyzeRealChart(candles: Candle[], crypto: string): RealChartData {
+// ═══════════════════════════════════════════════════════════════════════════════
+// 📊 MULTI-TIMEFRAME ANALYSIS ENGINE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function fetchMultiTimeframeData(crypto: string): Promise<MultiTimeframeAnalysis> {
+  console.log(`📊 Fetching multi-timeframe data for ${crypto}...`);
+  
+  // Fetch all timeframes in parallel
+  const [tf1H, tf4H, tfDaily] = await Promise.all([
+    fetchRealChartData(crypto, '1h'),
+    fetchRealChartData(crypto, '4h'),
+    fetchRealChartData(crypto, '1d')
+  ]);
+  
+  const successCount = [tf1H, tf4H, tfDaily].filter(Boolean).length;
+  console.log(`✅ Multi-TF fetch complete: ${successCount}/3 timeframes loaded`);
+  
+  // Analyze confluence
+  const trends: ('BULLISH' | 'BEARISH' | 'SIDEWAYS')[] = [];
+  if (tf1H) trends.push(tf1H.trendAnalysis.direction);
+  if (tf4H) trends.push(tf4H.trendAnalysis.direction);
+  if (tfDaily) trends.push(tfDaily.trendAnalysis.direction);
+  
+  const bullishCount = trends.filter(t => t === 'BULLISH').length;
+  const bearishCount = trends.filter(t => t === 'BEARISH').length;
+  
+  let overallBias: 'BULLISH' | 'BEARISH' | 'MIXED' | 'NEUTRAL' = 'NEUTRAL';
+  let alignment = 0;
+  
+  if (trends.length > 0) {
+    if (bullishCount === trends.length) {
+      overallBias = 'BULLISH';
+      alignment = 100;
+    } else if (bearishCount === trends.length) {
+      overallBias = 'BEARISH';
+      alignment = 100;
+    } else if (bullishCount > bearishCount) {
+      overallBias = bullishCount >= 2 ? 'BULLISH' : 'MIXED';
+      alignment = Math.round((bullishCount / trends.length) * 100);
+    } else if (bearishCount > bullishCount) {
+      overallBias = bearishCount >= 2 ? 'BEARISH' : 'MIXED';
+      alignment = Math.round((bearishCount / trends.length) * 100);
+    } else {
+      overallBias = 'MIXED';
+      alignment = 50;
+    }
+  }
+  
+  // Determine HTF trend (prefer Daily > 4H)
+  const htfTrend = tfDaily?.trendAnalysis.direction || tf4H?.trendAnalysis.direction || 'SIDEWAYS';
+  
+  // Determine LTF entry quality
+  let ltfEntry: 'OPTIMAL' | 'WAIT' | 'RISKY' = 'WAIT';
+  if (tf1H && tf4H) {
+    const ltfTrend = tf1H.trendAnalysis.direction;
+    if (ltfTrend === htfTrend && tf1H.trendAnalysis.strength >= 60) {
+      ltfEntry = 'OPTIMAL';
+    } else if (ltfTrend !== htfTrend) {
+      ltfEntry = 'RISKY';
+    }
+  }
+  
+  // Calculate strength from all timeframes
+  const strengths: number[] = [];
+  if (tf1H) strengths.push(tf1H.trendAnalysis.strength);
+  if (tf4H) strengths.push(tf4H.trendAnalysis.strength * 1.2); // Weight 4H higher
+  if (tfDaily) strengths.push(tfDaily.trendAnalysis.strength * 1.5); // Weight Daily highest
+  const avgStrength = strengths.length > 0 ? strengths.reduce((a, b) => a + b, 0) / strengths.length : 50;
+  
+  // Generate multi-TF signals
+  const signals: string[] = [];
+  
+  if (alignment === 100) {
+    signals.push(`All timeframes aligned ${overallBias} — high probability setup`);
+  } else if (alignment >= 66) {
+    signals.push(`Strong ${overallBias.toLowerCase()} confluence across timeframes`);
+  } else {
+    signals.push('Mixed signals across timeframes — wait for alignment');
+  }
+  
+  if (htfTrend !== 'SIDEWAYS' && ltfEntry === 'OPTIMAL') {
+    signals.push(`HTF ${htfTrend.toLowerCase()} trend with optimal LTF entry conditions`);
+  }
+  
+  if (tf4H && tf1H) {
+    if (tf4H.volumeProfile.volumeTrend === 'INCREASING' && tf1H.volumeProfile.volumeTrend === 'INCREASING') {
+      signals.push('Volume expanding on multiple timeframes — momentum building');
+    }
+  }
+  
+  if (tfDaily?.candlePatterns && tfDaily.candlePatterns.length > 0) {
+    signals.push(`Daily candle pattern: ${tfDaily.candlePatterns[0].replace(' (REAL) ✓', '')}`);
+  }
+  
+  // Collect key levels from all timeframes
+  const keyLevels = {
+    dailySupport: tfDaily?.supportResistance.supports || [],
+    dailyResistance: tfDaily?.supportResistance.resistances || [],
+    h4Support: tf4H?.supportResistance.supports || [],
+    h4Resistance: tf4H?.supportResistance.resistances || [],
+    h1Support: tf1H?.supportResistance.supports || [],
+    h1Resistance: tf1H?.supportResistance.resistances || []
+  };
+  
+  return {
+    tf1H,
+    tf4H,
+    tfDaily,
+    confluence: {
+      overallBias,
+      strength: Math.min(98, Math.round(avgStrength)),
+      alignment,
+      htfTrend,
+      ltfEntry
+    },
+    keyLevels,
+    signals
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🧠 PREDICTIVE MEMORY SYSTEM — PAST, PRESENT & FUTURE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function buildPredictiveMemory(memory: MarketMemory[], currentPrice: number, currentChange: number): PredictiveMemory {
+  // Analyze past patterns and their outcomes
+  const pastPatterns: { pattern: string; outcome: 'WIN' | 'LOSS' | 'PENDING'; priceChange: number }[] = [];
+  
+  for (let i = 0; i < Math.min(memory.length - 1, 20); i++) {
+    const current = memory[i];
+    const next = memory[i + 1];
+    
+    if (current.wasCorrect !== undefined) {
+      pastPatterns.push({
+        pattern: `${current.bias} at ${current.confidence || 50}% confidence`,
+        outcome: current.wasCorrect ? 'WIN' : 'LOSS',
+        priceChange: ((current.price - next.price) / next.price) * 100
+      });
+    }
+  }
+  
+  // Build price history
+  const priceHistory = memory.slice(0, 30).map(m => ({
+    price: m.price,
+    timestamp: m.timestamp
+  }));
+  
+  // Calculate prediction accuracy
+  const feedbackRecords = memory.filter(m => m.wasCorrect !== undefined);
+  const correctCount = feedbackRecords.filter(m => m.wasCorrect).length;
+  const predictionAccuracy = feedbackRecords.length >= 3 
+    ? Math.round((correctCount / feedbackRecords.length) * 100)
+    : 50;
+  
+  // Calculate trend consistency (how often bias matches actual direction)
+  let consistentCount = 0;
+  for (let i = 0; i < Math.min(memory.length - 1, 10); i++) {
+    const m = memory[i];
+    const nextM = memory[i + 1];
+    const actualDirection = m.price > nextM.price ? 'LONG' : 'SHORT';
+    if (m.bias === actualDirection) consistentCount++;
+  }
+  const trendConsistency = memory.length >= 2 
+    ? Math.round((consistentCount / Math.min(memory.length - 1, 10)) * 100)
+    : 50;
+  
+  // Generate future predictions based on patterns
+  const futurePredictions: { target: number; probability: number; timeframe: string; basis: string }[] = [];
+  
+  // Short-term prediction (24h)
+  if (memory.length >= 3) {
+    const avgChange = memory.slice(0, 5).reduce((a, m) => a + m.change, 0) / Math.min(memory.length, 5);
+    const momentum = currentChange > avgChange ? 'accelerating' : 'decelerating';
+    
+    const shortTermTarget = currentPrice * (1 + (avgChange * 0.5) / 100);
+    futurePredictions.push({
+      target: shortTermTarget,
+      probability: Math.min(75, 50 + predictionAccuracy * 0.25),
+      timeframe: '24H',
+      basis: `Momentum ${momentum}, avg daily change ${avgChange.toFixed(2)}%`
+    });
+  }
+  
+  // Medium-term prediction (7D)
+  if (memory.length >= 7) {
+    const weeklyAvg = memory.slice(0, 7).reduce((a, m) => a + m.price, 0) / 7;
+    const weeklyTrend = currentPrice > weeklyAvg ? 'above' : 'below';
+    const weeklyMomentum = ((currentPrice - weeklyAvg) / weeklyAvg) * 100;
+    
+    const projectedChange = weeklyMomentum * 0.5; // Mean reversion factor
+    const mediumTermTarget = currentPrice * (1 + projectedChange / 100);
+    
+    futurePredictions.push({
+      target: mediumTermTarget,
+      probability: Math.min(65, 45 + trendConsistency * 0.2),
+      timeframe: '7D',
+      basis: `Price ${weeklyTrend} weekly average, ${weeklyMomentum > 0 ? '+' : ''}${weeklyMomentum.toFixed(2)}% deviation`
+    });
+  }
+  
+  // Long-term prediction (30D)
+  if (memory.length >= 20) {
+    const monthlyHigh = Math.max(...memory.slice(0, 20).map(m => m.price));
+    const monthlyLow = Math.min(...memory.slice(0, 20).map(m => m.price));
+    const monthlyRange = monthlyHigh - monthlyLow;
+    const positionInRange = ((currentPrice - monthlyLow) / monthlyRange) * 100;
+    
+    let longTermTarget: number;
+    let basis: string;
+    
+    if (positionInRange < 30) {
+      longTermTarget = currentPrice + monthlyRange * 0.5;
+      basis = 'Near monthly lows — mean reversion likely';
+    } else if (positionInRange > 70) {
+      longTermTarget = currentPrice - monthlyRange * 0.3;
+      basis = 'Near monthly highs — pullback possible';
+    } else {
+      longTermTarget = currentPrice + monthlyRange * 0.25;
+      basis = 'Mid-range — continuation of trend expected';
+    }
+    
+    futurePredictions.push({
+      target: longTermTarget,
+      probability: Math.min(60, 40 + predictionAccuracy * 0.15),
+      timeframe: '30D',
+      basis
+    });
+  }
+  
+  return {
+    pastPatterns,
+    priceHistory,
+    predictionAccuracy,
+    trendConsistency,
+    futurePredictions
+  };
+}
+
+function analyzeRealChart(candles: Candle[], crypto: string, timeframe: string = '4h'): RealChartData {
   const recent = candles.slice(-50); // Focus on last 50 candles (8+ days)
   const currentCandle = candles[candles.length - 1];
   
@@ -919,8 +1174,8 @@ function analyzeRealChart(candles: Candle[], crypto: string): RealChartData {
   
   return {
     candles,
-    source: 'Binance 4H',
-    timeframe: '4H',
+    source: `Binance ${timeframe.toUpperCase()}`,
+    timeframe: timeframe.toUpperCase(),
     realPatterns,
     trendAnalysis: {
       direction,
@@ -1761,19 +2016,16 @@ serve(async (req) => {
     const validatedVolume = volumeValidation.value;
     const validatedMarketCap = marketCapValidation.value;
     
-    console.log(`🧠 AI Brain v6.0 analyzing ${sanitizedCrypto} at $${validatedPrice} with ${validatedChange}% change`);
+    console.log(`🧠 AI Brain v7.0 analyzing ${sanitizedCrypto} at $${validatedPrice} with ${validatedChange}% change`);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // 📊 FETCH REAL CHART DATA FROM BINANCE
+    // 📊 MULTI-TIMEFRAME CHART ANALYSIS (1H, 4H, DAILY)
     // ═══════════════════════════════════════════════════════════════════════════
     
-    const realChartData = await fetchRealChartData(sanitizedCrypto);
+    const mtfAnalysis = await fetchMultiTimeframeData(sanitizedCrypto);
+    const realChartData = mtfAnalysis.tf4H; // Primary timeframe for patterns
     
-    if (realChartData) {
-      console.log(`📈 Real chart analysis complete: ${realChartData.trendAnalysis.direction} trend, ${realChartData.realPatterns.length} patterns, ${realChartData.candlePatterns.length} candle patterns`);
-    } else {
-      console.log(`⚠️ Using fallback analysis without real chart data`);
-    }
+    console.log(`📊 MTF Analysis: ${mtfAnalysis.confluence.overallBias} bias, ${mtfAnalysis.confluence.alignment}% alignment, HTF: ${mtfAnalysis.confluence.htfTrend}`);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // 🧠 CORE AI BRAIN v6.0 — ADAPTIVE NEURAL LEARNING
@@ -1924,11 +2176,14 @@ serve(async (req) => {
     });
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // 🧬 ADAPTIVE LEARNING ENGINE
+    // 🧬 ADAPTIVE LEARNING ENGINE + PREDICTIVE MEMORY
     // ═══════════════════════════════════════════════════════════════════════════
     
-    // Get trend direction for scenario matching
-    const trendDirection = realChartData?.trendAnalysis.direction || 
+    // Build predictive memory from historical data
+    const predictiveMemory = buildPredictiveMemory(memory, priceNum, validatedChange);
+    
+    // Get trend direction for scenario matching — use MTF confluence
+    const trendDirection = mtfAnalysis.confluence.htfTrend || 
       (validatedChange > 3 ? 'BULLISH' : validatedChange < -3 ? 'BEARISH' : 'SIDEWAYS');
     
     // Run adaptive scenario analysis
@@ -1945,8 +2200,12 @@ serve(async (req) => {
     // Learn from real chart data
     const chartLessons = learnFromChartData(realChartData, memory);
     
-    // Learning insights
+    // Learning insights with MTF integration
     const learningInsights: string[] = [];
+    
+    // Add MTF signals first
+    learningInsights.push(...mtfAnalysis.signals.slice(0, 2));
+    
     if (totalFeedback >= 3) {
       if (learningAccuracy >= 80) {
         learningInsights.push(`Excellent accuracy (${learningAccuracy}%) — strategy highly effective for ${sanitizedCrypto}`);
@@ -1959,8 +2218,8 @@ serve(async (req) => {
       }
     }
     
-    // Add adaptive adjustments to insights
-    learningInsights.push(...adaptiveLearning.adaptiveAdjustments.slice(0, 3));
+    // Add adaptive adjustments and chart lessons
+    learningInsights.push(...adaptiveLearning.adaptiveAdjustments.slice(0, 2));
     learningInsights.push(...chartLessons.slice(0, 2));
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -2028,35 +2287,55 @@ serve(async (req) => {
     // ═══════════════════════════════════════════════════════════════════════════
     
     // Real chart data and learning processed internally — powers analysis without display
-    // Adaptive learning enhances predictions based on historical success rates
+    // Multi-timeframe confluence enhances predictions with HTF/LTF alignment
 
-    // Combine real chart patterns with algorithmic patterns — enhanced neural fusion
-    const allPatterns = realChartData 
-      ? [...new Set([...realChartData.realPatterns, ...realChartData.candlePatterns, ...patterns])]
-      : patterns;
+    // Combine real chart patterns from ALL timeframes
+    const allPatterns = [
+      ...(mtfAnalysis.tfDaily?.realPatterns || []).map(p => `[D] ${p}`),
+      ...(mtfAnalysis.tf4H?.realPatterns || []).map(p => `[4H] ${p}`),
+      ...(mtfAnalysis.tf1H?.realPatterns || []).map(p => `[1H] ${p}`),
+      ...(realChartData?.candlePatterns || []),
+      ...patterns
+    ].filter((v, i, a) => a.indexOf(v) === i).slice(0, 15);
     
-    // Adaptive confidence calculation — multi-factor neural weighting with learning boost
+    // Adaptive confidence calculation — multi-timeframe neural weighting
+    const mtfBoost = mtfAnalysis.confluence.alignment >= 90 ? 15 :
+                     mtfAnalysis.confluence.alignment >= 70 ? 10 :
+                     mtfAnalysis.confluence.alignment >= 50 ? 5 : 0;
+    
     const realDataBoost = realChartData ? (
-      realChartData.realPatterns.length * 4 +
-      realChartData.candlePatterns.length * 3 +
-      (realChartData.trendAnalysis.strength >= 70 ? 8 : realChartData.trendAnalysis.strength >= 50 ? 5 : 2) +
-      (realChartData.volumeProfile.climacticVolume ? 6 : 0)
+      realChartData.realPatterns.length * 3 +
+      realChartData.candlePatterns.length * 2 +
+      (realChartData.trendAnalysis.strength >= 70 ? 6 : realChartData.trendAnalysis.strength >= 50 ? 3 : 0) +
+      (realChartData.volumeProfile.climacticVolume ? 5 : 0)
     ) : 0;
     
     // Scenario-based confidence boost
     const scenarioBoost = adaptiveLearning.currentScenario 
-      ? Math.round((adaptiveLearning.scenarioConfidence - 50) * 0.3) 
+      ? Math.round((adaptiveLearning.scenarioConfidence - 50) * 0.25) 
       : 0;
     
-    // Learning velocity boost (faster learning = higher confidence in recent patterns)
-    const learningBoost = adaptiveLearning.learningVelocity > 50 ? 5 : 0;
+    // Predictive memory boost (consistent past = higher confidence)
+    const memoryBoost = predictiveMemory.trendConsistency >= 70 ? 5 :
+                        predictiveMemory.trendConsistency >= 50 ? 3 : 0;
     
-    const adjustedConfidence = Math.min(98, Math.max(55, probabilities.confidence + realDataBoost + scenarioBoost + learningBoost));
+    const adjustedConfidence = Math.min(98, Math.max(55, probabilities.confidence + mtfBoost + realDataBoost + scenarioBoost + memoryBoost));
     
-    // Adaptive bias synthesis — integrating real-time market intelligence + scenario learning
+    // Adaptive bias synthesis — MTF confluence + scenario learning
     let finalBias = bias;
     
-    // Scenario-based bias override (high confidence scenarios)
+    // MTF confluence override (strongest signal)
+    if (mtfAnalysis.confluence.alignment >= 80) {
+      if (mtfAnalysis.confluence.overallBias === 'BULLISH') {
+        finalBias = 'LONG';
+        allInsights.push(`🎯 ${mtfAnalysis.confluence.alignment}% multi-timeframe bullish alignment`);
+      } else if (mtfAnalysis.confluence.overallBias === 'BEARISH') {
+        finalBias = 'SHORT';
+        allInsights.push(`🎯 ${mtfAnalysis.confluence.alignment}% multi-timeframe bearish alignment`);
+      }
+    }
+    
+    // Scenario-based bias (secondary)
     if (adaptiveLearning.currentScenario && adaptiveLearning.scenarioConfidence >= 70) {
       if (adaptiveLearning.currentScenario.expectedOutcome !== 'NEUTRAL') {
         finalBias = adaptiveLearning.currentScenario.expectedOutcome;
@@ -2106,31 +2385,47 @@ serve(async (req) => {
       }
     }
     
-    const analysis = `🧠 ZIKALYZE AI BRAIN v6.0 — ADAPTIVE NEURAL LEARNING
+    const analysis = `🧠 ZIKALYZE AI BRAIN v7.0 — MULTI-TIMEFRAME PREDICTIVE INTELLIGENCE
 Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 MULTI-TIMEFRAME CONFLUENCE
+HTF Trend (Daily): ${mtfAnalysis.tfDaily?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tfDaily ? `(${mtfAnalysis.tfDaily.trendAnalysis.strength}%)` : ''}
+MTF Trend (4H): ${mtfAnalysis.tf4H?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tf4H ? `(${mtfAnalysis.tf4H.trendAnalysis.strength}%)` : ''}
+LTF Trend (1H): ${mtfAnalysis.tf1H?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tf1H ? `(${mtfAnalysis.tf1H.trendAnalysis.strength}%)` : ''}
+Confluence: ${mtfAnalysis.confluence.overallBias} — ${mtfAnalysis.confluence.alignment}% aligned
+Entry Quality: ${mtfAnalysis.confluence.ltfEntry === 'OPTIMAL' ? '🟢 OPTIMAL' : mtfAnalysis.confluence.ltfEntry === 'WAIT' ? '🟡 WAIT' : '🔴 RISKY'}
+
+🎯 MTF KEY LEVELS
+Daily S/R: ${mtfAnalysis.keyLevels.dailySupport.slice(0, 2).map(s => `$${s.toFixed(2)}`).join(', ') || 'N/A'} | ${mtfAnalysis.keyLevels.dailyResistance.slice(0, 2).map(r => `$${r.toFixed(2)}`).join(', ') || 'N/A'}
+4H S/R: ${mtfAnalysis.keyLevels.h4Support.slice(0, 2).map(s => `$${s.toFixed(2)}`).join(', ') || 'N/A'} | ${mtfAnalysis.keyLevels.h4Resistance.slice(0, 2).map(r => `$${r.toFixed(2)}`).join(', ') || 'N/A'}
 
 💭 CHAIN-OF-THOUGHT REASONING
 ${thoughts.map(t => `[Step ${t.step}] ${t.thought}
 → Conclusion: ${t.conclusion} (Weight: ${t.weight}/10)`).join('\n\n')}
 
 🔍 DETECTED PATTERNS (${allPatterns.length})
-${allPatterns.slice(0, 8).map((p, i) => `${i + 1}. ${p}`).join('\n')}
-Pattern Confluence: ${allPatterns.length >= 6 ? 'EXCELLENT ⭐⭐⭐⭐⭐' : allPatterns.length >= 4 ? 'STRONG ⭐⭐⭐⭐' : allPatterns.length >= 3 ? 'GOOD ⭐⭐⭐' : allPatterns.length >= 2 ? 'MODERATE ⭐⭐' : 'DEVELOPING ⭐'}
+${allPatterns.slice(0, 10).map((p, i) => `${i + 1}. ${p}`).join('\n')}
+Pattern Confluence: ${allPatterns.length >= 8 ? 'EXCELLENT ⭐⭐⭐⭐⭐' : allPatterns.length >= 5 ? 'STRONG ⭐⭐⭐⭐' : allPatterns.length >= 3 ? 'GOOD ⭐⭐⭐' : allPatterns.length >= 2 ? 'MODERATE ⭐⭐' : 'DEVELOPING ⭐'}
 
 📊 PROBABILITY MATRIX
 Bull Probability: ${probabilities.bullProb}% ${'█'.repeat(Math.round(probabilities.bullProb / 5))}${'░'.repeat(20 - Math.round(probabilities.bullProb / 5))}
 Bear Probability: ${probabilities.bearProb}% ${'█'.repeat(Math.round(probabilities.bearProb / 5))}${'░'.repeat(20 - Math.round(probabilities.bearProb / 5))}
 Neutral Zone: ${probabilities.neutralProb}%
 Primary Bias: ${probabilities.bullProb > probabilities.bearProb + 10 ? 'BULLISH 🟢' : probabilities.bearProb > probabilities.bullProb + 10 ? 'BEARISH 🔴' : 'NEUTRAL ⚪'}
-Adaptive Confidence: ${adjustedConfidence}%
+Predictive Confidence: ${adjustedConfidence}%
+
+🔮 PREDICTIVE MEMORY (PAST → FUTURE)
+Historical Accuracy: ${predictiveMemory.predictionAccuracy}% | Trend Consistency: ${predictiveMemory.trendConsistency}%
+${predictiveMemory.futurePredictions.length > 0 ? predictiveMemory.futurePredictions.map(p => 
+  `${p.timeframe}: $${p.target.toFixed(2)} (${p.probability}% probability) — ${p.basis}`
+).join('\n') : 'Building prediction model...'}
 
 🧬 ADAPTIVE LEARNING STATUS
 ${adaptiveLearning.currentScenario ? `Active Scenario: ${adaptiveLearning.currentScenario.name} (${adaptiveLearning.scenarioConfidence.toFixed(0)}% match)` : 'Scenario: Analyzing market conditions...'}
 Learning Velocity: ${adaptiveLearning.learningVelocity}% ${'█'.repeat(Math.round(adaptiveLearning.learningVelocity / 10))}${'░'.repeat(10 - Math.round(adaptiveLearning.learningVelocity / 10))}
 Matched Scenarios: ${adaptiveLearning.matchedScenarios.length}
-Pattern Success Tracking: ${Object.keys(adaptiveLearning.patternSuccessRates).length} patterns with feedback
-
+Pattern Tracking: ${Object.keys(adaptiveLearning.patternSuccessRates).length} patterns with feedback
 
 📈 WYCKOFF PHASE ANALYSIS
 Phase: ${wyckoffPhase.phase} — ${wyckoffPhase.subPhase}
@@ -2152,16 +2447,11 @@ Structure: ${marketStructure.higherHighs ? 'HH ' : ''}${marketStructure.higherLo
 💧 LIQUIDITY MAP
 ${liquidityPools.slice(0, 4).map(p => `${p.type === 'BUYSIDE' ? '🔵' : '🔴'} ${p.type}: $${p.level.toFixed(2)} (Strength: ${p.strength}%)${p.swept ? ' [SWEPT]' : ''}`).join('\n')}
 
-🎓 LEARNING & ADAPTATION
-Historical Accuracy: ${learningAccuracy}% ${totalFeedback >= 5 ? `(${correctPredictions}/${totalFeedback} correct predictions)` : totalFeedback >= 3 ? `(${correctPredictions}/${totalFeedback} feedback points)` : '(building baseline)'}
-Learning Status: ${totalFeedback >= 10 ? '✓ Mature Adaptive Model' : totalFeedback >= 5 ? '◐ Active Learning' : '○ Collecting Data'}
-Adaptation Speed: ${adaptiveLearning.learningVelocity >= 70 ? 'Fast' : adaptiveLearning.learningVelocity >= 40 ? 'Moderate' : 'Building'}
-${learningInsights.length > 0 ? learningInsights.slice(0, 4).map(l => `• ${l}`).join('\n') : '• Provide feedback on predictions to improve accuracy'}
-
-🧬 MEMORY CONTEXT
-Historical Analyses: ${memory.length} records
-${memory.length > 0 ? `Last Analysis: ${memory[0].bias} at $${memory[0].price.toLocaleString()} (${memory[0].confidence}% confidence)${memory[0].wasCorrect !== undefined ? ` — ${memory[0].wasCorrect ? '✓ Correct' : '✗ Incorrect'}` : ''}` : 'Building memory database...'}
-Bias Trend: ${memory.length >= 3 ? memory.slice(0, 3).map(m => m.bias === 'LONG' ? '🟢' : m.bias === 'SHORT' ? '🔴' : '⚪').join('') : 'Insufficient data'}
+🎓 LEARNING & MEMORY
+Historical Analyses: ${memory.length} records | Accuracy: ${learningAccuracy}%
+${memory.length > 0 ? `Last Analysis: ${memory[0].bias} at $${memory[0].price.toLocaleString()}${memory[0].wasCorrect !== undefined ? ` — ${memory[0].wasCorrect ? '✓ Correct' : '✗ Incorrect'}` : ''}` : 'Building memory...'}
+Bias Trend: ${memory.length >= 3 ? memory.slice(0, 5).map(m => m.bias === 'LONG' ? '🟢' : m.bias === 'SHORT' ? '🔴' : '⚪').join('') : 'Insufficient data'}
+${learningInsights.length > 0 ? learningInsights.slice(0, 5).map(l => `• ${l}`).join('\n') : ''}
 
 🌐 MARKET INTELLIGENCE
 Correlations: ${correlationInfo}
