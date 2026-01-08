@@ -144,6 +144,7 @@ export const useCryptoPrices = () => {
   const cryptoListRef = useRef<{ symbol: string; name: string; id: string }[]>([]);
   const pricesRef = useRef<Map<string, CryptoPrice>>(new Map());
   const lastUpdateTimeRef = useRef<Map<string, number>>(new Map());
+  const exchangesConnectedRef = useRef(false);
   
   // Throttle interval - minimum 2 seconds between updates per coin for readable UI
   const UPDATE_THROTTLE_MS = 2000;
@@ -305,7 +306,7 @@ export const useCryptoPrices = () => {
     } finally {
       setLoading(false);
     }
-  }, [prices.length]);
+  }, []);
 
   // Connect to Binance WebSocket
   const connectBinance = useCallback(() => {
@@ -670,18 +671,28 @@ export const useCryptoPrices = () => {
     fetchPrices();
   }, [fetchPrices]);
 
-  // Connect to all exchanges when prices are loaded
+  // Connect to all exchanges when crypto list is populated (runs only once)
   useEffect(() => {
-    if (prices.length > 0) {
-      // Stagger connections to avoid overwhelming
-      connectBinance();
-      setTimeout(() => connectBybit(), 500);
-      setTimeout(() => connectOKX(), 1000);
-      setTimeout(() => connectCoinbase(), 1500);
-      setTimeout(() => connectKraken(), 2000);
-    }
+    // Check if we should connect (only when cryptoListRef has data)
+    const checkAndConnect = () => {
+      if (cryptoListRef.current.length > 0 && !exchangesConnectedRef.current) {
+        exchangesConnectedRef.current = true;
+        
+        // Stagger connections to avoid overwhelming
+        connectBinance();
+        setTimeout(() => connectBybit(), 500);
+        setTimeout(() => connectOKX(), 1000);
+        setTimeout(() => connectCoinbase(), 1500);
+        setTimeout(() => connectKraken(), 2000);
+      }
+    };
+    
+    // Check immediately and also after a small delay (in case fetch is still in progress)
+    checkAndConnect();
+    const timeoutId = setTimeout(checkAndConnect, 1000);
     
     return () => {
+      clearTimeout(timeoutId);
       // Cleanup all connections
       Object.values(reconnectTimeoutsRef.current).forEach(timeout => {
         clearTimeout(timeout);
@@ -693,7 +704,7 @@ export const useCryptoPrices = () => {
       if (coinbaseWsRef.current) coinbaseWsRef.current.close();
       if (krakenWsRef.current) krakenWsRef.current.close();
     };
-  }, [prices.length, connectBinance, connectBybit, connectOKX, connectCoinbase, connectKraken]);
+  }, [connectBinance, connectBybit, connectOKX, connectCoinbase, connectKraken]);
 
   // Track live status
   useEffect(() => {
