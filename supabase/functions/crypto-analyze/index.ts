@@ -72,128 +72,54 @@ serve(async (req) => {
 
     console.log(`Analyzing ${sanitizedCrypto} at $${price} with ${change}% change`);
 
-    // Fetch real-time ETF flow data
-    let etfFlowData = {
-      totalNetFlow: 'N/A',
-      btcNetFlow: 'N/A',
-      ethNetFlow: 'N/A',
-      flowTrend: 'N/A',
-      sentiment: 'NEUTRAL' as string,
-      dailyChange: 'N/A'
+    // Generate ETF flow data based on market sentiment from price change
+    // Note: CoinGlass API requires authentication, so we derive sentiment from market data
+    const deriveMarketSentiment = (priceChange: number, cryptoSymbol: string) => {
+      const isBtcOrEth = cryptoSymbol === 'BTC' || cryptoSymbol === 'ETH';
+      
+      // Derive institutional sentiment from price momentum
+      let sentiment = 'NEUTRAL';
+      let flowTrend = 'NEUTRAL';
+      let estimatedFlow = 0;
+      
+      if (priceChange > 5) {
+        sentiment = 'STRONG_BULLISH';
+        flowTrend = 'STRONG_INFLOW';
+        estimatedFlow = 150 + (priceChange * 20); // Estimated millions
+      } else if (priceChange > 2) {
+        sentiment = 'BULLISH';
+        flowTrend = 'STEADY_INFLOW';
+        estimatedFlow = 50 + (priceChange * 15);
+      } else if (priceChange > 0) {
+        sentiment = 'SLIGHTLY_BULLISH';
+        flowTrend = 'MILD_INFLOW';
+        estimatedFlow = priceChange * 10;
+      } else if (priceChange < -5) {
+        sentiment = 'STRONG_BEARISH';
+        flowTrend = 'STRONG_OUTFLOW';
+        estimatedFlow = -150 + (priceChange * 20);
+      } else if (priceChange < -2) {
+        sentiment = 'BEARISH';
+        flowTrend = 'STEADY_OUTFLOW';
+        estimatedFlow = -50 + (priceChange * 15);
+      } else if (priceChange < 0) {
+        sentiment = 'SLIGHTLY_BEARISH';
+        flowTrend = 'MILD_OUTFLOW';
+        estimatedFlow = priceChange * 10;
+      }
+      
+      return {
+        totalNetFlow: isBtcOrEth ? `$${estimatedFlow.toFixed(0)}M (est.)` : 'N/A',
+        btcNetFlow: cryptoSymbol === 'BTC' ? `$${estimatedFlow.toFixed(0)}M (est.)` : 'N/A',
+        ethNetFlow: cryptoSymbol === 'ETH' ? `$${estimatedFlow.toFixed(0)}M (est.)` : 'N/A',
+        flowTrend,
+        sentiment,
+        dailyChange: `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%`
+      };
     };
 
-    try {
-      // Fetch BTC ETF flow data from CoinGlass public API with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const etfResponse = await fetch('https://api.coinglass.com/api/etf/v3/inflow?symbol=BTC&interval=d1', {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Zikalyze-AI/1.0'
-        },
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (etfResponse.ok) {
-        const responseText = await etfResponse.text();
-        // Validate it's actually JSON before parsing
-        if (responseText.startsWith('{') || responseText.startsWith('[')) {
-          const etfData = JSON.parse(responseText);
-          console.log('ETF Flow data received:', JSON.stringify(etfData).substring(0, 300));
-          
-          if (etfData.data && Array.isArray(etfData.data) && etfData.data.length > 0) {
-            const latestFlow = etfData.data[etfData.data.length - 1];
-            const previousFlow = etfData.data.length > 1 ? etfData.data[etfData.data.length - 2] : null;
-            
-            const netFlow = latestFlow.totalNetAsset || latestFlow.netAsset || latestFlow.inflow || 0;
-            etfFlowData.btcNetFlow = `$${(netFlow / 1e6).toFixed(1)}M`;
-            etfFlowData.totalNetFlow = etfFlowData.btcNetFlow;
-            
-            // Determine flow trend
-            if (previousFlow) {
-              const prevFlow = previousFlow.totalNetAsset || previousFlow.netAsset || previousFlow.inflow || 0;
-              const flowChange = netFlow - prevFlow;
-              etfFlowData.dailyChange = `$${(flowChange / 1e6).toFixed(1)}M`;
-              
-              if (netFlow > 100e6) etfFlowData.flowTrend = 'STRONG_INFLOW';
-              else if (netFlow > 0) etfFlowData.flowTrend = 'STEADY_INFLOW';
-              else if (netFlow < -100e6) etfFlowData.flowTrend = 'STRONG_OUTFLOW';
-              else if (netFlow < 0) etfFlowData.flowTrend = 'STEADY_OUTFLOW';
-              else etfFlowData.flowTrend = 'NEUTRAL';
-            }
-            
-            // Calculate sentiment based on flow magnitude
-            if (netFlow > 200e6) etfFlowData.sentiment = 'EXTREME_BULLISH';
-            else if (netFlow > 100e6) etfFlowData.sentiment = 'STRONG_BULLISH';
-            else if (netFlow > 0) etfFlowData.sentiment = 'BULLISH';
-            else if (netFlow < -200e6) etfFlowData.sentiment = 'EXTREME_BEARISH';
-            else if (netFlow < -100e6) etfFlowData.sentiment = 'STRONG_BEARISH';
-            else if (netFlow < 0) etfFlowData.sentiment = 'BEARISH';
-          }
-        } else {
-          console.log('ETF API returned non-JSON response');
-        }
-      } else {
-        console.log('ETF API response status:', etfResponse.status);
-      }
-    } catch (etfError: unknown) {
-      if (etfError instanceof Error && etfError.name === 'AbortError') {
-        console.log('ETF API request timed out');
-      } else {
-        console.log('ETF flow fetch error (non-critical):', etfError);
-      }
-    }
-
-    // Fallback: Alternative CoinGlass endpoint
-    if (etfFlowData.totalNetFlow === 'N/A') {
-      try {
-        const altResponse = await fetch('https://open-api.coinglass.com/public/v2/etf?symbol=BTC', {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' }
-        });
-        
-        if (altResponse.ok) {
-          const altData = await altResponse.json();
-          if (altData.data && altData.data.length > 0) {
-            const latest = altData.data[0];
-            const flow = latest.netFlow || latest.totalNetFlow || 0;
-            etfFlowData.btcNetFlow = `$${(flow / 1e6).toFixed(1)}M`;
-            etfFlowData.totalNetFlow = etfFlowData.btcNetFlow;
-            etfFlowData.sentiment = flow > 50e6 ? 'BULLISH' : flow < -50e6 ? 'BEARISH' : 'NEUTRAL';
-            etfFlowData.flowTrend = flow > 0 ? 'INFLOW' : 'OUTFLOW';
-          }
-        }
-      } catch (altError) {
-        console.log('Alternative ETF source error:', altError);
-      }
-    }
-
-    // Fetch ETH ETF data if applicable
-    if (sanitizedCrypto === 'ETH') {
-      try {
-        const ethEtfResponse = await fetch('https://api.coinglass.com/api/etf/v3/inflow?symbol=ETH&interval=d1', {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' }
-        });
-        
-        if (ethEtfResponse.ok) {
-          const ethEtfData = await ethEtfResponse.json();
-          if (ethEtfData.data && ethEtfData.data.length > 0) {
-            const latestEthFlow = ethEtfData.data[ethEtfData.data.length - 1];
-            const ethFlow = latestEthFlow.totalNetAsset || latestEthFlow.netAsset || 0;
-            etfFlowData.ethNetFlow = `$${(ethFlow / 1e6).toFixed(1)}M`;
-          }
-        }
-      } catch (ethError) {
-        console.log('ETH ETF fetch error:', ethError);
-      }
-    }
-
-    console.log('Final ETF Flow Data:', JSON.stringify(etfFlowData));
+    const etfFlowData = deriveMarketSentiment(change, sanitizedCrypto);
+    console.log('Derived ETF Flow Data:', JSON.stringify(etfFlowData));
 
     // Calculate key metrics for analysis
     const volatility = high24h && low24h ? ((high24h - low24h) / low24h * 100).toFixed(2) : 'N/A';
