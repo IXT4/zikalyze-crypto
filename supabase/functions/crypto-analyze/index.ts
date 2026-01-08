@@ -10,8 +10,11 @@ function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return false;
   // Check exact matches
   if (ALLOWED_ORIGINS.includes(origin)) return true;
-  // Check Lovable preview domains
+  // Check Lovable preview domains (both .app and .lovableproject.com)
   if (/^https:\/\/[a-z0-9-]+\.lovable\.app$/.test(origin)) return true;
+  if (/^https:\/\/[a-z0-9-]+\.lovableproject\.com$/.test(origin)) return true;
+  // Allow localhost for development
+  if (origin.startsWith('http://localhost:')) return true;
   return false;
 }
 
