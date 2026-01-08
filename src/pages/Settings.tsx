@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Search, User, Bell, Shield, Palette, Globe, Moon, Sun, Save, Volume2, VolumeX, Mail, Lock, Loader2, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
 import TwoFactorAuth from "@/components/settings/TwoFactorAuth";
+import { languageCodes } from "@/i18n/config";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -22,6 +24,7 @@ const passwordSchema = z.string().min(6, "Password must be at least 6 characters
 const Settings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t, i18n } = useTranslation();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { settings, saveSettings, toggleSetting } = useSettings();
   const { user, updatePassword, updateEmail } = useAuth();
@@ -82,9 +85,12 @@ const Settings = () => {
       language: selectedLanguage, 
       currency: selectedCurrency 
     });
+    // Change language in i18n
+    const langCode = languageCodes[selectedLanguage] || "en";
+    i18n.changeLanguage(langCode);
     toast({
-      title: "Settings Saved",
-      description: "Your preferences have been updated successfully.",
+      title: t("settings.settingsSaved"),
+      description: t("settings.settingsSavedDesc"),
     });
   };
 
