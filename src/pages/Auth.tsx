@@ -16,11 +16,12 @@ const passwordSchema = z.string().min(6, "Password must be at least 6 characters
 const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, loading: authLoading, signIn, signUp } = useAuth();
+  const { user, loading: authLoading, signIn, signUp, resetPassword } = useAuth();
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   // Redirect if already logged in
@@ -77,6 +78,35 @@ const Auth = () => {
       description: "Successfully signed in to Zikalyze.",
     });
     navigate("/dashboard");
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const emailResult = emailSchema.safeParse(email);
+    if (!emailResult.success) {
+      setErrors({ email: emailResult.error.errors[0].message });
+      return;
+    }
+    
+    setIsLoading(true);
+    const { error } = await resetPassword(email);
+    setIsLoading(false);
+
+    if (error) {
+      toast({
+        title: "Reset failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Check your email",
+      description: "We've sent you a password reset link.",
+    });
+    setShowForgotPassword(false);
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -184,6 +214,16 @@ const Auth = () => {
                   )}
                 </div>
 
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+
                 <Button
                   type="submit"
                   className="w-full bg-primary hover:bg-primary/90 glow-cyan"
@@ -265,6 +305,61 @@ const Auth = () => {
             By continuing, you agree to our Terms of Service and Privacy Policy.
           </p>
         </div>
+
+        {/* Forgot Password Modal */}
+        {showForgotPassword && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="rounded-2xl border border-border bg-card p-8 shadow-2xl w-full max-w-md mx-4">
+              <h3 className="text-xl font-bold mb-2">Reset Password</h3>
+              <p className="text-muted-foreground mb-4">
+                Enter your email and we'll send you a reset link.
+              </p>
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-email">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      placeholder="Enter your email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setErrors((prev) => ({ ...prev, email: undefined }));
+                      }}
+                      className="pl-10"
+                    />
+                  </div>
+                  {errors.email && (
+                    <p className="text-sm text-destructive">{errors.email}</p>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setShowForgotPassword(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Send Reset Link"
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
