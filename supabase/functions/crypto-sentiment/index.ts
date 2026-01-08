@@ -5,6 +5,47 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Retry with exponential backoff for rate-limited APIs
+async function fetchWithRetry(
+  url: string,
+  options: { maxRetries?: number; baseDelayMs?: number; timeoutMs?: number } = {}
+): Promise<Response> {
+  const { maxRetries = 3, baseDelayMs = 1000, timeoutMs = 10000 } = options;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
+      // If rate limited (429) or server error (5xx), retry with backoff
+      if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+        if (attempt < maxRetries) {
+          const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 500;
+          console.log(`Rate limited (${response.status}), retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+      
+      return response;
+    } catch (error: unknown) {
+      if (attempt < maxRetries) {
+        const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 500;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.log(`Fetch error: ${errorMessage}, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  
+  throw new Error(`Failed after ${maxRetries} retries`);
+}
+
 // Fetch real Fear & Greed Index from Alternative.me
 async function fetchFearGreedIndex(): Promise<{
   value: number;
@@ -126,11 +167,12 @@ async function fetchCryptoMarketData(cryptoId: string): Promise<{
   const knownSocial = realSocialData[cryptoId] || { twitter: 0, reddit: 0, telegram: 0 };
 
   try {
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/coins/${geckoId}?localization=false&tickers=false&community_data=true&developer_data=false`
+    const response = await fetchWithRetry(
+      `https://api.coingecko.com/api/v3/coins/${geckoId}?localization=false&tickers=false&community_data=true&developer_data=false`,
+      { maxRetries: 3, baseDelayMs: 1500 }
     );
     
-    if (!response.ok) throw new Error('CoinGecko API failed');
+    if (!response.ok) throw new Error(`CoinGecko API failed: ${response.status}`);
     
     const data = await response.json();
     
@@ -181,7 +223,10 @@ async function fetchCryptoMarketData(cryptoId: string): Promise<{
 // Fetch trending coins from CoinGecko
 async function fetchTrendingCoins(): Promise<string[]> {
   try {
-    const response = await fetch('https://api.coingecko.com/api/v3/search/trending');
+    const response = await fetchWithRetry(
+      'https://api.coingecko.com/api/v3/search/trending',
+      { maxRetries: 2, baseDelayMs: 1000 }
+    );
     if (!response.ok) throw new Error('Trending API failed');
     
     const data = await response.json();
