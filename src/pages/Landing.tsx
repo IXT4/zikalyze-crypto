@@ -42,103 +42,103 @@ const Landing = () => {
       </div>
 
       {/* Header */}
-      <header className="relative z-10 flex items-center justify-between px-6 py-4 md:px-12">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary glow-cyan">
-            <TrendingUp className="h-6 w-6 text-primary-foreground" />
+      <header className="relative z-10 flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 md:px-12">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary glow-cyan sm:h-12 sm:w-12 sm:rounded-xl">
+            <TrendingUp className="h-4 w-4 text-primary-foreground sm:h-6 sm:w-6" />
           </div>
-          <span className="text-2xl font-bold text-foreground">Zikalyze</span>
+          <span className="text-xl font-bold text-foreground sm:text-2xl">Zikalyze</span>
         </div>
         <Link to="/login">
-          <Button className="bg-primary hover:bg-primary/90 glow-cyan text-primary-foreground">
-            {t("common.getStarted")} <ArrowRight className="ml-2 h-4 w-4" />
+          <Button size="sm" className="bg-primary hover:bg-primary/90 glow-cyan text-primary-foreground text-xs sm:text-sm sm:h-10">
+            {t("common.getStarted")} <ArrowRight className="ml-1.5 h-3 w-3 sm:ml-2 sm:h-4 sm:w-4" />
           </Button>
         </Link>
       </header>
 
       {/* Hero Section */}
-      <main className="relative z-10 flex flex-col items-center justify-center px-6 py-16 text-center md:py-24">
-        <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 backdrop-blur-sm">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm text-primary">{t("landing.heroTagline")}</span>
+      <main className="relative z-10 flex flex-col items-center justify-center px-4 py-12 text-center sm:px-6 md:py-24">
+        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 backdrop-blur-sm sm:mb-8 sm:px-4 sm:py-2">
+          <Sparkles className="h-3 w-3 text-primary sm:h-4 sm:w-4" />
+          <span className="text-xs text-primary sm:text-sm">{t("landing.heroTagline")}</span>
         </div>
 
-        <h1 className="mb-6 max-w-4xl text-5xl font-bold leading-tight text-foreground md:text-7xl">
+        <h1 className="mb-4 max-w-4xl text-3xl font-bold leading-tight text-foreground sm:mb-6 sm:text-5xl md:text-7xl">
           {t("landing.heroTitle")}{" "}
           <span className="gradient-text">{t("landing.heroTitleHighlight")}</span>
         </h1>
 
-        <p className="mb-12 max-w-2xl text-lg text-muted-foreground md:text-xl">
+        <p className="mb-8 max-w-2xl text-base text-muted-foreground sm:mb-12 sm:text-lg md:text-xl">
           {t("landing.heroDescription")}
         </p>
 
-        <div className="flex flex-col gap-4 sm:flex-row">
-          <Link to="/login">
-            <Button size="lg" className="bg-primary hover:bg-primary/90 glow-cyan text-primary-foreground px-8">
-              {t("landing.startFreeTrial")} <ArrowRight className="ml-2 h-5 w-5" />
+        <div className="flex flex-col gap-3 w-full max-w-sm sm:flex-row sm:max-w-none sm:gap-4">
+          <Link to="/login" className="w-full sm:w-auto">
+            <Button size="lg" className="w-full bg-primary hover:bg-primary/90 glow-cyan text-primary-foreground px-6 sm:px-8">
+              {t("landing.startFreeTrial")} <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
           </Link>
-          <Link to="/dashboard">
-            <Button size="lg" variant="outline" className="border-primary/30 hover:bg-primary/10 hover:border-primary/50">
-              {t("landing.launchApp")} <Zap className="ml-2 h-5 w-5" />
+          <Link to="/dashboard" className="w-full sm:w-auto">
+            <Button size="lg" variant="outline" className="w-full border-primary/30 hover:bg-primary/10 hover:border-primary/50">
+              {t("landing.launchApp")} <Zap className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
           </Link>
         </div>
 
         {/* Dashboard Preview - Clickable */}
         <div 
-          className="mt-20 w-full max-w-6xl animate-float cursor-pointer group/preview"
+          className="mt-12 w-full max-w-6xl animate-float cursor-pointer group/preview sm:mt-20"
           onClick={() => navigate("/auth")}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
         >
-          <div className="relative rounded-2xl border border-border bg-card/50 backdrop-blur-xl p-6 shadow-2xl transition-all duration-300 group-hover/preview:border-primary/50 group-hover/preview:shadow-primary/20 group-hover/preview:shadow-3xl">
+          <div className="relative rounded-xl border border-border bg-card/50 backdrop-blur-xl p-3 shadow-2xl transition-all duration-300 group-hover/preview:border-primary/50 group-hover/preview:shadow-primary/20 sm:rounded-2xl sm:p-6">
             {/* Mini Dashboard Header */}
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="h-3 w-3 rounded-full bg-destructive" />
-                <div className="h-3 w-3 rounded-full bg-warning" />
-                <div className="h-3 w-3 rounded-full bg-success" />
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-border sm:mb-6 sm:pb-4">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="h-2 w-2 rounded-full bg-destructive sm:h-3 sm:w-3" />
+                <div className="h-2 w-2 rounded-full bg-warning sm:h-3 sm:w-3" />
+                <div className="h-2 w-2 rounded-full bg-success sm:h-3 sm:w-3" />
               </div>
-              <span className="text-sm text-muted-foreground">{t("landing.dashboardPreview")}</span>
+              <span className="text-xs text-muted-foreground sm:text-sm">{t("landing.dashboardPreview")}</span>
             </div>
 
-            {/* Dashboard Grid */}
-            <div className="grid gap-4 md:grid-cols-3">
+            {/* Dashboard Grid - Stack on mobile */}
+            <div className="grid gap-3 grid-cols-1 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {/* AI Generated Card */}
-              <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-foreground">{t("landing.aiGenerated")}</span>
-                  <Brain className="h-4 w-4 text-primary" />
+              <div className="rounded-lg border border-border bg-card p-3 sm:rounded-xl sm:p-4">
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <span className="text-xs font-medium text-foreground sm:text-sm">{t("landing.aiGenerated")}</span>
+                  <Brain className="h-3 w-3 text-primary sm:h-4 sm:w-4" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <div className="text-xs text-muted-foreground">{t("landing.predictions")}</div>
-                    <div className="text-2xl font-bold text-primary">44.28</div>
+                    <div className="text-[10px] text-muted-foreground sm:text-xs">{t("landing.predictions")}</div>
+                    <div className="text-xl font-bold text-primary sm:text-2xl">44.28</div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted-foreground">{t("landing.confidence")}</div>
-                    <div className="text-2xl font-bold text-accent">2,595</div>
+                    <div className="text-[10px] text-muted-foreground sm:text-xs">{t("landing.confidence")}</div>
+                    <div className="text-xl font-bold text-accent sm:text-2xl">2,595</div>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-4">
+                <div className="mt-2 grid grid-cols-2 gap-3 sm:mt-3 sm:gap-4">
                   <div className="flex items-center gap-1">
-                    <span className="text-xs text-success">↗ 2.12%</span>
+                    <span className="text-[10px] text-success sm:text-xs">↗ 2.12%</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="text-xs text-success">↗ 4.10%</span>
+                    <span className="text-[10px] text-success sm:text-xs">↗ 4.10%</span>
                   </div>
                 </div>
               </div>
 
               {/* Analytics Card */}
-              <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-foreground">{t("landing.analytics")}</span>
-                  <Activity className="h-4 w-4 text-primary" />
+              <div className="rounded-lg border border-border bg-card p-3 sm:rounded-xl sm:p-4">
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <span className="text-xs font-medium text-foreground sm:text-sm">{t("landing.analytics")}</span>
+                  <Activity className="h-3 w-3 text-primary sm:h-4 sm:w-4" />
                 </div>
-                <div className="h-20 flex items-end gap-1">
+                <div className="h-16 flex items-end gap-1 sm:h-20">
                   {[40, 60, 45, 80, 55, 70, 65, 90, 75, 85].map((h, i) => (
                     <div
                       key={i}
@@ -150,16 +150,16 @@ const Landing = () => {
               </div>
 
               {/* Predictive Card */}
-              <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-foreground">{t("landing.predictive")}</span>
-                  <LineChart className="h-4 w-4 text-accent" />
+              <div className="rounded-lg border border-border bg-card p-3 sm:col-span-2 lg:col-span-1 sm:rounded-xl sm:p-4">
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <span className="text-xs font-medium text-foreground sm:text-sm">{t("landing.predictive")}</span>
+                  <LineChart className="h-3 w-3 text-accent sm:h-4 sm:w-4" />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5 sm:space-y-2">
                   {["Strong", "Uptrend", "Momentum", "Bullish", "Volume"].map((item, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs">
+                    <div key={i} className="flex items-center justify-between text-[10px] sm:text-xs">
                       <span className="text-muted-foreground">{item}</span>
-                      <div className="h-1.5 w-16 rounded-full bg-secondary overflow-hidden">
+                      <div className="h-1 w-12 rounded-full bg-secondary overflow-hidden sm:h-1.5 sm:w-16">
                         <div
                           className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
                           style={{ width: `${60 + i * 8}%` }}
@@ -172,15 +172,15 @@ const Landing = () => {
             </div>
 
             {/* Candlestick Preview */}
-            <div className="mt-4 rounded-xl border border-border bg-card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-foreground">{t("landing.candlesticks")}</span>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground">{t("landing.indicator")}</Button>
-                  <Button size="sm" className="h-6 px-2 text-xs bg-primary text-primary-foreground">{t("landing.dashboard")}</Button>
+            <div className="mt-3 rounded-lg border border-border bg-card p-3 sm:mt-4 sm:rounded-xl sm:p-4">
+              <div className="flex items-center justify-between mb-2 sm:mb-3">
+                <span className="text-xs font-medium text-foreground sm:text-sm">{t("landing.candlesticks")}</span>
+                <div className="flex gap-1 sm:gap-2">
+                  <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-muted-foreground sm:h-6 sm:px-2 sm:text-xs">{t("landing.indicator")}</Button>
+                  <Button size="sm" className="h-5 px-1.5 text-[10px] bg-primary text-primary-foreground sm:h-6 sm:px-2 sm:text-xs">{t("landing.dashboard")}</Button>
                 </div>
               </div>
-              <div className="h-32 flex items-end justify-around">
+              <div className="h-20 flex items-end justify-around sm:h-32">
                 {[
                   { o: 60, c: 80, h: 90, l: 50, up: true },
                   { o: 80, c: 70, h: 85, l: 65, up: false },
@@ -199,7 +199,7 @@ const Landing = () => {
                       style={{ height: `${candle.h - Math.max(candle.o, candle.c)}%`, marginTop: `${100 - candle.h}%` }}
                     />
                     <div
-                      className={`w-3 rounded-sm ${candle.up ? "bg-success" : "bg-destructive"}`}
+                      className={`w-2 rounded-sm sm:w-3 ${candle.up ? "bg-success" : "bg-destructive"}`}
                       style={{ height: `${Math.abs(candle.c - candle.o)}%` }}
                     />
                     <div
@@ -214,93 +214,93 @@ const Landing = () => {
         </div>
 
         {/* Features - Clickable */}
-        <div className="mt-24 grid gap-8 md:grid-cols-3 w-full max-w-5xl">
+        <div className="mt-16 grid gap-4 grid-cols-1 w-full max-w-5xl sm:mt-24 sm:gap-8 md:grid-cols-3">
           <div 
-            className="group rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-8 transition-all hover:border-primary/50 hover:bg-card cursor-pointer"
+            className="group rounded-xl border border-border bg-card/50 backdrop-blur-sm p-5 transition-all hover:border-primary/50 hover:bg-card cursor-pointer sm:rounded-2xl sm:p-8"
             onClick={() => navigate("/auth")}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
           >
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/20 group-hover:glow-cyan transition-all">
-              <Brain className="h-7 w-7 text-primary" />
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 group-hover:glow-cyan transition-all sm:mb-4 sm:h-14 sm:w-14 sm:rounded-xl">
+              <Brain className="h-5 w-5 text-primary sm:h-7 sm:w-7" />
             </div>
-            <h3 className="mb-2 text-xl font-semibold text-foreground">{t("landing.smartMoneyConcepts")}</h3>
-            <p className="text-muted-foreground">
+            <h3 className="mb-1.5 text-lg font-semibold text-foreground sm:mb-2 sm:text-xl">{t("landing.smartMoneyConcepts")}</h3>
+            <p className="text-sm text-muted-foreground sm:text-base">
               {t("landing.smartMoneyDesc")}
             </p>
           </div>
 
           <div 
-            className="group rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-8 transition-all hover:border-accent/50 hover:bg-card cursor-pointer"
+            className="group rounded-xl border border-border bg-card/50 backdrop-blur-sm p-5 transition-all hover:border-accent/50 hover:bg-card cursor-pointer sm:rounded-2xl sm:p-8"
             onClick={() => navigate("/auth")}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
           >
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-accent/20 group-hover:glow-purple transition-all">
-              <BarChart3 className="h-7 w-7 text-accent" />
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/20 group-hover:glow-purple transition-all sm:mb-4 sm:h-14 sm:w-14 sm:rounded-xl">
+              <BarChart3 className="h-5 w-5 text-accent sm:h-7 sm:w-7" />
             </div>
-            <h3 className="mb-2 text-xl font-semibold text-foreground">{t("landing.vwapAnalysis")}</h3>
-            <p className="text-muted-foreground">
+            <h3 className="mb-1.5 text-lg font-semibold text-foreground sm:mb-2 sm:text-xl">{t("landing.vwapAnalysis")}</h3>
+            <p className="text-sm text-muted-foreground sm:text-base">
               {t("landing.vwapDesc")}
             </p>
           </div>
 
           <div 
-            className="group rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-8 transition-all hover:border-primary/50 hover:bg-card cursor-pointer"
+            className="group rounded-xl border border-border bg-card/50 backdrop-blur-sm p-5 transition-all hover:border-primary/50 hover:bg-card cursor-pointer sm:rounded-2xl sm:p-8"
             onClick={() => navigate("/auth")}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
           >
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/20 group-hover:glow-cyan transition-all">
-              <Shield className="h-7 w-7 text-primary" />
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 group-hover:glow-cyan transition-all sm:mb-4 sm:h-14 sm:w-14 sm:rounded-xl">
+              <Shield className="h-5 w-5 text-primary sm:h-7 sm:w-7" />
             </div>
-            <h3 className="mb-2 text-xl font-semibold text-foreground">{t("landing.riskManagement")}</h3>
-            <p className="text-muted-foreground">
+            <h3 className="mb-1.5 text-lg font-semibold text-foreground sm:mb-2 sm:text-xl">{t("landing.riskManagement")}</h3>
+            <p className="text-sm text-muted-foreground sm:text-base">
               {t("landing.riskDesc")}
             </p>
           </div>
         </div>
 
         {/* Stats */}
-        <div className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8 w-full max-w-4xl">
+        <div className="mt-12 grid grid-cols-2 gap-4 w-full max-w-4xl sm:mt-20 sm:gap-8 md:grid-cols-4">
           {[
             { label: t("landing.accuracyRate"), value: "94.2%", icon: Activity },
             { label: t("landing.activeUsers"), value: "12K+", icon: TrendingUp },
             { label: t("landing.predictionsPerDay"), value: "50K+", icon: Brain },
             { label: t("landing.marketsTracked"), value: "200+", icon: BarChart3 },
           ].map((stat, i) => (
-            <div key={i} className="text-center">
-              <stat.icon className="h-6 w-6 text-primary mx-auto mb-2" />
-              <div className="text-3xl font-bold gradient-text">{stat.value}</div>
-              <div className="text-sm text-muted-foreground">{stat.label}</div>
+            <div key={i} className="text-center p-3 sm:p-0">
+              <stat.icon className="h-5 w-5 text-primary mx-auto mb-1.5 sm:h-6 sm:w-6 sm:mb-2" />
+              <div className="text-2xl font-bold gradient-text sm:text-3xl">{stat.value}</div>
+              <div className="text-xs text-muted-foreground sm:text-sm">{stat.label}</div>
             </div>
           ))}
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-border py-8 px-6 mt-20">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <footer className="relative z-10 border-t border-border py-6 px-4 mt-12 sm:py-8 sm:px-6 sm:mt-20">
+        <div className="max-w-6xl mx-auto flex flex-col items-center gap-4 md:flex-row md:justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <TrendingUp className="h-4 w-4 text-primary-foreground" />
+            <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center sm:h-8 sm:w-8">
+              <TrendingUp className="h-3.5 w-3.5 text-primary-foreground sm:h-4 sm:w-4" />
             </div>
-            <span className="font-semibold text-foreground">Zikalyze AI</span>
+            <span className="font-semibold text-foreground text-sm sm:text-base">Zikalyze AI</span>
           </div>
           
           {/* Social Links */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <a
               href="https://x.com/_bigzik"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 transition-colors sm:h-10 sm:w-10"
               aria-label="Follow on X"
             >
-              <svg className="h-5 w-5 text-foreground" viewBox="0 0 24 24" fill="currentColor">
+              <svg className="h-4 w-4 text-foreground sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
               </svg>
             </a>
@@ -308,16 +308,16 @@ const Landing = () => {
               href="https://discord.gg/MjpCBEVBnu"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 transition-colors sm:h-10 sm:w-10"
               aria-label="Join Discord"
             >
-              <svg className="h-5 w-5 text-foreground" viewBox="0 0 24 24" fill="currentColor">
+              <svg className="h-4 w-4 text-foreground sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
               </svg>
             </a>
           </div>
           
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground text-center sm:text-sm">
             {t("landing.footer")}
           </p>
         </div>
