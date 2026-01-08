@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Search, User, Bell, BellRing, Trash2, Clock, CheckCircle, AlertCircle, Volume2, BellOff } from "lucide-react";
-import { PageTransition } from "@/components/PageTransition";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
@@ -103,9 +102,8 @@ const Alerts = () => {
   };
 
   return (
-    <PageTransition>
-      <div className="min-h-screen bg-background">
-        <Sidebar />
+    <div className="min-h-screen bg-background">
+      <Sidebar />
 
       <main className="ml-16 lg:ml-64">
         {/* Header */}
@@ -395,8 +393,7 @@ const Alerts = () => {
           </div>
         </div>
       </main>
-      </div>
-    </PageTransition>
+    </div>
   );
 };
 

@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Search, User, Bell, Shield, Palette, Globe, Moon, Sun, Save, Volume2, VolumeX, Mail, Lock, Loader2, AlertTriangle } from "lucide-react";
-import { PageTransition } from "@/components/PageTransition";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -231,9 +230,8 @@ const Settings = () => {
   };
 
   return (
-    <PageTransition>
-      <div className="min-h-screen bg-background">
-        <Sidebar />
+    <div className="min-h-screen bg-background">
+      <Sidebar />
 
       <main className="ml-16 lg:ml-64">
         {/* Header */}
@@ -618,8 +616,7 @@ const Settings = () => {
           </div>
         </div>
       </main>
-      </div>
-    </PageTransition>
+    </div>
   );
 };
 

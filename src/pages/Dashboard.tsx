@@ -8,7 +8,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageTransition } from "@/components/PageTransition";
+
 // Lazy load heavy chart components to reduce initial bundle
 const PriceChart = lazy(() => import("@/components/dashboard/PriceChart"));
 const VolumeChart = lazy(() => import("@/components/dashboard/VolumeChart"));
@@ -62,11 +62,10 @@ const Dashboard = () => {
     : cryptoData[selectedCrypto] || { name: selectedCrypto, price: 0, change: 0 };
 
   return (
-    <PageTransition>
-      <div className="min-h-screen min-h-[100dvh] bg-background texture-noise custom-scrollbar">
-        <Sidebar />
+    <div className="min-h-screen min-h-[100dvh] bg-background texture-noise custom-scrollbar">
+      <Sidebar />
 
-        <main className="ml-16 lg:ml-64 safe-area-inset-bottom">
+      <main className="ml-16 lg:ml-64 safe-area-inset-bottom">
         {/* Header */}
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/95 backdrop-blur-sm px-3 py-3 sm:px-6 sm:py-4">
           <h1 className="text-lg font-bold text-foreground sm:text-xl md:text-2xl">{t("dashboard.title")}</h1>
@@ -205,8 +204,7 @@ const Dashboard = () => {
           </Suspense>
         </div>
       </main>
-      </div>
-    </PageTransition>
+    </div>
   );
 };
 
