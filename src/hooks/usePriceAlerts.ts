@@ -190,6 +190,8 @@ export const usePriceAlerts = () => {
           // Play alert sound if enabled
           try {
             if (isSoundEnabled()) {
+              // Ensure audio context is unlocked before playing
+              alertSound.unlock();
               await alertSound.playAlertSound();
             }
           } catch (err) {
