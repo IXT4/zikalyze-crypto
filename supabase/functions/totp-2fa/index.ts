@@ -68,14 +68,28 @@ async function decryptSecret(encrypted: string): Promise<string> {
 // TOTP implementation
 const BASE32_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
-function generateSecret(length = 20): string {
-  const randomBytes = new Uint8Array(length);
+function generateSecret(): string {
+  // Generate 10 random bytes (80 bits) which encodes to exactly 16 Base32 chars
+  // This is the standard length for TOTP secrets and is compatible with all authenticator apps
+  const randomBytes = new Uint8Array(10);
   crypto.getRandomValues(randomBytes);
+  
+  // Encode bytes to Base32 (RFC 4648)
+  let bits = 0;
+  let value = 0;
   let secret = "";
-  for (let i = 0; i < length; i++) {
-    secret += BASE32_CHARS[randomBytes[i] % 32];
+  
+  for (let i = 0; i < randomBytes.length; i++) {
+    value = (value << 8) | randomBytes[i];
+    bits += 8;
+    
+    while (bits >= 5) {
+      bits -= 5;
+      secret += BASE32_CHARS[(value >> bits) & 0x1f];
+    }
   }
-  return secret;
+  
+  return secret; // Returns exactly 16 characters
 }
 
 function base32Decode(encoded: string): Uint8Array {
@@ -346,7 +360,7 @@ serve(async (req: Request) => {
     switch (actionValidation.value) {
       case "setup": {
         // Generate new TOTP secret
-        const secret = generateSecret(20);
+        const secret = generateSecret();
         const issuer = "Zikalyze";
         const accountName = user.email || user.id;
         
