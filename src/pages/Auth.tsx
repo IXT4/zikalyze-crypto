@@ -193,16 +193,9 @@ const Auth = () => {
     });
   };
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <img 
-          src={zikalyzeLogo} 
-          alt="Loading" 
-          className="h-16 w-16 animate-pulse"
-        />
-      </div>
-    );
+  // Redirect immediately if already logged in (no blocking loading state)
+  if (user) {
+    return null;
   }
 
   return (
