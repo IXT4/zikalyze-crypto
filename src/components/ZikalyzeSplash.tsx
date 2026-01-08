@@ -1,5 +1,3 @@
-import { TrendingUp } from "lucide-react";
-
 interface ZikalyzeSplashProps {
   message?: string;
 }
@@ -20,9 +18,13 @@ const ZikalyzeSplash = ({ message = "Loading..." }: ZikalyzeSplashProps) => {
           {/* Outer glow ring */}
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary to-accent opacity-50 blur-xl animate-pulse" />
           
-          {/* Logo */}
-          <div className="relative flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow-2xl animate-logo-bounce">
-            <TrendingUp className="h-7 w-7 text-primary-foreground" />
+          {/* Logo Image */}
+          <div className="relative flex h-16 w-16 items-center justify-center rounded-xl shadow-2xl animate-logo-bounce overflow-hidden">
+            <img 
+              src="/pwa-192x192.png" 
+              alt="Zikalyze" 
+              className="h-full w-full object-contain"
+            />
           </div>
           
           {/* Rotating ring */}
