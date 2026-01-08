@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { TrendingUp, Key, ArrowRight, Loader2, Copy, Check, Shield, RefreshCw, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { generateAccessKey, isValidAccessKey, formatAccessKey, parseAccessKey } from "@/lib/crypto-auth";
 import { supabase } from "@/integrations/supabase/client";
+import ZikalyzeSplash from "@/components/ZikalyzeSplash";
 
 const Login = () => {
   const [accessKey, setAccessKey] = useState("");
@@ -15,8 +16,34 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Check if already logged in
+  useEffect(() => {
+    const checkSession = async () => {
+      const session = localStorage.getItem("wallet_session");
+      if (session) {
+        try {
+          const parsed = JSON.parse(session);
+          if (parsed.walletId && parsed.publicKey) {
+            navigate("/dashboard");
+            return;
+          }
+        } catch (e) {
+          // Invalid session, continue to login
+        }
+      }
+      // Show splash for at least 1.5 seconds for branding
+      setTimeout(() => setInitialLoading(false), 1500);
+    };
+    checkSession();
+  }, [navigate]);
+
+  if (initialLoading) {
+    return <ZikalyzeSplash message="Initializing secure access..." />;
+  }
 
   const handleGenerateKey = async () => {
     if (!userName.trim()) {
