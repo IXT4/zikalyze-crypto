@@ -3,6 +3,9 @@ project_id = "eqtzrftndyninwasclfd"
 [functions.crypto-analyze]
 verify_jwt = false
 
+[functions.crypto-sentiment]
+verify_jwt = false
+
 [functions.send-push-notification]
 verify_jwt = false
 
