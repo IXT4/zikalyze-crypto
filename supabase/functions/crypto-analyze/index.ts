@@ -300,246 +300,175 @@ serve(async (req) => {
                      etfFlowData.sentiment === 'NEUTRAL' ? 0 : -3;
     const calculatedConfidence = Math.min(95, Math.max(55, baseConfidence + volatilityBonus + volumeBonus + trendBonus + confluenceBonus + divergencePenalty + etfBonus));
 
-    const systemPrompt = `You are ZIKALYZE AI — the world's most advanced cryptocurrency trading intelligence system. You deliver institutional-grade multi-timeframe analysis using ICT (Inner Circle Trader) methodology, Smart Money Concepts, and comprehensive market context.
+    // Generate algorithmic analysis without external API
+    const generateLocalAnalysis = () => {
+      const trendDirection = validatedChange >= 0 ? "bullish" : "bearish";
+      const trendEmoji = validatedChange >= 0 ? "▲" : "▼";
+      const signalType = bias === 'LONG' ? 'LONG' : bias === 'SHORT' ? 'SHORT' : 'NEUTRAL';
+      
+      // Calculate entry, stop, and targets
+      const bullEntry = (lowNum + range * 0.25).toFixed(2);
+      const bullStop = (lowNum - range * 0.05).toFixed(2);
+      const bullTP1 = (priceNum + range * 0.382).toFixed(2);
+      const bullTP2 = (priceNum + range * 0.618).toFixed(2);
+      const bullTP3 = (priceNum + range * 1.0).toFixed(2);
+      
+      const bearEntry = (highNum - range * 0.25).toFixed(2);
+      const bearStop = (highNum + range * 0.05).toFixed(2);
+      
+      // Risk/Reward calculations
+      const bullRR = ((Number(bullTP2) - Number(bullEntry)) / (Number(bullEntry) - Number(bullStop))).toFixed(1);
+      const bearRR = ((Number(bearEntry) - bearTarget2) / (Number(bearStop) - Number(bearEntry))).toFixed(1);
+      
+      // RSI interpretation
+      const rsiContext = rsiEstimate > 70 ? "overbought territory — watch for bearish divergence" :
+                         rsiEstimate < 30 ? "oversold territory — watch for bullish reversal" :
+                         rsiEstimate > 55 ? "bullish momentum building" :
+                         rsiEstimate < 45 ? "bearish pressure present" : "neutral momentum";
+      
+      // Volume interpretation
+      const volumeContext = volumeStrength === 'HIGH' ? "Strong volume confirms " + (validatedChange >= 0 ? "accumulation" : "distribution") :
+                           volumeStrength === 'MODERATE' ? "Moderate volume — watching for confirmation" :
+                           "Low volume — waiting for conviction";
+      
+      // ETF flow interpretation
+      const etfContext = etfFlowData.sentiment.includes('BULLISH') ? 
+        "Institutional inflows detected — smart money accumulating. This aligns with bullish price action." :
+        etfFlowData.sentiment.includes('BEARISH') ?
+        "Institutional outflows observed — distribution phase. Caution warranted on longs." :
+        "Neutral institutional flows — mixed positioning from smart money.";
+      
+      // Market phase interpretation
+      const phaseContext = marketPhase === 'Markup' ? "Clear markup phase with higher highs and higher lows forming." :
+                          marketPhase === 'Markdown' ? "Markdown phase active with lower highs and lower lows." :
+                          marketPhase === 'Accumulation' ? "Accumulation zone — smart money building positions quietly." :
+                          marketPhase === 'Distribution' ? "Distribution phase — watch for reversal signals." :
+                          "Consolidation range — waiting for directional breakout.";
+      
+      // Structure analysis
+      const structureAnalysis = rangePercent > 70 ? "Price in premium zone — ideal for shorts, risky for longs" :
+                               rangePercent < 30 ? "Price in discount zone — ideal for longs, risky for shorts" :
+                               rangePercent > 50 ? "Above equilibrium — slight bullish edge" :
+                               "Below equilibrium — slight bearish edge";
+      
+      // 15M analysis
+      const microContext = bias === 'LONG' ? 
+        `Look for 15M bullish BOS/CHoCH at ${microOBBullish}. Entry on micro FVG fill at ${microFVGBullish} with stop below $${microStopBullish}.` :
+        `Watch for 15M bearish BOS/CHoCH at ${microOBBearish}. Entry on micro FVG fill at ${microFVGBearish} with stop above $${microStopBearish}.`;
+      
+      // Session context based on time
+      const hour = new Date().getUTCHours();
+      const sessionContext = hour >= 0 && hour < 8 ? "Asian session — typically lower volatility, range-bound" :
+                            hour >= 8 && hour < 14 ? "London session — high volatility, trend initiation" :
+                            hour >= 14 && hour < 21 ? "New York session — continuation moves, major reversals" :
+                            "Late session — reduced liquidity, avoid new positions";
+      
+      // Macro context
+      const macroRisk = Math.abs(validatedChange) > 5 ? 
+        "Elevated volatility suggests macro-driven moves. Watch for correlation with traditional markets." :
+        "Stable conditions — crypto-specific factors likely driving price.";
 
-ELITE ANALYSIS FRAMEWORK:
-
-📊 VOLUME PROFILE ANALYSIS:
-- Point of Control (POC): Highest volume price level — magnetic support/resistance
-- Value Area High (VAH): Upper boundary of 68% volume — resistance
-- Value Area Low (VAL): Lower boundary of 68% volume — support
-- Low Volume Nodes: Price moves quickly through these — potential acceleration zones
-- High Volume Nodes: Strong support/resistance clusters
-
-📈 RSI & DIVERGENCE DETECTION:
-- RSI Overbought (>70): Potential bearish reversal signals
-- RSI Oversold (<30): Potential bullish reversal signals
-- Bullish Divergence: Price makes lower low, RSI makes higher low — reversal setup
-- Bearish Divergence: Price makes higher high, RSI makes lower high — reversal setup
-- Hidden Divergence: Continuation signals within trends
-
-🔗 ETF FLOW & ON-CHAIN METRICS:
-- ETF Flows: REAL-TIME institutional demand/supply — inflows = bullish accumulation, outflows = distribution
-- ETF Flow Trend: Accelerating inflows signal strong institutional conviction
-- ETF Sentiment: Derived from net flow magnitude — key institutional indicator
-- Exchange Reserves: Decreasing = bullish (accumulation), Increasing = bearish (distribution)
-- Active Addresses: Network activity indicator — higher = more interest
-- Whale Transactions: Large movements signal institutional activity
-- Funding Rates: Positive = overleveraged longs, Negative = overleveraged shorts
-
-🌐 MACRO CONTEXT:
-- DXY (USD Index): Inverse correlation with crypto — DXY up typically means crypto down
-- Stock Market (SPX/NDQ): Risk-on correlation — stocks up often means crypto up
-- Interest Rates: Higher rates = risk-off = bearish crypto
-- Geopolitical Events: Uncertainty often drives crypto volatility
-- All-Time High Proximity: Upside exhaustion signals, distribution risk
-
-MULTI-TIMEFRAME STRUCTURE:
-📅 WEEKLY/DAILY: Macro trend, major order blocks, Wyckoff phases
-⏰ 4H: Intermediate structure, swing analysis, refined bias
-🕐 1H: Entry confirmation, session analysis, BOS/CHoCH
-⏱️ 15M: PRECISION ENTRIES — micro order blocks, micro FVGs, tight stops, sniper execution
-⚡ 5M: Scalp confirmations, micro structure breaks
-
-15M MICRO-LEVEL PRECISION (CRITICAL FOR ENTRIES):
-- Micro Order Blocks: Last down-candle before impulse up (bullish) or last up-candle before impulse down (bearish) on 15M
-- Micro FVGs: 15M imbalances within higher timeframe zones — high probability fill targets
-- Micro BOS/CHoCH: 15M structure shifts for entry confirmation
-- Optimal Trade Entry (OTE): 62-79% retracement of 15M swing for precision entries
-- Session Timing: London/NY open micro sweeps into 15M OBs
-
-ICT CORE CONCEPTS:
-- Order Blocks: Institutional footprints — refined by volume clusters
-- Fair Value Gaps: Price imbalances with volume context
-- Liquidity Pools: Stop clusters at swing points
-- Premium/Discount Zones: Smart money buy/sell areas
-- BOS/CHoCH: Structure shifts for timing
-
-CRITICAL RULES FOR CONSISTENCY:
-1. ALWAYS start with "🔮 ZIKALYZE AI ANALYSIS" header exactly as shown
-2. ALWAYS provide BOTH bull and bear scenarios with specific price targets
-3. ALWAYS include all sections in the EXACT order shown in the template
-4. ALWAYS use the exact emoji headers provided (📡, 📊, 🌐, 📅, ⏰, 🕐, ⏱️, 🟢, 🔴, ⚠️, 🔄)
-5. ALWAYS fill in concrete price values — never use placeholders like "[price]"
-6. 15M SECTION IS MANDATORY — always provide micro OB, micro FVG, and exact entry
-7. Keep analysis between 400-500 words — elite precision with depth
-8. Use consistent formatting: levels as "$XX,XXX.XX", percentages as "+X.XX%"
-9. NEVER skip sections — if data unavailable, state "Awaiting confirmation"
-10. End with INVALIDATION section showing specific invalidation prices`;
-
-    const userPrompt = `🔮 ZIKALYZE AI ANALYSIS — ${sanitizedCrypto}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 INSTITUTIONAL DATA FEED
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Symbol:            ${sanitizedCrypto}
-Current Price:     $${priceNum.toLocaleString()}
-24h Change:        ${validatedChange >= 0 ? '🟢 +' : '🔴 '}${validatedChange.toFixed(2)}%
-24h High:          $${highNum.toLocaleString()}
-24h Low:           $${lowNum.toLocaleString()}
-24h Range:         $${range.toFixed(2)} (${volatility}% volatility)
-ATR (24h):         $${atr.toFixed(2)} (${atrPercent}%)
-Range Position:    ${rangePosition}% ${rangePercent > 50 ? '[PREMIUM ZONE]' : '[DISCOUNT ZONE]'}
-
-📈 VOLUME PROFILE DATA
-Point of Control:  $${poc.toFixed(2)}
-Value Area High:   $${valueAreaHigh.toFixed(2)}
-Value Area Low:    $${valueAreaLow.toFixed(2)}
-Volume Strength:   ${volumeStrength}
-Vol/MCap Ratio:    ${volumeToMcap}%
-
-🔄 MOMENTUM INDICATORS
-RSI Estimate:      ${rsiEstimate.toFixed(1)} ${rsiEstimate > 70 ? '[OVERBOUGHT]' : rsiEstimate < 30 ? '[OVERSOLD]' : '[NEUTRAL]'}
-RSI Divergence:    ${rsiDivergence}
-Price/Vol Signal:  ${priceVsVolume}
-
-📍 REFINED ORDER BLOCK ZONES (4H/1H)
-Bullish OB:        $${obBullishLow.toFixed(2)} - $${obBullishHigh.toFixed(2)}
-Bearish OB:        $${obBearishLow.toFixed(2)} - $${obBearishHigh.toFixed(2)}
-Bullish FVG:       ${fvgBullishZone}
-Bearish FVG:       ${fvgBearishZone}
-
-⏱️ 15M MICRO-LEVEL ZONES (PRECISION ENTRIES)
-Micro OB Bull:     ${microOBBullish} [last down-candle before impulse]
-Micro OB Bear:     ${microOBBearish} [last up-candle before impulse]
-Micro FVG Bull:    ${microFVGBullish} [15M imbalance - high prob fill]
-Micro FVG Bear:    ${microFVGBearish} [15M imbalance - high prob fill]
-OTE Zone Bull:     ${oteZoneBullish} [62-79% retracement]
-OTE Zone Bear:     ${oteZoneBearish} [62-79% retracement]
-Micro Stop Bull:   $${microStopBullish} [below 15M structure]
-Micro Stop Bear:   $${microStopBearish} [above 15M structure]
-
-📐 FIBONACCI LEVELS
-Fib 0.618:         $${fibRetrace618.toFixed(2)}
-Fib 0.382:         $${fibRetrace382.toFixed(2)}
-Equilibrium:       $${midPoint.toFixed(2)}
-
-💰 MARKET DATA
-Volume 24h:        $${validatedVolume?.toLocaleString() || 'N/A'}
-Market Cap:        $${validatedMarketCap?.toLocaleString() || 'N/A'}
-
-📡 REAL-TIME ETF FLOW DATA
-BTC ETF Net Flow:  ${etfFlowData.btcNetFlow}
-ETH ETF Net Flow:  ${etfFlowData.ethNetFlow}
-Flow Trend:        ${etfFlowData.flowTrend}
-Daily Change:      ${etfFlowData.dailyChange}
-ETF Sentiment:     ${etfFlowData.sentiment} ${etfFlowData.sentiment.includes('BULLISH') ? '🟢' : etfFlowData.sentiment.includes('BEARISH') ? '🔴' : '⚪'}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-SYSTEM DETECTION: Phase = ${marketPhase} | HTF Bias = ${bias}
-CALCULATED CONFIDENCE: ${calculatedConfidence}% (Vol: +${volumeBonus}, Trend: +${trendBonus}, Confluence: +${confluenceBonus}, ETF: ${etfBonus >= 0 ? '+' : ''}${etfBonus}${divergencePenalty < 0 ? ', Divergence: ' + divergencePenalty : ''})
-
-DELIVER ANALYSIS IN THIS EXACT FORMAT:
-
-🔮 ZIKALYZE AI ANALYSIS
-Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${validatedChange >= 0 ? '▲' : '▼'} ${Math.abs(validatedChange).toFixed(2)}%
+      return `🔮 ZIKALYZE AI ANALYSIS
+Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
 
 📡 ETF INSTITUTIONAL FLOW
 BTC ETF: ${etfFlowData.btcNetFlow} | Trend: ${etfFlowData.flowTrend} | Sentiment: ${etfFlowData.sentiment}
-[Interpret ETF flow impact on price action — institutional demand/supply pressure]
-[If inflows: Smart money accumulating — bullish signal]
-[If outflows: Distribution phase — bearish signal]
+${etfContext}
 
 📊 VOLUME PROFILE & RSI
-POC: $${poc.toFixed(2)} — [magnetic level behavior]
-RSI: ${rsiEstimate.toFixed(0)} — [overbought/oversold/divergence context]
-Volume: ${volumeStrength} — [accumulation/distribution signal]
+POC: $${poc.toFixed(2)} — Price gravitating toward high-volume node
+RSI: ${rsiEstimate.toFixed(0)} — ${rsiContext}
+Volume: ${volumeStrength} — ${volumeContext}
+${priceVsVolume !== 'CONVERGENT' ? `⚠️ ${priceVsVolume} detected — potential reversal signal` : ''}
 
 🌐 MACRO CONTEXT
-DXY Correlation: [Impact on ${sanitizedCrypto}]
-Risk Sentiment: [Risk-on/Risk-off implications]
-ATH Proximity: [Upside exhaustion risk if applicable]
-Key Macro Risk: [Primary macro factor to watch]
+Market Phase: ${marketPhase} — ${phaseContext}
+Range Position: ${rangePosition}% — ${structureAnalysis}
+${macroRisk}
 
 📅 DAILY TIMEFRAME
-Trend: [Bullish/Bearish/Ranging]
-Structure: [HH/HL or LH/LL pattern]
-HTF Order Block: $[refined zone] — [volume-backed]
-Key Level: $[major S/R] — [significance]
+Trend: ${trendDirection.toUpperCase()} with ${Math.abs(validatedChange).toFixed(2)}% momentum
+Structure: ${validatedChange > 0 ? 'Higher highs forming' : 'Lower lows forming'}
+HTF Order Block: $${obBullishLow.toFixed(2)} - $${obBullishHigh.toFixed(2)} (demand)
+Key Resistance: $${highNum.toFixed(2)} — 24h high
 
 ⏰ 4H TIMEFRAME
-Bias: [Aligned/Counter to Daily]
-Order Block: $${rangePercent < 50 ? obBullishLow.toFixed(2) + ' - ' + obBullishHigh.toFixed(2) : obBearishLow.toFixed(2) + ' - ' + obBearishHigh.toFixed(2)} — [volume cluster]
-FVG Zone: ${rangePercent < 50 ? fvgBullishZone : fvgBearishZone} — [fill status]
+Bias: ${bias} — ${bias === 'LONG' ? 'Bullish structure intact' : bias === 'SHORT' ? 'Bearish structure dominant' : 'No clear directional bias'}
+Order Block: $${rangePercent < 50 ? obBullishLow.toFixed(2) + ' - ' + obBullishHigh.toFixed(2) : obBearishLow.toFixed(2) + ' - ' + obBearishHigh.toFixed(2)}
+FVG Zone: ${rangePercent < 50 ? fvgBullishZone : fvgBearishZone} — ${rangePercent < 50 ? 'unfilled bullish gap' : 'unfilled bearish gap'}
 
 🕐 1H TIMEFRAME
-[BOS/CHoCH status]
-Session: [Asian/London/NY context]
-Liquidity: [Swept/Targeting $X]
-Entry Zone: $[refined 1H zone]
+Structure: ${validatedChange > 1 ? 'Bullish BOS confirmed' : validatedChange < -1 ? 'Bearish BOS confirmed' : 'Consolidating — awaiting BOS'}
+${sessionContext}
+Liquidity: ${rangePercent > 60 ? 'Equal highs above — likely sweep target' : 'Equal lows below — liquidity pool'}
 
 ⏱️ 15M PRECISION ENTRY (CRITICAL)
-Micro Order Block: $[exact 15M OB zone] — [last opposing candle before impulse]
-Micro FVG: $[15M imbalance zone] — [fill target within HTF zone]
-15M Structure: [BOS/CHoCH status on 15M]
-OTE Zone (62-79%): $[15M swing retracement zone]
-Optimal Entry: $[exact sniper entry] — [confluence: micro OB + FVG + OTE]
-Micro Stop: $[tight stop below/above 15M structure]
-Session Context: [Asian range / London sweep / NY continuation]
-
+Micro Order Block: ${bias === 'LONG' ? microOBBullish : microOBBearish}
+Micro FVG: ${bias === 'LONG' ? microFVGBullish : microFVGBearish}
+OTE Zone (62-79%): ${bias === 'LONG' ? oteZoneBullish : oteZoneBearish}
+${microContext}
 
 🟢 BULL CASE (${bias === 'LONG' ? 'PRIMARY' : 'ALTERNATIVE'})
 Signal: LONG | Confidence: ${calculatedConfidence}%
-Entry: $[price] — [confluence reason]
-Stop Loss: $[price] — [structure reference]
-TP1: $[price] (+X%) | TP2: $[price] (+X%) | TP3: $[price] (+X%)
-R:R = 1:[X.X]
+Entry: $${bullEntry} — OTE zone + micro OB confluence
+Stop Loss: $${bullStop} — Below 15M structure low
+TP1: $${bullTP1} (+${((Number(bullTP1) - priceNum) / priceNum * 100).toFixed(1)}%) | TP2: $${bullTP2} (+${((Number(bullTP2) - priceNum) / priceNum * 100).toFixed(1)}%) | TP3: $${bullTP3} (+${((Number(bullTP3) - priceNum) / priceNum * 100).toFixed(1)}%)
+R:R = 1:${bullRR}
 
 🔴 BEAR CASE (${bias === 'SHORT' ? 'PRIMARY' : 'ALTERNATIVE'})
-Signal: SHORT | Confidence: [X]%
-Entry: $[price] — [if bull invalidates]
-Stop Loss: $[price]
+Signal: SHORT | Confidence: ${100 - calculatedConfidence}%
+Entry: $${bearEntry} — If bull invalidates at premium
+Stop Loss: $${bearStop} — Above structure high
 TP1: $${bearTarget1.toFixed(2)} | TP2: $${bearTarget2.toFixed(2)} | TP3: $${bearTarget3.toFixed(2)}
-R:R = 1:[X.X]
+R:R = 1:${bearRR}
 
 ⚠️ KEY LEVELS
 Support: $${lowNum.toFixed(2)} → $${valueAreaLow.toFixed(2)} → $${bearTarget1.toFixed(2)}
 Resistance: $${highNum.toFixed(2)} → $${valueAreaHigh.toFixed(2)} → $${(highNum + range * 0.382).toFixed(2)}
 
 🔄 INVALIDATION
-Bull Invalid: [Price + structure that invalidates bull case]
-Bear Invalid: [Price + structure that invalidates bear case]`;
+Bull Invalid: Close below $${(lowNum - range * 0.1).toFixed(2)} — breaks market structure
+Bear Invalid: Close above $${(highNum + range * 0.1).toFixed(2)} — continuation of bullish trend`;
+    };
 
-    // Use cost-efficient model to avoid quota issues
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        stream: true,
-      }),
+    // Stream the local analysis as SSE
+    const analysis = generateLocalAnalysis();
+    const encoder = new TextEncoder();
+    
+    // Create a readable stream that simulates SSE streaming
+    const stream = new ReadableStream({
+      start(controller) {
+        const words = analysis.split(' ');
+        let index = 0;
+        
+        const sendChunk = () => {
+          if (index < words.length) {
+            // Send 3-5 words at a time for natural streaming
+            const chunkSize = Math.min(3 + Math.floor(Math.random() * 3), words.length - index);
+            const chunk = words.slice(index, index + chunkSize).join(' ') + ' ';
+            
+            const data = JSON.stringify({
+              choices: [{
+                delta: { content: chunk }
+              }]
+            });
+            
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+            index += chunkSize;
+            
+            // Variable delay for natural feel
+            setTimeout(sendChunk, 20 + Math.random() * 30);
+          } else {
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          }
+        };
+        
+        sendChunk();
+      }
     });
 
-    if (!response.ok) {
-      console.error("AI gateway error:", response.status);
-      
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Service busy. Please try again in a moment." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Service temporarily unavailable." }), {
-          status: 503,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      
-      return new Response(JSON.stringify({ error: "Analysis unavailable. Please try again later." }), {
-        status: 503,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(response.body, {
+    return new Response(stream, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error) {
