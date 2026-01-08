@@ -15,8 +15,8 @@ interface AIAnalyzerProps {
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crypto-analyze`;
-const CHARS_PER_FRAME = 8; // Characters to add per animation frame
-const FRAME_INTERVAL = 10; // Faster interval for snappy feel
+const CHARS_PER_FRAME = 3; // Fewer characters for smoother feel
+const FRAME_INTERVAL = 16; // ~60fps for buttery smooth animation
 
 const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap }: AIAnalyzerProps) => {
   const [displayedText, setDisplayedText] = useState("");
