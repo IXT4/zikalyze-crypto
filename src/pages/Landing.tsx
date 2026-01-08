@@ -39,12 +39,15 @@ const Landing = () => {
   // Redirect to dashboard if already logged in (non-blocking)
   useEffect(() => {
     if (!authLoading && user) {
-      navigate("/dashboard");
+      setIsNavigating(true);
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 400);
     }
   }, [navigate, user, authLoading]);
 
-  // Loading overlay when navigating
-  if (isNavigating) {
+  // Loading overlay when navigating or redirecting
+  if (isNavigating || (authLoading && !user)) {
     return (
       <div 
         className="fixed inset-0 flex items-center justify-center z-50"
