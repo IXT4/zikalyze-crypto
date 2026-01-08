@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ZikalyzeSplash from "@/components/ZikalyzeSplash";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -20,37 +21,39 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const session = localStorage.getItem("wallet_session");
-    
-    if (!session) {
-      navigate("/login");
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(session);
+    const checkAuth = async () => {
+      const session = localStorage.getItem("wallet_session");
       
-      if (!isSessionValid(parsed)) {
-        localStorage.removeItem("wallet_session");
+      if (!session) {
         navigate("/login");
         return;
       }
 
-      setIsAuthenticated(true);
-    } catch {
-      localStorage.removeItem("wallet_session");
-      navigate("/login");
-    } finally {
-      setIsLoading(false);
-    }
+      try {
+        const parsed = JSON.parse(session);
+        
+        if (!isSessionValid(parsed)) {
+          localStorage.removeItem("wallet_session");
+          navigate("/login");
+          return;
+        }
+
+        // Show splash briefly for smooth transition
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setIsAuthenticated(true);
+      } catch {
+        localStorage.removeItem("wallet_session");
+        navigate("/login");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    checkAuth();
   }, [navigate]);
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <ZikalyzeSplash message="Loading your dashboard..." />;
   }
 
   if (!isAuthenticated) return null;

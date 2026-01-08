@@ -1,8 +1,35 @@
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { TrendingUp, Sparkles, ArrowRight, BarChart3, Brain, Shield, Activity, Zap, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import ZikalyzeSplash from "@/components/ZikalyzeSplash";
 
 const Landing = () => {
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if already logged in
+    const session = localStorage.getItem("wallet_session");
+    if (session) {
+      try {
+        const parsed = JSON.parse(session);
+        if (parsed.walletId && parsed.publicKey) {
+          navigate("/dashboard");
+          return;
+        }
+      } catch (e) {
+        // Invalid session
+      }
+    }
+    // Show splash for branding
+    setTimeout(() => setLoading(false), 2000);
+  }, [navigate]);
+
+  if (loading) {
+    return <ZikalyzeSplash message="Welcome to Zikalyze AI..." />;
+  }
+
   return (
     <div className="min-h-screen bg-background overflow-hidden">
       {/* Animated Background */}
