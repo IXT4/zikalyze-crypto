@@ -47,7 +47,6 @@ Deno.serve(async (req) => {
     // Handle different email types
     switch (email_action_type) {
       case 'signup':
-      case 'email_change':
         html = render(
           React.createElement(VerificationEmail, {
             supabase_url: supabaseUrl,
@@ -57,6 +56,18 @@ Deno.serve(async (req) => {
           })
         )
         subject = 'Verify your Zikalyze account'
+        break
+
+      case 'email_change':
+        html = render(
+          React.createElement(VerificationEmail, {
+            supabase_url: supabaseUrl,
+            token_hash,
+            redirect_to: defaultRedirect,
+            email_action_type,
+          })
+        )
+        subject = 'Confirm your email change - Zikalyze'
         break
 
       case 'recovery':
