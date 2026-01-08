@@ -147,12 +147,75 @@ interface RateLimitRequest {
   success?: boolean;
 }
 
+// Enhanced input validation functions
+function validateEmail(email: unknown): { valid: boolean; sanitized: string; error?: string } {
+  if (!email || typeof email !== "string") {
+    return { valid: false, sanitized: "", error: "Email is required" };
+  }
+  
+  const trimmed = email.trim().toLowerCase();
+  
+  // Length validation
+  if (trimmed.length === 0) {
+    return { valid: false, sanitized: "", error: "Email cannot be empty" };
+  }
+  if (trimmed.length > 254) {
+    return { valid: false, sanitized: "", error: "Email too long" };
+  }
+  
+  // Format validation (RFC 5322 simplified)
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  if (!emailRegex.test(trimmed)) {
+    return { valid: false, sanitized: "", error: "Invalid email format" };
+  }
+  
+  // Check for suspicious patterns
+  if (trimmed.includes("..") || trimmed.startsWith(".") || trimmed.includes(".@")) {
+    return { valid: false, sanitized: "", error: "Invalid email format" };
+  }
+  
+  return { valid: true, sanitized: trimmed };
+}
+
+function validateAction(action: unknown): { valid: boolean; value: "check" | "record"; error?: string } {
+  if (!action || typeof action !== "string") {
+    return { valid: false, value: "check", error: "Action is required" };
+  }
+  
+  const validActions = ["check", "record"];
+  if (!validActions.includes(action)) {
+    return { valid: false, value: "check", error: "Invalid action. Must be 'check' or 'record'" };
+  }
+  
+  return { valid: true, value: action as "check" | "record" };
+}
+
+function validateBoolean(value: unknown, fieldName: string): { valid: boolean; value: boolean; error?: string } {
+  if (value === undefined || value === null) {
+    return { valid: true, value: false }; // Default to false
+  }
+  
+  if (typeof value !== "boolean") {
+    return { valid: false, value: false, error: `${fieldName} must be a boolean` };
+  }
+  
+  return { valid: true, value };
+}
+
 serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Only allow POST method
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   try {
@@ -162,35 +225,68 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    const body: RateLimitRequest = await req.json();
+    // Parse JSON body with error handling
+    let body: RateLimitRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Validate request body exists and is an object
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return new Response(
+        JSON.stringify({ error: "Request body must be an object" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     const { email, action, success } = body;
     
-    // Validate email
-    if (!email || typeof email !== "string" || email.length > 255) {
+    // Validate email with enhanced validation
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
       return new Response(
-        JSON.stringify({ error: "Invalid email" }),
+        JSON.stringify({ error: emailValidation.error }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    // Validate action
+    const actionValidation = validateAction(action);
+    if (!actionValidation.valid) {
       return new Response(
-        JSON.stringify({ error: "Invalid email format" }),
+        JSON.stringify({ error: actionValidation.error }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    // Validate success field if present
+    const successValidation = validateBoolean(success, "success");
+    if (!successValidation.valid) {
+      return new Response(
+        JSON.stringify({ error: successValidation.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    const sanitizedEmail = emailValidation.sanitized;
+    const validatedAction = actionValidation.value;
+    const validatedSuccess = successValidation.value;
     
     // Get and validate client IP
     const clientIP = getClientIP(req);
     const validatedIP = clientIP && isValidIP(clientIP) ? clientIP : null;
     
-    console.log(`Rate limit ${action} for ${email.toLowerCase()} from IP: ${validatedIP || "unknown"}`);
+    console.log(`Rate limit ${validatedAction} for ${sanitizedEmail} from IP: ${validatedIP || "unknown"}`);
     
-    if (action === "check") {
+    if (validatedAction === "check") {
       // Check rate limit with both email and IP
       const { data, error } = await supabase.rpc("check_rate_limit", {
-        p_email: email.toLowerCase(),
+        p_email: sanitizedEmail,
         p_ip_address: validatedIP,
         p_max_attempts: 5,
         p_window_minutes: 15,
@@ -217,7 +313,7 @@ serve(async (req) => {
           });
           
           const emailHtml = generateLockoutEmailHTML(
-            email.toLowerCase(),
+            sanitizedEmail,
             validatedIP,
             unlockTime,
             rateLimitData.attempts
@@ -225,12 +321,12 @@ serve(async (req) => {
           
           await resend.emails.send({
             from: 'Zikalyze Security <onboarding@resend.dev>',
-            to: [email.toLowerCase()],
+            to: [sanitizedEmail],
             subject: '🔒 Security Alert: Account Temporarily Locked',
             html: emailHtml,
           });
           
-          console.log(`Lockout notification sent to ${email.toLowerCase()}`);
+          console.log(`Lockout notification sent to ${sanitizedEmail}`);
         } catch (emailError) {
           console.error("Failed to send lockout notification:", emailError);
           // Don't fail the rate limit check if email fails
@@ -242,11 +338,11 @@ serve(async (req) => {
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
       
-    } else if (action === "record") {
+    } else if (validatedAction === "record") {
       const { error } = await supabase.rpc("record_login_attempt", {
-        p_email: email.toLowerCase(),
+        p_email: sanitizedEmail,
         p_ip_address: validatedIP,
-        p_success: success ?? false,
+        p_success: validatedSuccess,
       });
       
       if (error) {

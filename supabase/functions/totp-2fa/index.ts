@@ -138,9 +138,79 @@ async function hashCode(code: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Enhanced input validation functions
+function validateToken(token: unknown): { valid: boolean; sanitized: string; error?: string } {
+  if (token === undefined || token === null) {
+    return { valid: false, sanitized: "", error: "Token is required" };
+  }
+  
+  if (typeof token !== "string") {
+    return { valid: false, sanitized: "", error: "Token must be a string" };
+  }
+  
+  // Remove any whitespace and validate
+  const cleaned = token.replace(/\s/g, "");
+  
+  if (cleaned.length !== 6) {
+    return { valid: false, sanitized: "", error: "Token must be exactly 6 digits" };
+  }
+  
+  if (!/^\d{6}$/.test(cleaned)) {
+    return { valid: false, sanitized: "", error: "Token must contain only digits" };
+  }
+  
+  return { valid: true, sanitized: cleaned };
+}
+
+function validateBackupCode(code: unknown): { valid: boolean; sanitized: string; error?: string } {
+  if (code === undefined || code === null) {
+    return { valid: false, sanitized: "", error: "Backup code is required" };
+  }
+  
+  if (typeof code !== "string") {
+    return { valid: false, sanitized: "", error: "Backup code must be a string" };
+  }
+  
+  // Remove whitespace and validate format (XXXX-XXXX)
+  const cleaned = code.replace(/\s/g, "").toUpperCase();
+  
+  if (cleaned.length > 20) {
+    return { valid: false, sanitized: "", error: "Backup code too long" };
+  }
+  
+  // Accept format with or without hyphen
+  if (!/^[A-F0-9]{4}-?[A-F0-9]{4}$/i.test(cleaned)) {
+    return { valid: false, sanitized: "", error: "Invalid backup code format" };
+  }
+  
+  return { valid: true, sanitized: cleaned };
+}
+
+function validateAction(action: unknown): { valid: boolean; value: string; error?: string } {
+  const validActions = ["setup", "verify", "validate", "validate-backup", "status", "disable"];
+  
+  if (!action || typeof action !== "string") {
+    return { valid: false, value: "", error: "Action is required" };
+  }
+  
+  if (!validActions.includes(action)) {
+    return { valid: false, value: "", error: `Invalid action. Must be one of: ${validActions.join(", ")}` };
+  }
+  
+  return { valid: true, value: action };
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Only allow POST method
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   try {
@@ -151,6 +221,14 @@ serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "No authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate auth header format
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Invalid authorization header format" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -172,13 +250,42 @@ serve(async (req: Request) => {
       );
     }
 
-    const { action, token, backupCode } = await req.json();
-    console.log(`2FA action: ${action} for user: ${user.id}`);
+    // Parse JSON body with error handling
+    let requestBody: { action?: unknown; token?: unknown; backupCode?: unknown };
+    try {
+      requestBody = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate request body is an object
+    if (!requestBody || typeof requestBody !== "object" || Array.isArray(requestBody)) {
+      return new Response(
+        JSON.stringify({ error: "Request body must be an object" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { action, token, backupCode } = requestBody;
+    
+    // Validate action
+    const actionValidation = validateAction(action);
+    if (!actionValidation.valid) {
+      return new Response(
+        JSON.stringify({ error: actionValidation.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    console.log(`2FA action: ${actionValidation.value} for user: ${user.id}`);
 
     // Admin client for database operations
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    switch (action) {
+    switch (actionValidation.value) {
       case "setup": {
         // Generate new TOTP secret
         const secret = generateSecret(20);
@@ -221,10 +328,11 @@ serve(async (req: Request) => {
       }
 
       case "verify": {
-        // Verify TOTP token and enable 2FA
-        if (!token || token.length !== 6) {
+        // Validate token with enhanced validation
+        const tokenValidation = validateToken(token);
+        if (!tokenValidation.valid) {
           return new Response(
-            JSON.stringify({ error: "Invalid token format" }),
+            JSON.stringify({ error: tokenValidation.error }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -242,7 +350,7 @@ serve(async (req: Request) => {
           );
         }
 
-        const isValid = await verifyTOTP(twoFaData.totp_secret, token);
+        const isValid = await verifyTOTP(twoFaData.totp_secret, tokenValidation.sanitized);
         
         if (!isValid) {
           return new Response(
@@ -270,10 +378,11 @@ serve(async (req: Request) => {
       }
 
       case "validate": {
-        // Validate TOTP token during login
-        if (!token || token.length !== 6) {
+        // Validate token with enhanced validation
+        const tokenValidation = validateToken(token);
+        if (!tokenValidation.valid) {
           return new Response(
-            JSON.stringify({ error: "Invalid token format", valid: false }),
+            JSON.stringify({ error: tokenValidation.error, valid: false }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -291,7 +400,7 @@ serve(async (req: Request) => {
           );
         }
 
-        const isValid = await verifyTOTP(twoFaData.totp_secret, token);
+        const isValid = await verifyTOTP(twoFaData.totp_secret, tokenValidation.sanitized);
 
         return new Response(
           JSON.stringify({ valid: isValid }),
@@ -300,10 +409,11 @@ serve(async (req: Request) => {
       }
 
       case "validate-backup": {
-        // Validate backup code during login
-        if (!backupCode) {
+        // Validate backup code with enhanced validation
+        const backupValidation = validateBackupCode(backupCode);
+        if (!backupValidation.valid) {
           return new Response(
-            JSON.stringify({ error: "No backup code provided", valid: false }),
+            JSON.stringify({ error: backupValidation.error, valid: false }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -321,7 +431,7 @@ serve(async (req: Request) => {
           );
         }
 
-        const hashedInput = await hashCode(backupCode);
+        const hashedInput = await hashCode(backupValidation.sanitized);
         const codeIndex = twoFaData.backup_codes.indexOf(hashedInput);
 
         if (codeIndex === -1) {
@@ -363,10 +473,11 @@ serve(async (req: Request) => {
       }
 
       case "disable": {
-        // Disable 2FA (requires valid token)
-        if (!token || token.length !== 6) {
+        // Validate token with enhanced validation
+        const tokenValidation = validateToken(token);
+        if (!tokenValidation.valid) {
           return new Response(
-            JSON.stringify({ error: "Invalid token format" }),
+            JSON.stringify({ error: tokenValidation.error }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -384,7 +495,7 @@ serve(async (req: Request) => {
           );
         }
 
-        const isValid = await verifyTOTP(twoFaData.totp_secret, token);
+        const isValid = await verifyTOTP(twoFaData.totp_secret, tokenValidation.sanitized);
         
         if (!isValid) {
           return new Response(

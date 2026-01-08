@@ -32,6 +32,78 @@ interface PushPayload {
   symbol?: string;
 }
 
+// Enhanced input validation functions
+function validateUUID(value: unknown, fieldName: string): { valid: boolean; value: string; error?: string } {
+  if (!value || typeof value !== "string") {
+    return { valid: false, value: "", error: `${fieldName} is required` };
+  }
+  
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(value)) {
+    return { valid: false, value: "", error: `Invalid ${fieldName} format` };
+  }
+  
+  return { valid: true, value: value.toLowerCase() };
+}
+
+function validateString(value: unknown, fieldName: string, maxLength: number, required = true): { valid: boolean; sanitized: string; error?: string } {
+  if (value === undefined || value === null) {
+    if (required) {
+      return { valid: false, sanitized: "", error: `${fieldName} is required` };
+    }
+    return { valid: true, sanitized: "" };
+  }
+  
+  if (typeof value !== "string") {
+    return { valid: false, sanitized: "", error: `${fieldName} must be a string` };
+  }
+  
+  const trimmed = value.trim();
+  
+  if (required && trimmed.length === 0) {
+    return { valid: false, sanitized: "", error: `${fieldName} cannot be empty` };
+  }
+  
+  if (trimmed.length > maxLength) {
+    return { valid: false, sanitized: "", error: `${fieldName} too long (max ${maxLength} characters)` };
+  }
+  
+  return { valid: true, sanitized: trimmed };
+}
+
+function validateUrl(value: unknown): { valid: boolean; sanitized: string; error?: string } {
+  if (value === undefined || value === null) {
+    return { valid: true, sanitized: "" };
+  }
+  
+  if (typeof value !== "string") {
+    return { valid: false, sanitized: "", error: "URL must be a string" };
+  }
+  
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return { valid: true, sanitized: "" };
+  }
+  
+  // Only allow relative URLs or https URLs
+  if (trimmed.startsWith("/")) {
+    if (trimmed.length > 500) {
+      return { valid: false, sanitized: "", error: "URL too long" };
+    }
+    return { valid: true, sanitized: trimmed };
+  }
+  
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "https:") {
+      return { valid: false, sanitized: "", error: "Only HTTPS URLs are allowed" };
+    }
+    return { valid: true, sanitized: trimmed };
+  } catch {
+    return { valid: false, sanitized: "", error: "Invalid URL format" };
+  }
+}
+
 async function sendWebPush(
   subscription: { endpoint: string; p256dh: string; auth: string },
   payload: object,
@@ -88,6 +160,14 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Only allow POST method
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -104,15 +184,79 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { userId, title, body, url, symbol }: PushPayload = await req.json();
+    // Parse JSON body with error handling
+    let requestBody: PushPayload;
+    try {
+      requestBody = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    console.log(`Sending push notification to user ${userId}: ${title}`);
+    // Validate request body is an object
+    if (!requestBody || typeof requestBody !== "object" || Array.isArray(requestBody)) {
+      return new Response(
+        JSON.stringify({ error: "Request body must be an object" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { userId, title, body, url, symbol } = requestBody;
+
+    // Validate userId (UUID format)
+    const userIdValidation = validateUUID(userId, "userId");
+    if (!userIdValidation.valid) {
+      return new Response(
+        JSON.stringify({ error: userIdValidation.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate title
+    const titleValidation = validateString(title, "title", 200);
+    if (!titleValidation.valid) {
+      return new Response(
+        JSON.stringify({ error: titleValidation.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate body
+    const bodyValidation = validateString(body, "body", 500);
+    if (!bodyValidation.valid) {
+      return new Response(
+        JSON.stringify({ error: bodyValidation.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate optional URL
+    const urlValidation = validateUrl(url);
+    if (!urlValidation.valid) {
+      return new Response(
+        JSON.stringify({ error: urlValidation.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate optional symbol
+    const symbolValidation = validateString(symbol, "symbol", 20, false);
+    if (!symbolValidation.valid) {
+      return new Response(
+        JSON.stringify({ error: symbolValidation.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`Sending push notification to user ${userIdValidation.value}: ${titleValidation.sanitized}`);
 
     // Get all push subscriptions for this user
     const { data: subscriptions, error: fetchError } = await supabase
       .from("push_subscriptions")
       .select("*")
-      .eq("user_id", userId);
+      .eq("user_id", userIdValidation.value);
 
     if (fetchError) {
       console.error("Error fetching subscriptions:", fetchError);
@@ -132,7 +276,12 @@ Deno.serve(async (req) => {
 
     console.log(`Found ${subscriptions.length} subscriptions`);
 
-    const payload = { title, body, url: url || "/alerts", symbol };
+    const payload = { 
+      title: titleValidation.sanitized, 
+      body: bodyValidation.sanitized, 
+      url: urlValidation.sanitized || "/alerts", 
+      symbol: symbolValidation.sanitized 
+    };
     let successCount = 0;
     const failedSubscriptions: string[] = [];
 
