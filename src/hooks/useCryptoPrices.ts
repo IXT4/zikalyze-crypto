@@ -233,12 +233,26 @@ export const useCryptoPrices = () => {
       
       const data: CoinGeckoCoin[] = await response.json();
       
-      // Filter out stablecoins, restake assets, and USD-prefixed tokens, then take top 100
-      const filteredData = data
-        .filter(coin => !STABLECOINS.includes(coin.symbol.toLowerCase()) && 
-                        !STABLECOINS.includes(coin.id.toLowerCase()) &&
-                        !isUsdPrefixed(coin.symbol))
-        .slice(0, 100);
+      // Filter out stablecoins, restake assets, and USD-prefixed tokens
+      const cleanData = data.filter(coin => 
+        !STABLECOINS.includes(coin.symbol.toLowerCase()) && 
+        !STABLECOINS.includes(coin.id.toLowerCase()) &&
+        !isUsdPrefixed(coin.symbol)
+      );
+      
+      // Separate priority tokens and others
+      const priorityCoins = cleanData.filter(coin => 
+        PRIORITY_TOKENS.includes(coin.id.toLowerCase())
+      );
+      const otherCoins = cleanData.filter(coin => 
+        !PRIORITY_TOKENS.includes(coin.id.toLowerCase())
+      );
+      
+      // Combine: priority tokens first, then fill remaining slots with other coins
+      const filteredData = [
+        ...priorityCoins,
+        ...otherCoins.slice(0, 100 - priorityCoins.length)
+      ].slice(0, 100);
       
       // Store the crypto list for WebSocket connections
       cryptoListRef.current = filteredData.map(coin => ({
