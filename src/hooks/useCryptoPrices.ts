@@ -41,6 +41,11 @@ const STABLECOINS = [
 
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
 
+// Cache for CoinGecko data to handle rate limits
+let cachedData: CryptoPrice[] | null = null;
+let cacheTimestamp = 0;
+const CACHE_DURATION = 60000; // 1 minute cache
+
 // Exchange WebSocket endpoints
 const EXCHANGES = {
   binance: {
@@ -96,7 +101,21 @@ export const useCryptoPrices = () => {
     }));
   }, []);
 
-  const fetchPrices = useCallback(async () => {
+  const fetchPrices = useCallback(async (retryCount = 0) => {
+    // Check cache first
+    const now = Date.now();
+    if (cachedData && (now - cacheTimestamp) < CACHE_DURATION) {
+      setPrices(cachedData);
+      cachedData.forEach(p => pricesRef.current.set(p.symbol, p));
+      cryptoListRef.current = cachedData.map(coin => ({
+        symbol: coin.symbol.toUpperCase(),
+        name: coin.name,
+        id: coin.id
+      }));
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       
@@ -104,6 +123,22 @@ export const useCryptoPrices = () => {
       const response = await fetch(
         `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=150&page=1&sparkline=false`
       );
+      
+      if (response.status === 429) {
+        // Rate limited - use cache if available, otherwise retry with backoff
+        if (cachedData) {
+          setPrices(cachedData);
+          setLoading(false);
+          return;
+        }
+        if (retryCount < 3) {
+          const delay = Math.pow(2, retryCount) * 2000;
+          console.log(`Rate limited, retrying in ${delay}ms...`);
+          setTimeout(() => fetchPrices(retryCount + 1), delay);
+          return;
+        }
+        throw new Error("Rate limited by CoinGecko");
+      }
       
       if (!response.ok) {
         throw new Error("Failed to fetch from CoinGecko");
@@ -140,6 +175,10 @@ export const useCryptoPrices = () => {
         source: "CoinGecko",
       }));
       
+      // Update cache
+      cachedData = cryptoPrices;
+      cacheTimestamp = Date.now();
+      
       // Initialize price map
       cryptoPrices.forEach(p => pricesRef.current.set(p.symbol, p));
       
@@ -148,6 +187,10 @@ export const useCryptoPrices = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
       console.error("CoinGecko fetch error:", err);
+      // Use cached data if available on error
+      if (cachedData) {
+        setPrices(cachedData);
+      }
     } finally {
       setLoading(false);
     }
@@ -176,7 +219,6 @@ export const useCryptoPrices = () => {
         const ws = new WebSocket(`${EXCHANGES.binance.url}${streams}`);
         
         ws.onopen = () => {
-          console.log(`Binance WebSocket ${index + 1} connected`);
           setConnectedExchanges(prev => 
             prev.includes("Binance") ? prev : [...prev, "Binance"]
           );
@@ -202,12 +244,11 @@ export const useCryptoPrices = () => {
           }
         };
         
-        ws.onerror = (e) => {
-          console.error(`Binance WebSocket ${index + 1} error:`, e);
+        ws.onerror = () => {
+          // Silent - will reconnect on close
         };
         
         ws.onclose = () => {
-          console.log(`Binance WebSocket ${index + 1} closed`);
           setConnectedExchanges(prev => prev.filter(e => e !== "Binance"));
           
           // Reconnect after delay
@@ -216,12 +257,12 @@ export const useCryptoPrices = () => {
           }
           reconnectTimeoutsRef.current.binance = window.setTimeout(() => {
             connectBinance();
-          }, 3000);
+          }, 5000);
         };
         
         binanceWsRefs.current.push(ws);
       } catch (err) {
-        console.error("Binance connection error:", err);
+        // Silent connection errors
       }
     });
   }, [updatePrice]);
@@ -238,7 +279,6 @@ export const useCryptoPrices = () => {
       const ws = new WebSocket(EXCHANGES.bybit.url);
       
       ws.onopen = () => {
-        console.log("Bybit WebSocket connected");
         setConnectedExchanges(prev => 
           prev.includes("Bybit") ? prev : [...prev, "Bybit"]
         );
@@ -273,12 +313,11 @@ export const useCryptoPrices = () => {
         }
       };
       
-      ws.onerror = (e) => {
-        console.error("Bybit WebSocket error:", e);
+      ws.onerror = () => {
+        // Silent - will reconnect on close
       };
       
       ws.onclose = () => {
-        console.log("Bybit WebSocket closed");
         setConnectedExchanges(prev => prev.filter(e => e !== "Bybit"));
         
         if (reconnectTimeoutsRef.current.bybit) {
@@ -286,12 +325,12 @@ export const useCryptoPrices = () => {
         }
         reconnectTimeoutsRef.current.bybit = window.setTimeout(() => {
           connectBybit();
-        }, 5000);
+        }, 10000); // Longer delay for Bybit
       };
       
       bybitWsRef.current = ws;
     } catch (err) {
-      console.error("Bybit connection error:", err);
+      // Silent connection errors
     }
   }, [updatePrice]);
 
@@ -307,7 +346,6 @@ export const useCryptoPrices = () => {
       const ws = new WebSocket(EXCHANGES.okx.url);
       
       ws.onopen = () => {
-        console.log("OKX WebSocket connected");
         setConnectedExchanges(prev => 
           prev.includes("OKX") ? prev : [...prev, "OKX"]
         );
@@ -349,12 +387,11 @@ export const useCryptoPrices = () => {
         }
       };
       
-      ws.onerror = (e) => {
-        console.error("OKX WebSocket error:", e);
+      ws.onerror = () => {
+        // Silent - will reconnect on close
       };
       
       ws.onclose = () => {
-        console.log("OKX WebSocket closed");
         setConnectedExchanges(prev => prev.filter(e => e !== "OKX"));
         
         if (reconnectTimeoutsRef.current.okx) {
@@ -362,12 +399,12 @@ export const useCryptoPrices = () => {
         }
         reconnectTimeoutsRef.current.okx = window.setTimeout(() => {
           connectOKX();
-        }, 5000);
+        }, 10000); // Longer delay for OKX
       };
       
       okxWsRef.current = ws;
     } catch (err) {
-      console.error("OKX connection error:", err);
+      // Silent connection errors
     }
   }, [updatePrice]);
 
