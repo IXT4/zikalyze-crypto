@@ -1206,66 +1206,143 @@ function buildPredictiveMemory(memory: MarketMemory[], currentPrice: number, cur
 }
 
 function analyzeRealChart(candles: Candle[], crypto: string, timeframe: string = '4h'): RealChartData {
-  const recent = candles.slice(-50); // Focus on last 50 candles (8+ days)
+  const recent = candles.slice(-50); // Focus on last 50 candles
   const currentCandle = candles[candles.length - 1];
   
-  // ═══ Swing High/Low Detection ═══
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📊 ENHANCED TECHNICAL INDICATOR CALCULATIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // Calculate ATR (Average True Range) for volatility measurement
+  const trueRanges: number[] = [];
+  for (let i = 1; i < recent.length; i++) {
+    const c = recent[i];
+    const prev = recent[i - 1];
+    const tr = Math.max(
+      c.high - c.low,
+      Math.abs(c.high - prev.close),
+      Math.abs(c.low - prev.close)
+    );
+    trueRanges.push(tr);
+  }
+  const atr14 = trueRanges.slice(-14).reduce((a, b) => a + b, 0) / 14;
+  const currentATR = trueRanges[trueRanges.length - 1];
+  const atrExpansion = currentATR > atr14 * 1.5;
+  const atrContraction = currentATR < atr14 * 0.6;
+  
+  // Calculate RSI from real price data
+  const closes = recent.map(c => c.close);
+  const gains: number[] = [];
+  const losses: number[] = [];
+  for (let i = 1; i < closes.length; i++) {
+    const change = closes[i] - closes[i - 1];
+    gains.push(change > 0 ? change : 0);
+    losses.push(change < 0 ? Math.abs(change) : 0);
+  }
+  const avgGain14 = gains.slice(-14).reduce((a, b) => a + b, 0) / 14;
+  const avgLoss14 = losses.slice(-14).reduce((a, b) => a + b, 0) / 14;
+  const rs = avgLoss14 === 0 ? 100 : avgGain14 / avgLoss14;
+  const realRSI = 100 - (100 / (1 + rs));
+  
+  // Calculate EMA 9, 21 for trend confirmation
+  const ema9 = calculateEMA(closes, 9);
+  const ema21 = calculateEMA(closes, 21);
+  const emasBullish = ema9 > ema21;
+  const emasCrossedRecently = Math.abs((ema9 - ema21) / ema21 * 100) < 0.5;
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔍 ENHANCED SWING HIGH/LOW DETECTION (More Precise)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
   const swingHighs: number[] = [];
   const swingLows: number[] = [];
+  const swingHighIndices: number[] = [];
+  const swingLowIndices: number[] = [];
   
-  for (let i = 2; i < recent.length - 2; i++) {
+  // Use 3-candle lookback for higher precision
+  for (let i = 3; i < recent.length - 3; i++) {
     const c = recent[i];
     const prev1 = recent[i - 1];
     const prev2 = recent[i - 2];
+    const prev3 = recent[i - 3];
     const next1 = recent[i + 1];
     const next2 = recent[i + 2];
+    const next3 = recent[i + 3];
     
-    // Swing High: Higher than 2 candles before and after
-    if (c.high > prev1.high && c.high > prev2.high && c.high > next1.high && c.high > next2.high) {
+    // Swing High: Higher than 3 candles before and after (stricter)
+    if (c.high > prev1.high && c.high > prev2.high && c.high > prev3.high &&
+        c.high > next1.high && c.high > next2.high && c.high > next3.high) {
       swingHighs.push(c.high);
+      swingHighIndices.push(i);
     }
-    // Swing Low: Lower than 2 candles before and after
-    if (c.low < prev1.low && c.low < prev2.low && c.low < next1.low && c.low < next2.low) {
+    // Swing Low: Lower than 3 candles before and after (stricter)
+    if (c.low < prev1.low && c.low < prev2.low && c.low < prev3.low &&
+        c.low < next1.low && c.low < next2.low && c.low < next3.low) {
       swingLows.push(c.low);
+      swingLowIndices.push(i);
     }
   }
   
-  // ═══ Trend Analysis (HH/HL/LH/LL) ═══
-  const recentHighs = swingHighs.slice(-4);
-  const recentLows = swingLows.slice(-4);
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📈 ENHANCED TREND ANALYSIS (HH/HL/LH/LL with Strength Scoring)
+  // ═══════════════════════════════════════════════════════════════════════════
   
-  let higherHighs = false;
-  let higherLows = false;
-  let lowerHighs = false;
-  let lowerLows = false;
+  const recentHighs = swingHighs.slice(-5);
+  const recentLows = swingLows.slice(-5);
   
-  if (recentHighs.length >= 2) {
-    higherHighs = recentHighs[recentHighs.length - 1] > recentHighs[recentHighs.length - 2];
-    lowerHighs = recentHighs[recentHighs.length - 1] < recentHighs[recentHighs.length - 2];
+  let hhCount = 0, hlCount = 0, lhCount = 0, llCount = 0;
+  
+  // Count consecutive HH/HL or LH/LL for strength
+  for (let i = 1; i < recentHighs.length; i++) {
+    if (recentHighs[i] > recentHighs[i - 1]) hhCount++;
+    else if (recentHighs[i] < recentHighs[i - 1]) lhCount++;
   }
-  if (recentLows.length >= 2) {
-    higherLows = recentLows[recentLows.length - 1] > recentLows[recentLows.length - 2];
-    lowerLows = recentLows[recentLows.length - 1] < recentLows[recentLows.length - 2];
+  for (let i = 1; i < recentLows.length; i++) {
+    if (recentLows[i] > recentLows[i - 1]) hlCount++;
+    else if (recentLows[i] < recentLows[i - 1]) llCount++;
   }
   
+  const higherHighs = hhCount >= 2;
+  const higherLows = hlCount >= 2;
+  const lowerHighs = lhCount >= 2;
+  const lowerLows = llCount >= 2;
+  
+  // Determine direction with enhanced logic
   let direction: 'BULLISH' | 'BEARISH' | 'SIDEWAYS' = 'SIDEWAYS';
   let trendStrength = 50;
   
+  // Strong uptrend: Multiple HH + HL + RSI healthy + EMAs bullish
   if (higherHighs && higherLows) {
     direction = 'BULLISH';
-    trendStrength = 75 + Math.min(recentHighs.length * 5, 20);
-  } else if (lowerHighs && lowerLows) {
+    trendStrength = 70 + (hhCount * 5) + (hlCount * 5);
+    if (emasBullish) trendStrength += 10;
+    if (realRSI > 50 && realRSI < 70) trendStrength += 5;
+  } 
+  // Strong downtrend: Multiple LH + LL + RSI weak + EMAs bearish
+  else if (lowerHighs && lowerLows) {
     direction = 'BEARISH';
-    trendStrength = 75 + Math.min(recentLows.length * 5, 20);
-  } else if (higherHighs && lowerLows) {
-    direction = 'SIDEWAYS';
-    trendStrength = 40;
-  } else if (lowerHighs && higherLows) {
+    trendStrength = 70 + (lhCount * 5) + (llCount * 5);
+    if (!emasBullish) trendStrength += 10;
+    if (realRSI < 50 && realRSI > 30) trendStrength += 5;
+  }
+  // Expanding range (HH + LL = volatility expansion)
+  else if (hhCount > 0 && llCount > 0) {
     direction = 'SIDEWAYS';
     trendStrength = 35;
   }
+  // Contracting range (LH + HL = squeeze)
+  else if (lhCount > 0 && hlCount > 0) {
+    direction = 'SIDEWAYS';
+    trendStrength = 40;
+  }
   
-  // ═══ Volume Profile Analysis ═══
+  // Cap at 100
+  trendStrength = Math.min(100, trendStrength);
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📊 ENHANCED VOLUME PROFILE ANALYSIS
+  // ═══════════════════════════════════════════════════════════════════════════
+  
   const volumes = recent.map(c => c.volume);
   const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
   const recentVolumes = volumes.slice(-5);
@@ -1273,117 +1350,283 @@ function analyzeRealChart(candles: Candle[], crypto: string, timeframe: string =
   const olderVolumes = volumes.slice(0, 20);
   const olderAvgVol = olderVolumes.reduce((a, b) => a + b, 0) / olderVolumes.length;
   
+  // Calculate volume weighted by price direction
+  let bullishVolume = 0, bearishVolume = 0;
+  for (const c of recent.slice(-10)) {
+    if (c.close > c.open) bullishVolume += c.volume;
+    else bearishVolume += c.volume;
+  }
+  const volumeBias = bullishVolume > bearishVolume * 1.3 ? 'BULLISH' : 
+                     bearishVolume > bullishVolume * 1.3 ? 'BEARISH' : 'NEUTRAL';
+  
   const currentVsAvg = (currentCandle.volume / avgVolume) * 100;
   const volumeTrend = recentAvgVol > olderAvgVol * 1.3 ? 'INCREASING' : 
                       recentAvgVol < olderAvgVol * 0.7 ? 'DECREASING' : 'STABLE';
   const climacticVolume = currentCandle.volume > avgVolume * 2.5;
   
-  // ═══ Candlestick Pattern Detection ═══
-  const candlePatterns: string[] = [];
-  const last = candles.slice(-5);
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🕯️ ENHANCED CANDLESTICK PATTERN DETECTION
+  // ═══════════════════════════════════════════════════════════════════════════
   
-  for (let i = 1; i < last.length; i++) {
+  const candlePatterns: string[] = [];
+  const last = candles.slice(-8); // More candles for pattern detection
+  
+  for (let i = 2; i < last.length; i++) {
     const c = last[i];
     const prev = last[i - 1];
+    const prev2 = last[i - 2];
     const body = Math.abs(c.close - c.open);
     const upperWick = c.high - Math.max(c.open, c.close);
     const lowerWick = Math.min(c.open, c.close) - c.low;
     const totalRange = c.high - c.low;
     const prevBody = Math.abs(prev.close - prev.open);
+    const prevTotalRange = prev.high - prev.low;
     
-    // Bullish Engulfing
+    // Skip if invalid range
+    if (totalRange <= 0) continue;
+    
+    // ═══ BULLISH PATTERNS ═══
+    
+    // Bullish Engulfing (with volume confirmation)
     if (c.close > c.open && prev.close < prev.open && 
-        c.close > prev.open && c.open < prev.close && body > prevBody * 1.2) {
-      candlePatterns.push('Bullish Engulfing (REAL) ✓');
+        c.close > prev.open && c.open < prev.close && 
+        body > prevBody * 1.1 && c.volume > prev.volume) {
+      candlePatterns.push('Bullish Engulfing ✓');
     }
     
-    // Bearish Engulfing
+    // Hammer (long lower wick, small upper wick, at bottom of range)
+    if (lowerWick > body * 2.5 && upperWick < body * 0.5 && totalRange > atr14 * 0.5) {
+      candlePatterns.push('Hammer ✓');
+    }
+    
+    // Inverted Hammer
+    if (upperWick > body * 2.5 && lowerWick < body * 0.5 && c.close > c.open) {
+      candlePatterns.push('Inverted Hammer ✓');
+    }
+    
+    // Morning Star (3-candle pattern)
+    if (i >= 2 && prev2.close < prev2.open && Math.abs(prev.close - prev.open) < prevTotalRange * 0.3 && c.close > c.open && c.close > (prev2.open + prev2.close) / 2) {
+      candlePatterns.push('Morning Star ✓');
+    }
+    
+    // Bullish Piercing
+    if (prev.close < prev.open && c.close > c.open && 
+        c.open < prev.low && c.close > (prev.open + prev.close) / 2 && c.close < prev.open) {
+      candlePatterns.push('Bullish Piercing ✓');
+    }
+    
+    // Three White Soldiers
+    if (i >= 2 && prev2.close > prev2.open && prev.close > prev.open && c.close > c.open &&
+        prev.close > prev2.close && c.close > prev.close) {
+      candlePatterns.push('Three White Soldiers ✓');
+    }
+    
+    // ═══ BEARISH PATTERNS ═══
+    
+    // Bearish Engulfing (with volume confirmation)
     if (c.close < c.open && prev.close > prev.open &&
-        c.open > prev.close && c.close < prev.open && body > prevBody * 1.2) {
-      candlePatterns.push('Bearish Engulfing (REAL) ✓');
+        c.open > prev.close && c.close < prev.open && 
+        body > prevBody * 1.1 && c.volume > prev.volume) {
+      candlePatterns.push('Bearish Engulfing ✓');
     }
     
-    // Hammer (bullish reversal)
-    if (totalRange > 0 && lowerWick > body * 2 && upperWick < body * 0.3 && c.close > c.open) {
-      candlePatterns.push('Hammer (REAL) ✓');
+    // Shooting Star (long upper wick, small lower wick)
+    if (upperWick > body * 2.5 && lowerWick < body * 0.5 && c.close < c.open && totalRange > atr14 * 0.5) {
+      candlePatterns.push('Shooting Star ✓');
     }
     
-    // Shooting Star (bearish reversal)
-    if (totalRange > 0 && upperWick > body * 2 && lowerWick < body * 0.3 && c.close < c.open) {
-      candlePatterns.push('Shooting Star (REAL) ✓');
+    // Hanging Man
+    if (lowerWick > body * 2.5 && upperWick < body * 0.5 && c.close < c.open) {
+      candlePatterns.push('Hanging Man ✓');
     }
     
-    // Doji
-    if (totalRange > 0 && body < totalRange * 0.1) {
-      candlePatterns.push('Doji — Indecision');
+    // Evening Star (3-candle pattern)
+    if (i >= 2 && prev2.close > prev2.open && Math.abs(prev.close - prev.open) < prevTotalRange * 0.3 && c.close < c.open && c.close < (prev2.open + prev2.close) / 2) {
+      candlePatterns.push('Evening Star ✓');
     }
     
-    // Strong Bullish Candle
-    if (body > totalRange * 0.7 && c.close > c.open && body > avgVolume * 0.0001) {
-      candlePatterns.push('Strong Bullish Candle ✓');
+    // Dark Cloud Cover
+    if (prev.close > prev.open && c.close < c.open && 
+        c.open > prev.high && c.close < (prev.open + prev.close) / 2 && c.close > prev.open) {
+      candlePatterns.push('Dark Cloud Cover ✓');
     }
     
-    // Strong Bearish Candle
-    if (body > totalRange * 0.7 && c.close < c.open) {
-      candlePatterns.push('Strong Bearish Candle ✓');
+    // Three Black Crows
+    if (i >= 2 && prev2.close < prev2.open && prev.close < prev.open && c.close < c.open &&
+        prev.close < prev2.close && c.close < prev.close) {
+      candlePatterns.push('Three Black Crows ✓');
+    }
+    
+    // ═══ NEUTRAL/REVERSAL PATTERNS ═══
+    
+    // Doji (very small body)
+    if (body < totalRange * 0.08) {
+      if (upperWick > body * 3 && lowerWick > body * 3) {
+        candlePatterns.push('Long-Legged Doji — Indecision');
+      } else if (lowerWick > body * 3 && upperWick < body) {
+        candlePatterns.push('Dragonfly Doji — Bullish');
+      } else if (upperWick > body * 3 && lowerWick < body) {
+        candlePatterns.push('Gravestone Doji — Bearish');
+      } else {
+        candlePatterns.push('Doji — Indecision');
+      }
+    }
+    
+    // Marubozu (very strong momentum)
+    if (body > totalRange * 0.85) {
+      candlePatterns.push(c.close > c.open ? 'Bullish Marubozu ✓' : 'Bearish Marubozu ✓');
+    }
+    
+    // Spinning Top (small body, equal wicks)
+    if (body < totalRange * 0.35 && Math.abs(upperWick - lowerWick) < totalRange * 0.15) {
+      candlePatterns.push('Spinning Top — Indecision');
     }
   }
   
-  // ═══ Support/Resistance from Swing Points ═══
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📍 ENHANCED SUPPORT/RESISTANCE DETECTION
+  // ═══════════════════════════════════════════════════════════════════════════
+  
   const allPrices = recent.flatMap(c => [c.high, c.low]);
   const priceRange = Math.max(...allPrices) - Math.min(...allPrices);
-  const tolerance = priceRange * 0.02;
+  const tolerance = priceRange * 0.015; // Tighter tolerance
   
-  // Cluster swing lows for support
-  const supports = clusterLevels(swingLows, tolerance).slice(0, 3);
-  // Cluster swing highs for resistance
-  const resistances = clusterLevels(swingHighs, tolerance).slice(0, 3);
+  // Cluster swing lows for support with touch count
+  const supports = clusterLevelsWithStrength(swingLows, tolerance);
+  // Cluster swing highs for resistance with touch count
+  const resistances = clusterLevelsWithStrength(swingHighs, tolerance);
   
-  // ═══ Real Pattern Recognition ═══
+  // Calculate distance to nearest levels
+  const nearestSupport = supports.length > 0 ? supports[0].level : null;
+  const nearestResistance = resistances.length > 0 ? resistances[0].level : null;
+  const distToSupport = nearestSupport ? ((currentCandle.close - nearestSupport) / currentCandle.close) * 100 : null;
+  const distToResistance = nearestResistance ? ((nearestResistance - currentCandle.close) / currentCandle.close) * 100 : null;
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🎯 ENHANCED REAL PATTERN RECOGNITION
+  // ═══════════════════════════════════════════════════════════════════════════
+  
   const realPatterns: string[] = [];
   
-  // Double Bottom Detection
+  // Double Bottom Detection (with validation)
   if (swingLows.length >= 2) {
     const lastTwo = swingLows.slice(-2);
-    if (Math.abs(lastTwo[0] - lastTwo[1]) < lastTwo[0] * 0.02) {
-      realPatterns.push('Double Bottom forming (REAL CHART)');
+    const priceDiff = Math.abs(lastTwo[0] - lastTwo[1]) / lastTwo[0];
+    if (priceDiff < 0.015 && currentCandle.close > Math.max(...lastTwo)) {
+      realPatterns.push(`Double Bottom ✓ ($${Math.min(...lastTwo).toFixed(2)})`);
     }
   }
   
-  // Double Top Detection
+  // Double Top Detection (with validation)
   if (swingHighs.length >= 2) {
     const lastTwo = swingHighs.slice(-2);
-    if (Math.abs(lastTwo[0] - lastTwo[1]) < lastTwo[0] * 0.02) {
-      realPatterns.push('Double Top forming (REAL CHART)');
+    const priceDiff = Math.abs(lastTwo[0] - lastTwo[1]) / lastTwo[0];
+    if (priceDiff < 0.015 && currentCandle.close < Math.min(...lastTwo)) {
+      realPatterns.push(`Double Top ✓ ($${Math.max(...lastTwo).toFixed(2)})`);
     }
   }
   
-  // Break of Structure
-  if (swingHighs.length >= 2 && currentCandle.close > swingHighs[swingHighs.length - 2]) {
-    realPatterns.push('Bullish Break of Structure (REAL)');
+  // Higher High / Higher Low confirmation
+  if (higherHighs && higherLows && emasBullish) {
+    realPatterns.push('HH + HL Structure Confirmed ✓');
   }
-  if (swingLows.length >= 2 && currentCandle.close < swingLows[swingLows.length - 2]) {
-    realPatterns.push('Bearish Break of Structure (REAL)');
+  if (lowerHighs && lowerLows && !emasBullish) {
+    realPatterns.push('LH + LL Structure Confirmed ✓');
   }
   
-  // Liquidity Sweep Detection
+  // Break of Structure (BOS) with volume
+  if (swingHighs.length >= 2 && currentCandle.close > swingHighs[swingHighs.length - 2]) {
+    if (currentCandle.volume > avgVolume) {
+      realPatterns.push('Bullish BOS with Volume ✓');
+    } else {
+      realPatterns.push('Bullish BOS (Low Volume)');
+    }
+  }
+  if (swingLows.length >= 2 && currentCandle.close < swingLows[swingLows.length - 2]) {
+    if (currentCandle.volume > avgVolume) {
+      realPatterns.push('Bearish BOS with Volume ✓');
+    } else {
+      realPatterns.push('Bearish BOS (Low Volume)');
+    }
+  }
+  
+  // Change of Character (CHoCH) detection
+  if (higherHighs && lowerLows) {
+    realPatterns.push('CHoCH — Trend Shift Possible');
+  }
+  
+  // Liquidity Sweep Detection (enhanced)
   if (swingLows.length > 0) {
-    const recentLow = Math.min(...swingLows.slice(-2));
-    if (currentCandle.low < recentLow && currentCandle.close > recentLow) {
-      realPatterns.push('Sellside Liquidity Sweep + Reclaim (REAL)');
+    const recentLow = Math.min(...swingLows.slice(-3));
+    if (currentCandle.low < recentLow && currentCandle.close > recentLow * 1.002) {
+      realPatterns.push('Sellside Liquidity Swept + Reclaim ✓');
     }
   }
   if (swingHighs.length > 0) {
-    const recentHigh = Math.max(...swingHighs.slice(-2));
-    if (currentCandle.high > recentHigh && currentCandle.close < recentHigh) {
-      realPatterns.push('Buyside Liquidity Sweep + Rejection (REAL)');
+    const recentHigh = Math.max(...swingHighs.slice(-3));
+    if (currentCandle.high > recentHigh && currentCandle.close < recentHigh * 0.998) {
+      realPatterns.push('Buyside Liquidity Swept + Rejection ✓');
     }
   }
   
-  // Volume Climax
+  // Fair Value Gap (FVG) Detection
+  for (let i = 2; i < recent.length; i++) {
+    const candle1 = recent[i - 2];
+    const candle3 = recent[i];
+    // Bullish FVG: Gap between candle1 high and candle3 low
+    if (candle3.low > candle1.high && (candle3.low - candle1.high) > atr14 * 0.3) {
+      if (i === recent.length - 1) {
+        realPatterns.push('Bullish FVG Formed ✓');
+      }
+    }
+    // Bearish FVG: Gap between candle1 low and candle3 high
+    if (candle3.high < candle1.low && (candle1.low - candle3.high) > atr14 * 0.3) {
+      if (i === recent.length - 1) {
+        realPatterns.push('Bearish FVG Formed ✓');
+      }
+    }
+  }
+  
+  // RSI divergence detection
+  if (realRSI < 30 && direction === 'BEARISH') {
+    realPatterns.push(`RSI Oversold (${realRSI.toFixed(0)}) — Bullish Divergence Potential`);
+  } else if (realRSI > 70 && direction === 'BULLISH') {
+    realPatterns.push(`RSI Overbought (${realRSI.toFixed(0)}) — Bearish Divergence Potential`);
+  }
+  
+  // ATR-based volatility patterns
+  if (atrExpansion) {
+    realPatterns.push('Volatility Expansion ✓');
+  } else if (atrContraction) {
+    realPatterns.push('Volatility Squeeze — Breakout Imminent');
+  }
+  
+  // Volume Climax with direction
   if (climacticVolume) {
-    realPatterns.push(currentCandle.close > currentCandle.open ? 
-      'Climactic Buying Volume (REAL)' : 'Climactic Selling Volume (REAL)');
+    const volDirection = currentCandle.close > currentCandle.open ? 'Buying' : 'Selling';
+    realPatterns.push(`Climactic ${volDirection} Volume ✓`);
+  }
+  
+  // Volume confirms price
+  if (volumeBias === 'BULLISH' && direction === 'BULLISH') {
+    realPatterns.push('Volume Confirms Bullish Trend ✓');
+  } else if (volumeBias === 'BEARISH' && direction === 'BEARISH') {
+    realPatterns.push('Volume Confirms Bearish Trend ✓');
+  } else if (volumeBias !== 'NEUTRAL' && volumeBias !== direction) {
+    realPatterns.push('Volume Divergence — Caution');
+  }
+  
+  // EMA cross detection
+  if (emasCrossedRecently) {
+    realPatterns.push(emasBullish ? 'EMA 9/21 Bullish Cross ✓' : 'EMA 9/21 Bearish Cross ✓');
+  }
+  
+  // Near support/resistance
+  if (distToSupport !== null && distToSupport < 1) {
+    realPatterns.push(`Near Support ($${nearestSupport?.toFixed(2)})`);
+  }
+  if (distToResistance !== null && distToResistance < 1) {
+    realPatterns.push(`Near Resistance ($${nearestResistance?.toFixed(2)})`);
   }
   
   return {
@@ -1407,15 +1650,29 @@ function analyzeRealChart(candles: Candle[], crypto: string, timeframe: string =
       volumeTrend,
       climacticVolume
     },
-    candlePatterns: [...new Set(candlePatterns)].slice(0, 5),
+    candlePatterns: [...new Set(candlePatterns)].slice(0, 6),
     supportResistance: {
-      supports,
-      resistances
+      supports: supports.map(s => s.level).slice(0, 4),
+      resistances: resistances.map(r => r.level).slice(0, 4)
     }
   };
 }
 
-function clusterLevels(levels: number[], tolerance: number): number[] {
+// Calculate EMA
+function calculateEMA(prices: number[], period: number): number {
+  if (prices.length < period) return prices[prices.length - 1];
+  
+  const multiplier = 2 / (period + 1);
+  let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  
+  for (let i = period; i < prices.length; i++) {
+    ema = (prices[i] - ema) * multiplier + ema;
+  }
+  return ema;
+}
+
+// Cluster levels with strength scoring
+function clusterLevelsWithStrength(levels: number[], tolerance: number): { level: number; touches: number }[] {
   if (levels.length === 0) return [];
   const sorted = [...levels].sort((a, b) => a - b);
   const clusters: number[][] = [];
@@ -1431,10 +1688,18 @@ function clusterLevels(levels: number[], tolerance: number): number[] {
   }
   clusters.push(currentCluster);
   
-  // Return average of each cluster, sorted by cluster size (most touches = strongest)
+  // Return with touch count for strength
   return clusters
-    .sort((a, b) => b.length - a.length)
-    .map(c => c.reduce((a, b) => a + b, 0) / c.length);
+    .map(c => ({ 
+      level: c.reduce((a, b) => a + b, 0) / c.length,
+      touches: c.length
+    }))
+    .sort((a, b) => b.touches - a.touches);
+}
+
+function clusterLevels(levels: number[], tolerance: number): number[] {
+  const result = clusterLevelsWithStrength(levels, tolerance);
+  return result.map(r => r.level);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
