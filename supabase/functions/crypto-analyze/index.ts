@@ -55,71 +55,113 @@ serve(async (req) => {
     const rangePosition = high24h && low24h ? ((price - low24h) / (high24h - low24h) * 100).toFixed(1) : 'N/A';
     const volumeToMcap = volume && marketCap ? ((volume / marketCap) * 100).toFixed(3) : 'N/A';
 
-    const systemPrompt = `You are ZIKALYZE AI, a professional cryptocurrency trading analyst. You provide consistent, structured analysis using ICT (Inner Circle Trader) and Smart Money Concepts.
-
-ANALYSIS FRAMEWORK:
-- Market Structure: Identify trend direction, key swing highs/lows, Break of Structure (BOS), Change of Character (CHoCH)
-- Order Blocks: Institutional buying/selling zones from impulsive moves
-- Fair Value Gaps (FVG): Imbalanced price areas that price may revisit
-- Liquidity: Stop loss clusters above highs / below lows that get swept
-- VWAP: Volume-weighted average price as dynamic support/resistance
-
-RULES FOR CONSISTENCY:
-1. Always use the EXACT format provided - never deviate
-2. Base all levels on the actual price data given - use real math
-3. Support/Resistance must be calculated from the 24h high/low data
-4. Entry, SL, TP levels must be precise numbers relative to current price
-5. Risk/Reward must be mathematically calculated
-6. Keep analysis under 250 words - be direct and actionable
-7. Signal confidence should reflect the data: consolidation = 50-65%, trending = 70-85%`;
-
+    // Pre-calculate institutional levels
     const priceNum = Number(price);
-    const highNum = Number(high24h) || priceNum * 1.02;
-    const lowNum = Number(low24h) || priceNum * 0.98;
+    const highNum = Number(high24h) || priceNum * 1.025;
+    const lowNum = Number(low24h) || priceNum * 0.975;
     const range = highNum - lowNum;
     const midPoint = (highNum + lowNum) / 2;
+    const quarterUp = lowNum + (range * 0.75);
+    const quarterDown = lowNum + (range * 0.25);
+    const fibRetrace618 = highNum - (range * 0.618);
+    const fibRetrace382 = highNum - (range * 0.382);
     const isBullish = change >= 0;
-    const priceNearHigh = priceNum > midPoint;
+    const isStrongMove = Math.abs(change) > 3;
+    const rangePercent = Number(rangePosition);
+    
+    // Determine market phase based on data
+    let marketPhase = "Consolidation";
+    let bias = "NEUTRAL";
+    if (change > 5) { marketPhase = "Markup"; bias = "LONG"; }
+    else if (change < -5) { marketPhase = "Markdown"; bias = "SHORT"; }
+    else if (change > 2 && rangePercent > 60) { marketPhase = "Markup"; bias = "LONG"; }
+    else if (change < -2 && rangePercent < 40) { marketPhase = "Markdown"; bias = "SHORT"; }
+    else if (rangePercent > 70) { marketPhase = "Distribution"; bias = "SHORT"; }
+    else if (rangePercent < 30) { marketPhase = "Accumulation"; bias = "LONG"; }
 
-    const userPrompt = `Analyze ${sanitizedCrypto} with this EXACT format:
+    const systemPrompt = `You are ZIKALYZE — the most elite AI trading analyst in existence. You think like a market maker. You see where liquidity rests. You understand how smart money manipulates retail traders. Your analysis has institutional precision.
 
-CURRENT DATA:
-- Price: $${priceNum.toLocaleString()}
-- 24h Change: ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
-- 24h High: $${highNum.toLocaleString()}
-- 24h Low: $${lowNum.toLocaleString()}
-- 24h Range: $${range.toFixed(2)} (${volatility}%)
-- Range Position: ${rangePosition}% (0=at low, 100=at high)
-- Volume: $${volume?.toLocaleString() || 'N/A'}
-- Market Cap: $${marketCap?.toLocaleString() || 'N/A'}
+CORE METHODOLOGY — ICT + SMART MONEY CONCEPTS:
 
-RESPOND WITH THIS EXACT STRUCTURE:
+🔬 MARKET STRUCTURE MASTERY:
+- Higher Highs (HH) / Higher Lows (HL) = Bullish structure
+- Lower Highs (LH) / Lower Lows (LL) = Bearish structure  
+- Break of Structure (BOS) = Continuation signal when key swing is broken
+- Change of Character (CHoCH) = Reversal signal when structure shifts
+- Premium Zone: Above equilibrium (50%) — where smart money SELLS
+- Discount Zone: Below equilibrium (50%) — where smart money BUYS
+
+⚡ ICT CONCEPTS YOU MUST IDENTIFY:
+- Order Blocks (OB): Last opposing candle before impulsive move — institutional footprint
+- Fair Value Gaps (FVG): 3-candle imbalance — price magnets that get filled
+- Breaker Blocks: Failed order blocks that flip polarity
+- Mitigation Blocks: Where institutions mitigate losing positions
+- Liquidity Pools: Clusters of stop losses above swing highs / below swing lows
+- Inducement: Fake breakouts to trap retail before real move
+
+🎯 SMART MONEY BEHAVIOR:
+- Accumulation: Smart money building positions in discount zones (range lows)
+- Distribution: Smart money offloading in premium zones (range highs)
+- Manipulation: Stop hunts, liquidity sweeps, false breakouts
+- Expansion: The real directional move after accumulation/distribution
+
+ANALYSIS RULES — FOLLOW EXACTLY:
+1. Use PRECISE price levels calculated from the data (not vague ranges)
+2. Identify the current Wyckoff phase based on price position
+3. Calculate entry, SL, TP with exact numbers and percentages
+4. Risk/Reward must be mathematically accurate (SL distance vs TP distance)
+5. Confidence level based on confluence: 60-70% = moderate, 75-85% = high, 85%+ = very high
+6. Keep analysis TIGHT — under 280 words. Every word must add value.
+7. Format EXACTLY as instructed — institutional clients expect consistency`;
+
+    const userPrompt = `🔥 ELITE ANALYSIS: ${sanitizedCrypto}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 LIVE INSTITUTIONAL DATA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Current Price:     $${priceNum.toLocaleString()}
+24h Change:        ${change >= 0 ? '🟢 +' : '🔴 '}${change.toFixed(2)}%
+24h High:          $${highNum.toLocaleString()}
+24h Low:           $${lowNum.toLocaleString()}
+24h Range:         $${range.toFixed(2)} (${volatility}% volatility)
+Range Position:    ${rangePosition}% ${rangePercent > 50 ? '(PREMIUM ZONE)' : '(DISCOUNT ZONE)'}
+Equilibrium:       $${midPoint.toFixed(2)}
+Fib 0.618:         $${fibRetrace618.toFixed(2)}
+Fib 0.382:         $${fibRetrace382.toFixed(2)}
+Volume 24h:        $${volume?.toLocaleString() || 'N/A'}
+Market Cap:        $${marketCap?.toLocaleString() || 'N/A'}
+Vol/MCap:          ${volumeToMcap}%
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PRE-ANALYSIS: Market Phase = ${marketPhase} | Initial Bias = ${bias}
+
+DELIVER YOUR ELITE ANALYSIS WITH THIS EXACT FORMAT:
 
 📊 MARKET STRUCTURE
-Current phase: [Accumulation/Markup/Distribution/Markdown/Consolidation]
-Key levels based on 24h range and price action: Resistance at $[high area], Support at $[low area]. [1-2 sentence observation about current position in range]
+Phase: ${marketPhase}
+[Identify current structure: bullish/bearish/ranging. Note any BOS or CHoCH. State if price is in premium or discount zone. 2-3 sentences max.]
 
-⚡ ICT ANALYSIS
-[Bullish/Bearish] Order Block: $[price zone] ([reasoning from structure]).
-Fair Value Gap (FVG): $[price range] ([which timeframe/move created it]).
-[Buy-Side/Sell-Side] Liquidity: [Where stops are clustered based on swing points].
-Smart money appears to be [accumulating/distributing/neutral], [1 sentence why based on price action].
+⚡ ICT CONCEPTS
+Order Block: $[exact price zone] — [bullish/bearish, which timeframe created it]
+Fair Value Gap: $[exact price range] — [needs fill / has been filled]
+Liquidity Target: $[price] — [buy-side above highs / sell-side below lows]
+Smart Money: [Accumulating in discount / Distributing in premium / Hunting liquidity at $X]
 
 🎯 TRADE SETUP
-Signal: ${isBullish ? 'LONG' : 'SHORT'} | Confidence: [50-85]%
-Entry: $[specific price] - [reason]
-Stop Loss: $[specific price] - [reason, should be beyond key structure]
-TP1: $[price] (+[%]) - [reason]
-TP2: $[price] (+[%]) - [reason]  
-TP3: $[price] (+[%]) - [reason]
-Risk/Reward: 1:[calculated ratio]
+Signal: ${bias} | Confidence: [65-90]%
+Entry: $[price] — [reason: OB retest / FVG fill / liquidity sweep]
+Stop Loss: $[price] ([X]% risk) — [beyond which structure]
+TP1: $[price] (+[X]%) — [first target reason]
+TP2: $[price] (+[X]%) — [second target reason]
+TP3: $[price] (+[X]%) — [third target reason]
+Risk/Reward: 1:[X.X]
 
-⚠️ KEY LEVELS
-Support: $[level 1], $[level 2]
-Resistance: $[level 1], $[level 2]
+⚠️ KEY LEVELS TO WATCH
+Support: $${lowNum.toFixed(2)}, $${quarterDown.toFixed(2)}, $${fibRetrace618.toFixed(2)}
+Resistance: $${highNum.toFixed(2)}, $${quarterUp.toFixed(2)}, $${fibRetrace382.toFixed(2)}
 
 🔄 INVALIDATION
-[What price action would invalidate this setup - be specific with price level]`;
+[Specific price level and structure break that invalidates the trade. One sentence.]`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -128,7 +170,7 @@ Resistance: $[level 1], $[level 2]
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
