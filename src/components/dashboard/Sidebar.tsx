@@ -35,10 +35,7 @@ const Sidebar = () => {
   const handleLogout = async () => {
     setIsLoggingOut(true);
     await signOut();
-    
-    setTimeout(() => {
-      navigate("/");
-    }, 800);
+    navigate("/");
   };
 
   if (isLoggingOut) {
