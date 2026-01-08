@@ -2,6 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    
+    <!-- Preconnect hints FIRST for critical external origins -->
+    <link rel="preconnect" href="https://api.exchangerate-api.com" />
+    <link rel="dns-prefetch" href="https://api.exchangerate-api.com" />
+    <link rel="preconnect" href="https://cdn.gpteng.co" crossorigin />
+    <link rel="dns-prefetch" href="https://cdn.gpteng.co" />
+    
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     
     <!-- PWA Meta Tags -->
@@ -11,12 +18,6 @@
     <meta name="apple-mobile-web-app-title" content="Zikalyze" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    
-    <!-- Preconnect to external origins to reduce connection time -->
-    <link rel="preconnect" href="https://api.exchangerate-api.com" crossorigin />
-    <link rel="dns-prefetch" href="https://api.exchangerate-api.com" />
-    <link rel="preconnect" href="https://cdn.gpteng.co" crossorigin />
-    <link rel="dns-prefetch" href="https://cdn.gpteng.co" />
     
     <title>Zikalyze - AI Crypto Trading Analysis</title>
     <meta name="description" content="AI-powered cryptocurrency trading analysis platform with smart money concepts, ICT analysis, and real-time market insights." />
