@@ -244,9 +244,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           <div className="flex items-center gap-3">
             <div className={cn(
               "flex h-10 w-10 items-center justify-center rounded-xl transition-all",
-              isAnalyzing 
-                ? "bg-primary/30 animate-pulse shadow-[0_0_20px_rgba(168,85,247,0.6)] shadow-primary/60" 
-                : "bg-primary/20"
+              isAnalyzing ? "bg-primary/30 animate-pulse" : "bg-primary/20"
             )}>
               <Brain className={cn("h-5 w-5 text-primary", isAnalyzing && "animate-spin")} />
             </div>

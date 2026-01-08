@@ -31,15 +31,10 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
-// Loading fallback with Zikalyze logo - optimized for fast perception
+// Loading fallback with Zikalyze logo
 const PageLoader = () => (
-  <div className="min-h-screen bg-background flex items-center justify-center animate-fade-in">
-    <div className="flex flex-col items-center gap-3">
-      <img src={zikalyzeLogo} alt="Loading" className="h-14 w-14 animate-pulse-soft" />
-      <div className="h-1 w-24 rounded-full bg-muted overflow-hidden">
-        <div className="h-full w-1/2 bg-primary rounded-full animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
-      </div>
-    </div>
+  <div className="min-h-screen bg-background flex items-center justify-center">
+    <img src={zikalyzeLogo} alt="Loading" className="h-16 w-16 animate-pulse" />
   </div>
 );
 

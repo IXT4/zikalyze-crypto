@@ -507,7 +507,7 @@ Bear Invalid: [Price + structure that invalidates bear case]`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -526,47 +526,9 @@ Bear Invalid: [Price + structure that invalidates bear case]`;
         });
       }
       if (response.status === 402) {
-        // Quota / billing limit at AI gateway. Instead of failing hard (503),
-        // stream a deterministic fallback analysis so the UI stays usable.
-        const fallbackText =
-          `\n\n⚠️ Service at capacity (quota reached). Showing fallback analysis (no AI).\n\n` +
-          `Symbol: ${sanitizedCrypto}\n` +
-          `Price: $${validatedPrice.toLocaleString()}\n` +
-          `24h Change: ${validatedChange >= 0 ? "+" : ""}${validatedChange.toFixed(2)}%\n` +
-          `24h Range: $${validatedLow24h.toFixed(2)} → $${validatedHigh24h.toFixed(2)}\n` +
-          `Volatility (24h): ${volatility}%\n` +
-          `Range Position: ${rangePosition}%\n` +
-          `ETF Flow (est.): ${etfFlowData.totalNetFlow} (${etfFlowData.flowTrend})\n\n` +
-          `Quick read:\n` +
-          `• Bias: ${bias}\n` +
-          `• Key Support: $${valueAreaLow.toFixed(2)}\n` +
-          `• Key Resistance: $${valueAreaHigh.toFixed(2)}\n` +
-          `• Bull invalidation: below $${(valueAreaLow - range * 0.05).toFixed(2)}\n` +
-          `• Bear invalidation: above $${(valueAreaHigh + range * 0.05).toFixed(2)}\n`;
-
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            const chunks = fallbackText.match(/.{1,120}/g) ?? [fallbackText];
-            for (const chunk of chunks) {
-              const payload = {
-                choices: [{ delta: { content: chunk } }],
-              };
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
-            }
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            controller.close();
-          },
-        });
-
-        return new Response(stream, {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            Connection: "keep-alive",
-          },
+        return new Response(JSON.stringify({ error: "Service temporarily unavailable." }), {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       
