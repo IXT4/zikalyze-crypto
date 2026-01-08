@@ -28,6 +28,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const charIndexRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const processingSteps = [
     "Connecting to AI...",
@@ -35,6 +36,16 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     "Analyzing patterns...",
     "Generating insights..."
   ];
+
+  // Smooth scroll to bottom
+  const scrollToBottom = useCallback(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({
+        top: scrollContainerRef.current.scrollHeight,
+        behavior: "smooth"
+      });
+    }
+  }, []);
 
   // Smooth typewriter effect using requestAnimationFrame
   useEffect(() => {
@@ -45,6 +56,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           setDisplayedText(fullAnalysis.slice(0, nextIndex));
           charIndexRef.current = nextIndex;
           lastFrameTimeRef.current = timestamp;
+          scrollToBottom();
         }
       }
       
@@ -62,7 +74,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [fullAnalysis]);
+  }, [fullAnalysis, scrollToBottom]);
 
   const runAnalysis = useCallback(async () => {
     setIsAnalyzing(true);
@@ -232,7 +244,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
             </Button>
           )}
-        <div className="min-h-[180px] max-h-[350px] overflow-y-auto p-4 rounded-xl bg-background/50 border border-border/50">
+        <div ref={scrollContainerRef} className="min-h-[180px] max-h-[350px] overflow-y-auto p-4 rounded-xl bg-background/50 border border-border/50 scroll-smooth">
           {!hasAnalyzed && !isAnalyzing && !displayedText ? (
             <div className="flex flex-col items-center justify-center h-full text-center py-6">
               <Brain className="h-10 w-10 text-primary/40 mb-3" />
