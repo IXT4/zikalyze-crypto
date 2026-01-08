@@ -1,10 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAnalysisHistory, AnalysisRecord } from "@/hooks/useAnalysisHistory";
 import { format } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface AIAnalyzerProps {
   crypto: string;
@@ -277,10 +288,32 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           <div className="mb-4 p-3 rounded-xl bg-secondary/50 border border-border/50 max-h-48 overflow-y-auto animate-fade-in">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-muted-foreground">Previous Analyses</span>
-              {(selectedHistory || hasAnalyzed) && (
-                <Button variant="ghost" size="sm" onClick={handleClearAnalysis} className="h-6 text-xs">
-                  Clear
-                </Button>
+              {(selectedHistory || hasAnalyzed || history.length > 0) && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs text-destructive hover:text-destructive hover:bg-destructive/10">
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Clear All
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Clear all analysis history?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete all {history.length} saved {history.length === 1 ? 'analysis' : 'analyses'} for {crypto.toUpperCase()}. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction 
+                        onClick={handleClearAnalysis}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Clear All
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
             </div>
             {historyLoading ? (
