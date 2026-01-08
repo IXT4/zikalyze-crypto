@@ -136,20 +136,21 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     // Defer the API call to avoid blocking initial render
-    // Use requestIdleCallback if available, otherwise setTimeout
-    const deferredFetch = () => {
+    // Use longer timeout to ensure it's out of the critical path
+    const timeoutId = setTimeout(() => {
       if ('requestIdleCallback' in window) {
-        (window as any).requestIdleCallback(() => fetchRates(), { timeout: 2000 });
+        (window as any).requestIdleCallback(() => fetchRates(), { timeout: 5000 });
       } else {
-        setTimeout(fetchRates, 100);
+        fetchRates();
       }
-    };
-    
-    deferredFetch();
+    }, 1000);
     
     // Refresh rates every hour
     const interval = setInterval(fetchRates, RATES_CACHE_DURATION);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(interval);
+    };
   }, [fetchRates]);
 
   const convertPrice = useCallback((usdPrice: number): number => {
