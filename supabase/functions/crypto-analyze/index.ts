@@ -3102,32 +3102,47 @@ ${probabilities.bullProb > probabilities.bearProb + 15 ?
 📊 Analysis Complete | Patterns: ${allPatterns.length} | Confidence: ${adjustedConfidence}%
 🎓 Your feedback helps improve future predictions!`;
 
-    // Stream the analysis
+    // Stream the analysis with proper cancellation handling
     const encoder = new TextEncoder();
+    let streamClosed = false;
+    
     const stream = new ReadableStream({
       start(controller) {
         const words = analysis.split(' ');
         let index = 0;
         
         const sendChunk = () => {
-          if (index < words.length) {
-            const chunkSize = Math.min(3 + Math.floor(Math.random() * 3), words.length - index);
-            const chunk = words.slice(index, index + chunkSize).join(' ') + ' ';
-            
-            const data = JSON.stringify({
-              choices: [{ delta: { content: chunk } }]
-            });
-            
-            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-            index += chunkSize;
-            setTimeout(sendChunk, 12 + Math.random() * 20);
-          } else {
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            controller.close();
+          // Check if stream was cancelled
+          if (streamClosed) return;
+          
+          try {
+            if (index < words.length) {
+              const chunkSize = Math.min(3 + Math.floor(Math.random() * 3), words.length - index);
+              const chunk = words.slice(index, index + chunkSize).join(' ') + ' ';
+              
+              const data = JSON.stringify({
+                choices: [{ delta: { content: chunk } }]
+              });
+              
+              controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+              index += chunkSize;
+              setTimeout(sendChunk, 12 + Math.random() * 20);
+            } else {
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+              streamClosed = true;
+            }
+          } catch {
+            // Stream was closed by client, stop sending
+            streamClosed = true;
           }
         };
         
         sendChunk();
+      },
+      cancel() {
+        // Called when client disconnects
+        streamClosed = true;
       }
     });
 
