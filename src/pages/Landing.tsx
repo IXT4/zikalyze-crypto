@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { TrendingUp, Sparkles, ArrowRight, BarChart3, Brain, Shield, Activity, Zap, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import zikalyzeLogo from "@/assets/zikalyze-logo.png";
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -12,6 +13,16 @@ const Landing = () => {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  // Handle navigation with loading state
+  const handleNavigate = useCallback((path: string) => {
+    setIsNavigating(true);
+    // Brief delay to show loading animation before navigation
+    setTimeout(() => {
+      navigate(path);
+    }, 400);
+  }, [navigate]);
 
   // Handle email verification callback
   useEffect(() => {
@@ -32,6 +43,24 @@ const Landing = () => {
     }
   }, [navigate, user, authLoading]);
 
+  // Loading overlay when navigating
+  if (isNavigating) {
+    return (
+      <div 
+        className="fixed inset-0 flex items-center justify-center z-50"
+        style={{ backgroundColor: '#0a0f1a' }}
+      >
+        <img 
+          src={zikalyzeLogo} 
+          alt="Loading"
+          width={64}
+          height={64}
+          className="h-16 w-16 animate-pulse opacity-80"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background overflow-hidden">
       {/* Animated Background */}
@@ -49,11 +78,12 @@ const Landing = () => {
           </div>
           <span className="text-xl font-bold text-foreground sm:text-2xl lg:text-3xl">Zikalyze</span>
         </div>
-        <Link to="/login">
-          <Button className="bg-primary hover:bg-primary/90 glow-cyan text-primary-foreground text-xs h-8 px-3 sm:text-sm sm:h-10 sm:px-4 lg:h-11 lg:px-6 lg:text-base">
-            {t("common.getStarted")} <ArrowRight className="ml-1.5 h-3 w-3 sm:ml-2 sm:h-4 sm:w-4" />
-          </Button>
-        </Link>
+        <Button 
+          onClick={() => handleNavigate("/auth")}
+          className="bg-primary hover:bg-primary/90 glow-cyan text-primary-foreground text-xs h-8 px-3 sm:text-sm sm:h-10 sm:px-4 lg:h-11 lg:px-6 lg:text-base"
+        >
+          {t("common.getStarted")} <ArrowRight className="ml-1.5 h-3 w-3 sm:ml-2 sm:h-4 sm:w-4" />
+        </Button>
       </header>
 
       {/* Hero Section */}
@@ -73,25 +103,30 @@ const Landing = () => {
         </p>
 
         <div className="flex flex-col gap-3 w-full max-w-sm sm:flex-row sm:max-w-none sm:gap-4 lg:gap-6">
-          <Link to="/login" className="w-full sm:w-auto">
-            <Button size="lg" className="w-full bg-primary hover:bg-primary/90 glow-cyan text-primary-foreground px-6 sm:px-8 lg:px-10 lg:h-14 lg:text-lg">
-              {t("landing.startFreeTrial")} <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
-          </Link>
-          <Link to="/dashboard" className="w-full sm:w-auto">
-            <Button size="lg" variant="outline" className="w-full border-primary/30 hover:bg-primary/10 hover:border-primary/50 lg:px-10 lg:h-14 lg:text-lg">
-              {t("landing.launchApp")} <Zap className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
-          </Link>
+          <Button 
+            size="lg" 
+            onClick={() => handleNavigate("/auth")}
+            className="w-full sm:w-auto bg-primary hover:bg-primary/90 glow-cyan text-primary-foreground px-6 sm:px-8 lg:px-10 lg:h-14 lg:text-lg"
+          >
+            {t("landing.startFreeTrial")} <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
+          </Button>
+          <Button 
+            size="lg" 
+            variant="outline" 
+            onClick={() => handleNavigate("/auth")}
+            className="w-full sm:w-auto border-primary/30 hover:bg-primary/10 hover:border-primary/50 lg:px-10 lg:h-14 lg:text-lg"
+          >
+            {t("landing.launchApp")} <Zap className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
+          </Button>
         </div>
 
         {/* Dashboard Preview - Clickable */}
         <div 
           className="mt-12 w-full max-w-6xl animate-float cursor-pointer group/preview sm:mt-20 lg:mt-24 xl:max-w-7xl"
-          onClick={() => navigate("/auth")}
+          onClick={() => handleNavigate("/auth")}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
+          onKeyDown={(e) => e.key === "Enter" && handleNavigate("/auth")}
         >
           <div className="relative rounded-xl border border-border bg-card/50 backdrop-blur-xl p-3 shadow-2xl transition-all duration-300 group-hover/preview:border-primary/50 group-hover/preview:shadow-primary/20 sm:rounded-2xl sm:p-6 lg:p-8 xl:p-10">
             {/* Mini Dashboard Header */}
@@ -217,10 +252,10 @@ const Landing = () => {
         <div className="mt-16 grid gap-4 grid-cols-1 w-full max-w-5xl sm:mt-24 sm:gap-6 md:grid-cols-3 lg:mt-32 lg:gap-8 xl:max-w-6xl">
           <div 
             className="group rounded-xl border border-border bg-card/50 backdrop-blur-sm p-5 transition-all hover:border-primary/50 hover:bg-card cursor-pointer sm:rounded-2xl sm:p-6 lg:p-8 xl:p-10"
-            onClick={() => navigate("/auth")}
+            onClick={() => handleNavigate("/auth")}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
+            onKeyDown={(e) => e.key === "Enter" && handleNavigate("/auth")}
           >
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 group-hover:glow-cyan transition-all sm:mb-4 sm:h-12 sm:w-12 lg:mb-5 lg:h-16 lg:w-16 sm:rounded-xl">
               <Brain className="h-5 w-5 text-primary sm:h-6 sm:w-6 lg:h-8 lg:w-8" />
@@ -233,10 +268,10 @@ const Landing = () => {
 
           <div 
             className="group rounded-xl border border-border bg-card/50 backdrop-blur-sm p-5 transition-all hover:border-accent/50 hover:bg-card cursor-pointer sm:rounded-2xl sm:p-6 lg:p-8 xl:p-10"
-            onClick={() => navigate("/auth")}
+            onClick={() => handleNavigate("/auth")}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
+            onKeyDown={(e) => e.key === "Enter" && handleNavigate("/auth")}
           >
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/20 group-hover:glow-purple transition-all sm:mb-4 sm:h-12 sm:w-12 lg:mb-5 lg:h-16 lg:w-16 sm:rounded-xl">
               <BarChart3 className="h-5 w-5 text-accent sm:h-6 sm:w-6 lg:h-8 lg:w-8" />
@@ -249,10 +284,10 @@ const Landing = () => {
 
           <div 
             className="group rounded-xl border border-border bg-card/50 backdrop-blur-sm p-5 transition-all hover:border-primary/50 hover:bg-card cursor-pointer sm:rounded-2xl sm:p-6 lg:p-8 xl:p-10"
-            onClick={() => navigate("/auth")}
+            onClick={() => handleNavigate("/auth")}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
+            onKeyDown={(e) => e.key === "Enter" && handleNavigate("/auth")}
           >
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 group-hover:glow-cyan transition-all sm:mb-4 sm:h-12 sm:w-12 lg:mb-5 lg:h-16 lg:w-16 sm:rounded-xl">
               <Shield className="h-5 w-5 text-primary sm:h-6 sm:w-6 lg:h-8 lg:w-8" />
