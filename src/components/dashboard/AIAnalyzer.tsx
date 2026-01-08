@@ -34,7 +34,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const lastFrameTimeRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
-  const { history, loading: historyLoading, saveAnalysis } = useAnalysisHistory(crypto);
+  const { history, loading: historyLoading, saveAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
 
   const processingSteps = [
     "Connecting to AI...",
@@ -191,12 +191,14 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     toast.success(`Loaded analysis from ${format(new Date(record.created_at), "MMM d, h:mm a")}`);
   };
 
-  const handleClearAnalysis = () => {
+  const handleClearAnalysis = async () => {
     setSelectedHistory(null);
     setDisplayedText("");
     setFullAnalysis("");
     setHasAnalyzed(false);
     charIndexRef.current = 0;
+    await clearAllHistory();
+    toast.success("Analysis history cleared");
   };
 
   const sentiment = change >= 0 ? "bullish" : "bearish";
