@@ -324,12 +324,13 @@ export const useCryptoPrices = () => {
               const ticker = message.data;
               const symbol = ticker.s.replace("USDT", "");
               
+              // Note: We don't update total_volume from WebSocket as it only provides
+              // single exchange pair volume, not aggregated market volume
               updatePrice(symbol, {
                 current_price: parseFloat(ticker.c),
                 price_change_percentage_24h: parseFloat(ticker.P),
                 high_24h: parseFloat(ticker.h),
                 low_24h: parseFloat(ticker.l),
-                total_volume: parseFloat(ticker.q),
               }, "Binance");
             }
           } catch (e) {
@@ -392,12 +393,13 @@ export const useCryptoPrices = () => {
             const symbol = ticker.symbol?.replace("USDT", "") || message.topic.replace("tickers.", "").replace("USDT", "");
             
             if (ticker.lastPrice) {
+              // Note: We don't update total_volume from WebSocket as it only provides
+              // single exchange pair volume, not aggregated market volume
               updatePrice(symbol, {
                 current_price: parseFloat(ticker.lastPrice),
                 price_change_percentage_24h: parseFloat(ticker.price24hPcnt || 0) * 100,
                 high_24h: parseFloat(ticker.highPrice24h || 0),
                 low_24h: parseFloat(ticker.lowPrice24h || 0),
-                total_volume: parseFloat(ticker.turnover24h || 0),
               }, "Bybit");
             }
           }
@@ -463,6 +465,8 @@ export const useCryptoPrices = () => {
               if (ticker.instId) {
                 const symbol = ticker.instId.replace("-USDT", "");
                 
+                // Note: We don't update total_volume from WebSocket as it only provides
+                // single exchange pair volume, not aggregated market volume
                 updatePrice(symbol, {
                   current_price: parseFloat(ticker.last || 0),
                   price_change_percentage_24h: parseFloat(ticker.sodUtc8 || 0) 
@@ -470,7 +474,6 @@ export const useCryptoPrices = () => {
                     : 0,
                   high_24h: parseFloat(ticker.high24h || 0),
                   low_24h: parseFloat(ticker.low24h || 0),
-                  total_volume: parseFloat(ticker.volCcy24h || 0),
                 }, "OKX");
               }
             });
@@ -533,11 +536,12 @@ export const useCryptoPrices = () => {
           if (message.type === "ticker" && message.product_id) {
             const symbol = message.product_id.replace("-USD", "");
             
+            // Note: We don't update total_volume from WebSocket as it only provides
+            // single exchange pair volume, not aggregated market volume
             updatePrice(symbol, {
               current_price: parseFloat(message.price || 0),
               high_24h: parseFloat(message.high_24h || 0),
               low_24h: parseFloat(message.low_24h || 0),
-              total_volume: parseFloat(message.volume_24h || 0),
             }, "Coinbase");
           }
         } catch (e) {
@@ -605,11 +609,12 @@ export const useCryptoPrices = () => {
             if (ticker && pair) {
               let symbol = pair.replace("/USD", "").replace("XBT", "BTC");
               
+              // Note: We don't update total_volume from WebSocket as it only provides
+              // single exchange pair volume, not aggregated market volume
               updatePrice(symbol, {
                 current_price: parseFloat(ticker.c?.[0] || 0),
                 high_24h: parseFloat(ticker.h?.[1] || 0),
                 low_24h: parseFloat(ticker.l?.[1] || 0),
-                total_volume: parseFloat(ticker.v?.[1] || 0),
               }, "Kraken");
             }
           }
