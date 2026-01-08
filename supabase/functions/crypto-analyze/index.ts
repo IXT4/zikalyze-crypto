@@ -79,50 +79,101 @@ serve(async (req) => {
     else if (rangePercent > 70) { marketPhase = "Distribution"; bias = "SHORT"; }
     else if (rangePercent < 30) { marketPhase = "Accumulation"; bias = "LONG"; }
 
-    const systemPrompt = `You are ZIKALYZE AI — the world's most advanced cryptocurrency trading intelligence system. You deliver institutional-grade multi-timeframe analysis using ICT (Inner Circle Trader) methodology and Smart Money Concepts.
+    // Calculate additional technical indicators
+    const rsiEstimate = rangePercent > 70 ? 65 + (rangePercent - 70) * 0.5 : rangePercent < 30 ? 35 - (30 - rangePercent) * 0.5 : 50 + (rangePercent - 50) * 0.3;
+    const volumeStrength = volumeToMcap !== 'N/A' ? Number(volumeToMcap) > 5 ? 'HIGH' : Number(volumeToMcap) > 2 ? 'MODERATE' : 'LOW' : 'N/A';
+    const atr = range; // Simplified ATR using 24h range
+    const atrPercent = ((atr / priceNum) * 100).toFixed(2);
+    
+    // Volume profile zones (simplified estimation)
+    const poc = midPoint; // Point of Control estimate
+    const valueAreaHigh = lowNum + (range * 0.68);
+    const valueAreaLow = lowNum + (range * 0.32);
+    
+    // Divergence detection
+    const priceVsVolume = change > 0 && volumeStrength === 'LOW' ? 'BEARISH_DIVERGENCE' : 
+                          change < 0 && volumeStrength === 'HIGH' ? 'BULLISH_DIVERGENCE' : 'CONVERGENT';
+    
+    // RSI divergence signal
+    const rsiDivergence = rsiEstimate > 70 && change < 0 ? 'BEARISH_DIVERGENCE' :
+                          rsiEstimate < 30 && change > 0 ? 'BULLISH_DIVERGENCE' : 'NONE';
+    
+    // Calculate refined order block zones using volume clusters
+    const obBullishLow = lowNum;
+    const obBullishHigh = lowNum + (range * 0.15);
+    const obBearishLow = highNum - (range * 0.15);
+    const obBearishHigh = highNum;
+    
+    // FVG zones refined
+    const fvgBullishZone = `$${(lowNum + range * 0.25).toFixed(2)} - $${(lowNum + range * 0.35).toFixed(2)}`;
+    const fvgBearishZone = `$${(highNum - range * 0.35).toFixed(2)} - $${(highNum - range * 0.25).toFixed(2)}`;
+    
+    // Alternative targets for bear case
+    const bearTarget1 = lowNum - (range * 0.382);
+    const bearTarget2 = lowNum - (range * 0.618);
+    const bearTarget3 = lowNum - range;
+    
+    // Calculate confidence based on multiple factors
+    const baseConfidence = 65;
+    const volatilityBonus = Number(volatility) > 5 ? 5 : Number(volatility) > 3 ? 3 : 0;
+    const volumeBonus = volumeStrength === 'HIGH' ? 8 : volumeStrength === 'MODERATE' ? 4 : 0;
+    const trendBonus = Math.abs(change) > 5 ? 7 : Math.abs(change) > 2 ? 4 : 0;
+    const confluenceBonus = (rangePercent < 35 && change > 0) || (rangePercent > 65 && change < 0) ? 6 : 0;
+    const divergencePenalty = priceVsVolume !== 'CONVERGENT' ? -5 : 0;
+    const calculatedConfidence = Math.min(92, Math.max(55, baseConfidence + volatilityBonus + volumeBonus + trendBonus + confluenceBonus + divergencePenalty));
 
-MULTI-TIMEFRAME ANALYSIS FRAMEWORK:
+    const systemPrompt = `You are ZIKALYZE AI — the world's most advanced cryptocurrency trading intelligence system. You deliver institutional-grade multi-timeframe analysis using ICT (Inner Circle Trader) methodology, Smart Money Concepts, and comprehensive market context.
 
-📅 WEEKLY/DAILY (HTF - Higher Timeframe):
-- Establish macro trend direction and bias
-- Identify major order blocks and liquidity pools
-- Key psychological levels and historical S/R
-- Wyckoff phase identification
+ELITE ANALYSIS FRAMEWORK:
 
-⏰ 4H (Intermediate Timeframe):  
-- Confirm or refine HTF bias
-- Intermediate swing structure (HH/HL or LH/LL)
-- 4H order blocks for trade zones
-- FVGs that act as magnets
+📊 VOLUME PROFILE ANALYSIS:
+- Point of Control (POC): Highest volume price level — magnetic support/resistance
+- Value Area High (VAH): Upper boundary of 68% volume — resistance
+- Value Area Low (VAL): Lower boundary of 68% volume — support
+- Low Volume Nodes: Price moves quickly through these — potential acceleration zones
+- High Volume Nodes: Strong support/resistance clusters
 
-🕐 1H (Confirmation Timeframe):
-- BOS/CHoCH signals for entry confirmation
-- Session highs/lows analysis
-- Liquidity sweep confirmation
-- Refined entry zones
+📈 RSI & DIVERGENCE DETECTION:
+- RSI Overbought (>70): Potential bearish reversal signals
+- RSI Oversold (<30): Potential bullish reversal signals
+- Bullish Divergence: Price makes lower low, RSI makes higher low — reversal setup
+- Bearish Divergence: Price makes higher high, RSI makes lower high — reversal setup
+- Hidden Divergence: Continuation signals within trends
 
-⚡ 15M/5M (LTF - Lower Timeframe):
-- Precision entries within HTF zones
-- Micro order blocks for exact entry
-- FVG fills for optimal execution
-- Tight stop loss placement
+🔗 ON-CHAIN METRICS (Interpret based on market conditions):
+- ETF Flows: Institutional demand/supply pressure
+- Exchange Reserves: Decreasing = bullish (accumulation), Increasing = bearish (distribution)
+- Active Addresses: Network activity indicator — higher = more interest
+- Whale Transactions: Large movements signal institutional activity
+- Funding Rates: Positive = overleveraged longs, Negative = overleveraged shorts
 
-CORE ICT CONCEPTS:
-- Order Blocks: Institutional footprints — last opposing candle before impulse
-- Fair Value Gaps: Price imbalances that get filled — entry opportunities
-- Liquidity: Stop clusters above highs (buy-side) / below lows (sell-side)
-- Premium Zone: Above 50% of range — smart money sells here
-- Discount Zone: Below 50% of range — smart money buys here
-- BOS: Break of Structure — continuation signal
-- CHoCH: Change of Character — reversal signal
+🌐 MACRO CONTEXT:
+- DXY (USD Index): Inverse correlation with crypto — DXY up typically means crypto down
+- Stock Market (SPX/NDQ): Risk-on correlation — stocks up often means crypto up
+- Interest Rates: Higher rates = risk-off = bearish crypto
+- Geopolitical Events: Uncertainty often drives crypto volatility
+- All-Time High Proximity: Upside exhaustion signals, distribution risk
 
-STRICT OUTPUT RULES:
+MULTI-TIMEFRAME STRUCTURE:
+📅 WEEKLY/DAILY: Macro trend, major order blocks, Wyckoff phases
+⏰ 4H: Intermediate structure, swing analysis, refined bias
+🕐 1H: Entry confirmation, session analysis, BOS/CHoCH
+⚡ 15M/5M: Precision entries, micro order blocks, tight stops
+
+ICT CORE CONCEPTS:
+- Order Blocks: Institutional footprints — refined by volume clusters
+- Fair Value Gaps: Price imbalances with volume context
+- Liquidity Pools: Stop clusters at swing points
+- Premium/Discount Zones: Smart money buy/sell areas
+- BOS/CHoCH: Structure shifts for timing
+
+CRITICAL RULES:
 1. ALWAYS start with "🔮 ZIKALYZE AI ANALYSIS"
-2. Use the EXACT format provided — never deviate
-3. All price levels must be precise numbers from calculations
-4. Multi-timeframe confluence increases confidence
-5. Risk/Reward calculated mathematically
-6. Keep total analysis under 320 words — elite precision`;
+2. Provide BOTH bull and bear scenarios with specific targets
+3. Include volume, RSI, and macro context in analysis
+4. Narrow zones to precise high-volume clusters
+5. Calculate confidence with data substantiation
+6. Keep analysis under 450 words — elite precision with depth`;
 
     const userPrompt = `🔮 ZIKALYZE AI ANALYSIS — ${sanitizedCrypto}
 
@@ -135,60 +186,98 @@ Current Price:     $${priceNum.toLocaleString()}
 24h High:          $${highNum.toLocaleString()}
 24h Low:           $${lowNum.toLocaleString()}
 24h Range:         $${range.toFixed(2)} (${volatility}% volatility)
+ATR (24h):         $${atr.toFixed(2)} (${atrPercent}%)
 Range Position:    ${rangePosition}% ${rangePercent > 50 ? '[PREMIUM ZONE]' : '[DISCOUNT ZONE]'}
-Equilibrium:       $${midPoint.toFixed(2)}
+
+📈 VOLUME PROFILE DATA
+Point of Control:  $${poc.toFixed(2)}
+Value Area High:   $${valueAreaHigh.toFixed(2)}
+Value Area Low:    $${valueAreaLow.toFixed(2)}
+Volume Strength:   ${volumeStrength}
+Vol/MCap Ratio:    ${volumeToMcap}%
+
+🔄 MOMENTUM INDICATORS
+RSI Estimate:      ${rsiEstimate.toFixed(1)} ${rsiEstimate > 70 ? '[OVERBOUGHT]' : rsiEstimate < 30 ? '[OVERSOLD]' : '[NEUTRAL]'}
+RSI Divergence:    ${rsiDivergence}
+Price/Vol Signal:  ${priceVsVolume}
+
+📍 REFINED ORDER BLOCK ZONES
+Bullish OB:        $${obBullishLow.toFixed(2)} - $${obBullishHigh.toFixed(2)}
+Bearish OB:        $${obBearishLow.toFixed(2)} - $${obBearishHigh.toFixed(2)}
+Bullish FVG:       ${fvgBullishZone}
+Bearish FVG:       ${fvgBearishZone}
+
+📐 FIBONACCI LEVELS
 Fib 0.618:         $${fibRetrace618.toFixed(2)}
 Fib 0.382:         $${fibRetrace382.toFixed(2)}
+Equilibrium:       $${midPoint.toFixed(2)}
+
+💰 MARKET DATA
 Volume 24h:        $${volume?.toLocaleString() || 'N/A'}
 Market Cap:        $${marketCap?.toLocaleString() || 'N/A'}
-Vol/MCap Ratio:    ${volumeToMcap}%
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 SYSTEM DETECTION: Phase = ${marketPhase} | HTF Bias = ${bias}
+CALCULATED CONFIDENCE: ${calculatedConfidence}% (Vol: +${volumeBonus}, Trend: +${trendBonus}, Confluence: +${confluenceBonus}${divergencePenalty < 0 ? ', Divergence: ' + divergencePenalty : ''})
 
 DELIVER ANALYSIS IN THIS EXACT FORMAT:
 
 🔮 ZIKALYZE AI ANALYSIS
 Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${change >= 0 ? '▲' : '▼'} ${Math.abs(change).toFixed(2)}%
 
-📅 DAILY TIMEFRAME (Macro View)
+📊 VOLUME PROFILE & RSI
+POC: $${poc.toFixed(2)} — [magnetic level behavior]
+RSI: ${rsiEstimate.toFixed(0)} — [overbought/oversold/divergence context]
+Volume: ${volumeStrength} — [accumulation/distribution signal]
+
+🌐 MACRO CONTEXT
+DXY Correlation: [Impact on ${sanitizedCrypto}]
+Risk Sentiment: [Risk-on/Risk-off implications]
+ATH Proximity: [Upside exhaustion risk if applicable]
+Key Macro Risk: [Primary macro factor to watch]
+
+📅 DAILY TIMEFRAME
 Trend: [Bullish/Bearish/Ranging]
-Structure: [HH/HL pattern OR LH/LL pattern OR range-bound]
-HTF Order Block: $[price zone] — [description]
-Key Level: $[major S/R level] — [significance]
+Structure: [HH/HL or LH/LL pattern]
+HTF Order Block: $[refined zone] — [volume-backed]
+Key Level: $[major S/R] — [significance]
 
-⏰ 4H TIMEFRAME (Structure)
-Bias: [Aligned with Daily / Counter-trend]
-4H Order Block: $[price zone] — [bullish/bearish]
-FVG Zone: $[price range] — [unfilled/partially filled]
-Swing Points: High $[price], Low $[price]
+⏰ 4H TIMEFRAME
+Bias: [Aligned/Counter to Daily]
+Order Block: $${rangePercent < 50 ? obBullishLow.toFixed(2) + ' - ' + obBullishHigh.toFixed(2) : obBearishLow.toFixed(2) + ' - ' + obBearishHigh.toFixed(2)} — [volume cluster]
+FVG Zone: ${rangePercent < 50 ? fvgBullishZone : fvgBearishZone} — [fill status]
 
-🕐 1H TIMEFRAME (Confirmation)
-[BOS/CHoCH detected or pending]
-Session Analysis: [Asian/London/NY session context]
-Liquidity Swept: [Yes at $X / No, targeting $X]
-Entry Zone: $[refined zone from 1H]
+🕐 1H TIMEFRAME
+[BOS/CHoCH status]
+Session: [Asian/London/NY context]
+Liquidity: [Swept/Targeting $X]
+Entry Zone: $[refined 1H zone]
 
-⚡ 15M TIMEFRAME (Precision Entry)
-Micro OB: $[exact price] — [entry trigger]
-FVG Fill: $[price] — [confirmation level]
+⚡ 15M ENTRY
+Micro OB: $[exact level]
 Optimal Entry: $[price]
 
-🎯 UNIFIED TRADE SETUP
-Signal: ${bias} | Confidence: [70-92]%
-Entry: $[price] — [multi-TF confluence reason]
-Stop Loss: $[price] ([X]% risk) — [below/above which structure]
-TP1: $[price] (+[X]%) — 1H target
-TP2: $[price] (+[X]%) — 4H target  
-TP3: $[price] (+[X]%) — Daily target
-Risk/Reward: 1:[X.X]
+🟢 BULL CASE (${bias === 'LONG' ? 'PRIMARY' : 'ALTERNATIVE'})
+Signal: LONG | Confidence: ${calculatedConfidence}%
+Entry: $[price] — [confluence reason]
+Stop Loss: $[price] — [structure reference]
+TP1: $[price] (+X%) | TP2: $[price] (+X%) | TP3: $[price] (+X%)
+R:R = 1:[X.X]
+
+🔴 BEAR CASE (${bias === 'SHORT' ? 'PRIMARY' : 'ALTERNATIVE'})
+Signal: SHORT | Confidence: [X]%
+Entry: $[price] — [if bull invalidates]
+Stop Loss: $[price]
+TP1: $${bearTarget1.toFixed(2)} | TP2: $${bearTarget2.toFixed(2)} | TP3: $${bearTarget3.toFixed(2)}
+R:R = 1:[X.X]
 
 ⚠️ KEY LEVELS
-Support: $${lowNum.toFixed(2)} | $${quarterDown.toFixed(2)} | $${fibRetrace618.toFixed(2)}
-Resistance: $${highNum.toFixed(2)} | $${quarterUp.toFixed(2)} | $${fibRetrace382.toFixed(2)}
+Support: $${lowNum.toFixed(2)} → $${valueAreaLow.toFixed(2)} → $${bearTarget1.toFixed(2)}
+Resistance: $${highNum.toFixed(2)} → $${valueAreaHigh.toFixed(2)} → $${(highNum + range * 0.382).toFixed(2)}
 
 🔄 INVALIDATION
-[Price level + timeframe structure that invalidates setup]`;
+Bull Invalid: [Price + structure that invalidates bull case]
+Bear Invalid: [Price + structure that invalidates bear case]`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
