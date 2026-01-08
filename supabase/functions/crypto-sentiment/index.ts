@@ -141,7 +141,75 @@ async function fetchTrendingCoins(): Promise<string[]> {
   }
 }
 
-// Calculate sentiment score based on real market data
+// Fetch REAL news from CryptoCompare (free, no API key required)
+async function fetchRealCryptoNews(crypto: string): Promise<Array<{
+  source: string;
+  headline: string;
+  sentiment: 'bullish' | 'bearish' | 'neutral';
+  time: string;
+  url: string;
+}>> {
+  try {
+    // CryptoCompare news API - free tier, no auth needed
+    const response = await fetch(
+      `https://min-api.cryptocompare.com/data/v2/news/?categories=${crypto}&excludeCategories=Sponsored`
+    );
+    
+    if (!response.ok) throw new Error('CryptoCompare news API failed');
+    
+    const data = await response.json();
+    
+    if (data.Data && Array.isArray(data.Data)) {
+      const news = data.Data.slice(0, 8).map((article: any) => {
+        // Analyze headline for sentiment
+        const headline = article.title || '';
+        const body = (article.body || '').toLowerCase();
+        const combined = (headline + ' ' + body).toLowerCase();
+        
+        let sentiment: 'bullish' | 'bearish' | 'neutral' = 'neutral';
+        
+        const bullishWords = ['surge', 'rally', 'soar', 'gain', 'bull', 'rise', 'high', 'boost', 'breakout', 'pump', 'moon', 'growth', 'adoption', 'record', 'milestone'];
+        const bearishWords = ['crash', 'drop', 'fall', 'bear', 'plunge', 'sink', 'low', 'dump', 'decline', 'fear', 'warning', 'risk', 'concern', 'sell', 'loss'];
+        
+        const bullishCount = bullishWords.filter(w => combined.includes(w)).length;
+        const bearishCount = bearishWords.filter(w => combined.includes(w)).length;
+        
+        if (bullishCount > bearishCount) sentiment = 'bullish';
+        else if (bearishCount > bullishCount) sentiment = 'bearish';
+        
+        // Format time ago
+        const publishedAt = article.published_on * 1000;
+        const now = Date.now();
+        const diffMs = now - publishedAt;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        
+        let timeAgo = '';
+        if (diffMins < 60) timeAgo = `${diffMins}m ago`;
+        else if (diffHours < 24) timeAgo = `${diffHours}h ago`;
+        else timeAgo = `${diffDays}d ago`;
+        
+        return {
+          source: article.source_info?.name || article.source || 'Crypto News',
+          headline: headline.length > 120 ? headline.substring(0, 117) + '...' : headline,
+          sentiment,
+          time: timeAgo,
+          url: article.url || article.guid || '#'
+        };
+      });
+      
+      console.log(`Fetched ${news.length} real news articles for ${crypto}`);
+      return news;
+    }
+    
+    throw new Error('No news data');
+  } catch (error) {
+    console.error('CryptoCompare news fetch error:', error);
+    return []; // Return empty, will fall back to generated news
+  }
+}
+
 function calculateSentimentScore(
   priceChange24h: number,
   priceChange7d: number,
@@ -438,15 +506,17 @@ serve(async (req) => {
 
     console.log(`Fetching real sentiment data for ${crypto}...`);
 
-    // Fetch real data in parallel
-    const [fearGreed, marketData, trendingTopics] = await Promise.all([
+    // Fetch real data in parallel (including real news)
+    const [fearGreed, marketData, trendingTopics, realNews] = await Promise.all([
       fetchFearGreedIndex(),
       fetchCryptoMarketData(crypto),
-      fetchTrendingCoins()
+      fetchTrendingCoins(),
+      fetchRealCryptoNews(crypto)
     ]);
 
     console.log(`Fear & Greed: ${fearGreed.value} (${fearGreed.label})`);
     console.log(`Market data for ${crypto}: 24h: ${marketData.priceChange24h.toFixed(2)}%`);
+    console.log(`Real news fetched: ${realNews.length} articles`);
 
     // Generate social data based on real market conditions
     const socialData = generateSocialData(crypto, marketData, fearGreed.value);
@@ -465,8 +535,10 @@ serve(async (req) => {
       ...trendingTopics.slice(0, 3)
     ].slice(0, 7);
 
-    // Generate news based on real market data
-    const newsHeadlines = generateRealNewsHeadlines(crypto, marketData, fearGreed);
+    // Use real news if available, otherwise fall back to generated headlines
+    const newsHeadlines = realNews.length > 0 
+      ? realNews 
+      : generateRealNewsHeadlines(crypto, marketData, fearGreed);
 
     // Generate influencer mentions
     const influencerMentions = generateInfluencerMentions(crypto, socialData.overall.score);
