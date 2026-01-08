@@ -75,6 +75,7 @@ export const useCryptoPrices = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectedExchanges, setConnectedExchanges] = useState<string[]>([]);
+  const [isLive, setIsLive] = useState(false);
   
   // WebSocket refs for each exchange
   const binanceWsRefs = useRef<WebSocket[]>([]);
@@ -86,7 +87,6 @@ export const useCryptoPrices = () => {
   const reconnectTimeoutsRef = useRef<Record<string, number>>({});
   const cryptoListRef = useRef<{ symbol: string; name: string; id: string }[]>([]);
   const pricesRef = useRef<Map<string, CryptoPrice>>(new Map());
-  const [isLive, setIsLive] = useState(false);
 
   // Update price with source tracking (prefer most recent update)
   const updatePrice = useCallback((symbol: string, updates: Partial<CryptoPrice>, source: string) => {
