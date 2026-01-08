@@ -11,7 +11,9 @@ const ALLOWED_ORIGINS = [
 function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return false;
   if (ALLOWED_ORIGINS.includes(origin)) return true;
+  // Support lovable.app and lovableproject.com preview domains
   if (/^https:\/\/[a-z0-9-]+\.lovable\.app$/.test(origin)) return true;
+  if (/^https:\/\/[a-z0-9-]+\.lovableproject\.com$/.test(origin)) return true;
   return false;
 }
 
