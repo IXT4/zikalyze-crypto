@@ -191,8 +191,12 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     toast.success(`Loaded analysis from ${format(new Date(record.created_at), "MMM d, h:mm a")}`);
   };
 
-  const handleClearHistory = () => {
+  const handleClearAnalysis = () => {
     setSelectedHistory(null);
+    setDisplayedText("");
+    setFullAnalysis("");
+    setHasAnalyzed(false);
+    charIndexRef.current = 0;
   };
 
   const sentiment = change >= 0 ? "bullish" : "bearish";
@@ -232,7 +236,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               <Brain className={cn("h-5 w-5 text-primary", isAnalyzing && "animate-spin")} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-foreground">AI Analysis</h3>
+              <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
               <span className="text-xs text-muted-foreground">95% Accuracy • ICT Signals</span>
             </div>
           </div>
@@ -272,9 +276,9 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           <div className="mb-4 p-3 rounded-xl bg-secondary/50 border border-border/50 max-h-48 overflow-y-auto animate-fade-in">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-muted-foreground">Previous Analyses</span>
-              {selectedHistory && (
-                <Button variant="ghost" size="sm" onClick={handleClearHistory} className="h-6 text-xs">
-                  Clear Selection
+              {(selectedHistory || hasAnalyzed) && (
+                <Button variant="ghost" size="sm" onClick={handleClearAnalysis} className="h-6 text-xs">
+                  Clear
                 </Button>
               )}
             </div>
