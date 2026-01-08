@@ -45,7 +45,11 @@ const Sidebar = () => {
     return (
       <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <img 
+            src="/pwa-192x192.png" 
+            alt="Loading" 
+            className="h-12 w-12 animate-spin"
+          />
           <p className="text-sm text-muted-foreground">{t("sidebar.signingOut")}</p>
         </div>
       </div>

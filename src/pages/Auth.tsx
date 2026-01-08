@@ -195,7 +195,11 @@ const Auth = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <img 
+          src="/pwa-192x192.png" 
+          alt="Loading" 
+          className="h-12 w-12 animate-spin"
+        />
       </div>
     );
   }
