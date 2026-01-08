@@ -32,19 +32,12 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     }
   }, [user, loading, navigate]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <img 
-          src={zikalyzeLogo} 
-          alt="Loading" 
-          className="h-16 w-16 animate-pulse"
-        />
-      </div>
-    );
+  // Show minimal loading only during initial auth check, not blocking
+  if (loading && !user) {
+    return null;
   }
 
-  if (!user) return null;
+  if (!loading && !user) return null;
 
   return (
     <>
