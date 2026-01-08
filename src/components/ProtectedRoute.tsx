@@ -32,9 +32,20 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     }
   }, [user, loading, navigate]);
 
-  // Return empty div with matching background during loading to prevent flash
+  // Seamless loading with logo - matches index.html background exactly
   if (loading) {
-    return <div className="min-h-screen bg-background" />;
+    return (
+      <div 
+        className="fixed inset-0 flex items-center justify-center"
+        style={{ backgroundColor: '#0a0f1a' }}
+      >
+        <img 
+          src={zikalyzeLogo} 
+          alt="" 
+          className="h-16 w-16 animate-pulse opacity-80"
+        />
+      </div>
+    );
   }
 
   if (!user) return null;
