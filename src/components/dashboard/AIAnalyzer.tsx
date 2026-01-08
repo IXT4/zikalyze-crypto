@@ -15,7 +15,8 @@ interface AIAnalyzerProps {
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crypto-analyze`;
-const TYPEWRITER_SPEED = 15; // ms per character
+const CHARS_PER_FRAME = 2; // Characters to add per animation frame
+const FRAME_INTERVAL = 16; // ~60fps
 
 const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap }: AIAnalyzerProps) => {
   const [displayedText, setDisplayedText] = useState("");
@@ -24,8 +25,9 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
   const [copied, setCopied] = useState(false);
-  const typewriterRef = useRef<NodeJS.Timeout | null>(null);
   const charIndexRef = useRef(0);
+  const animationFrameRef = useRef<number | null>(null);
+  const lastFrameTimeRef = useRef(0);
 
   const processingSteps = [
     "Connecting to AI...",
@@ -34,21 +36,31 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     "Generating insights..."
   ];
 
-  // Typewriter effect
+  // Smooth typewriter effect using requestAnimationFrame
   useEffect(() => {
-    if (fullAnalysis.length > charIndexRef.current) {
-      typewriterRef.current = setInterval(() => {
+    const animate = (timestamp: number) => {
+      if (timestamp - lastFrameTimeRef.current >= FRAME_INTERVAL) {
         if (charIndexRef.current < fullAnalysis.length) {
-          setDisplayedText(fullAnalysis.slice(0, charIndexRef.current + 1));
-          charIndexRef.current++;
-        } else {
-          if (typewriterRef.current) clearInterval(typewriterRef.current);
+          const nextIndex = Math.min(charIndexRef.current + CHARS_PER_FRAME, fullAnalysis.length);
+          setDisplayedText(fullAnalysis.slice(0, nextIndex));
+          charIndexRef.current = nextIndex;
+          lastFrameTimeRef.current = timestamp;
         }
-      }, TYPEWRITER_SPEED);
+      }
+      
+      if (charIndexRef.current < fullAnalysis.length) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+      }
+    };
+
+    if (fullAnalysis.length > charIndexRef.current) {
+      animationFrameRef.current = requestAnimationFrame(animate);
     }
 
     return () => {
-      if (typewriterRef.current) clearInterval(typewriterRef.current);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
   }, [fullAnalysis]);
 
