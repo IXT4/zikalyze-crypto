@@ -21,6 +21,7 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showEmailConfirmation, setShowEmailConfirmation] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -137,6 +138,26 @@ const Auth = () => {
 
     // Show email confirmation screen
     setShowEmailConfirmation(true);
+  };
+
+  const handleResendVerification = async () => {
+    setIsResending(true);
+    const { error } = await signUp(email, password);
+    setIsResending(false);
+
+    if (error) {
+      toast({
+        title: "Failed to resend",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Email sent!",
+      description: "We've sent another verification link to your email.",
+    });
   };
 
   if (authLoading) {
@@ -324,6 +345,23 @@ const Auth = () => {
               </p>
               <div className="space-y-3">
                 <Button
+                  className="w-full bg-primary hover:bg-primary/90"
+                  onClick={handleResendVerification}
+                  disabled={isResending}
+                >
+                  {isResending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="mr-2 h-4 w-4" />
+                      Resend Verification Email
+                    </>
+                  )}
+                </Button>
+                <Button
                   variant="outline"
                   className="w-full"
                   onClick={() => {
@@ -335,7 +373,7 @@ const Auth = () => {
                   Back to Sign In
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  Didn't receive the email? Check your spam folder or try signing up again.
+                  Still not receiving emails? Check your spam folder.
                 </p>
               </div>
             </div>
