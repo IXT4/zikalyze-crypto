@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/dashboard/Sidebar";
-import { Search, User, Bell, BellRing, Trash2, Clock, CheckCircle, AlertCircle, Volume2 } from "lucide-react";
+import { Search, User, Bell, BellRing, Trash2, Clock, CheckCircle, AlertCircle, Volume2, BellOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { alertSound } from "@/lib/alertSound";
@@ -23,6 +24,7 @@ interface TriggeredAlert {
 const Alerts = () => {
   const { alerts, loading, removeAlert } = usePriceAlerts();
   const { prices, getPriceBySymbol } = useCryptoPrices();
+  const { isSupported, isSubscribed, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
   const [activeTab, setActiveTab] = useState<"active" | "history">("active");
   const [triggeredAlerts, setTriggeredAlerts] = useState<TriggeredAlert[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -87,6 +89,14 @@ const Alerts = () => {
   const handleTestSound = () => {
     alertSound.playAlertSound();
     toast.info("Testing alert sound...");
+  };
+
+  const handleTogglePush = async () => {
+    if (isSubscribed) {
+      await unsubscribe();
+    } else {
+      await subscribe();
+    }
   };
 
   return (
@@ -188,10 +198,33 @@ const Alerts = () => {
                 Alert History
               </button>
             </div>
-            <Button variant="outline" size="sm" onClick={handleTestSound} className="gap-2">
-              <Volume2 className="h-4 w-4" />
-              Test Sound
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleTestSound} className="gap-2">
+                <Volume2 className="h-4 w-4" />
+                Test Sound
+              </Button>
+              {isSupported && (
+                <Button 
+                  variant={isSubscribed ? "default" : "outline"} 
+                  size="sm" 
+                  onClick={handleTogglePush}
+                  disabled={pushLoading}
+                  className="gap-2"
+                >
+                  {isSubscribed ? (
+                    <>
+                      <BellRing className="h-4 w-4" />
+                      Push On
+                    </>
+                  ) : (
+                    <>
+                      <BellOff className="h-4 w-4" />
+                      Enable Push
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Content */}
