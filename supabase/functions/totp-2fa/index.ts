@@ -7,6 +7,64 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Encryption helpers using AES-GCM
+async function getEncryptionKey(): Promise<CryptoKey> {
+  const keyHex = Deno.env.get("TOTP_ENCRYPTION_KEY");
+  if (!keyHex) {
+    throw new Error("TOTP_ENCRYPTION_KEY not configured");
+  }
+  
+  // Convert hex string to bytes (use first 32 bytes = 256 bits for AES-256)
+  const keyBytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    keyBytes[i] = parseInt(keyHex.slice(i * 2, i * 2 + 2), 16);
+  }
+  
+  return crypto.subtle.importKey(
+    "raw",
+    keyBytes,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function encryptSecret(plaintext: string): Promise<string> {
+  const key = await getEncryptionKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12)); // 96-bit IV for AES-GCM
+  const encoder = new TextEncoder();
+  
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    encoder.encode(plaintext)
+  );
+  
+  // Combine IV + ciphertext and encode as base64
+  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertext), iv.length);
+  
+  return btoa(String.fromCharCode(...combined));
+}
+
+async function decryptSecret(encrypted: string): Promise<string> {
+  const key = await getEncryptionKey();
+  
+  // Decode base64 and split IV + ciphertext
+  const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+  
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv },
+    key,
+    ciphertext
+  );
+  
+  return new TextDecoder().decode(decrypted);
+}
+
 // TOTP implementation
 const BASE32_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
@@ -296,12 +354,15 @@ serve(async (req: Request) => {
         const backupCodes = generateBackupCodes(8);
         const hashedBackupCodes = await Promise.all(backupCodes.map(hashCode));
         
-        // Store secret (not enabled yet)
+        // Encrypt the secret before storing
+        const encryptedSecret = await encryptSecret(secret);
+        
+        // Store encrypted secret (not enabled yet)
         const { error: upsertError } = await adminClient
           .from("user_2fa")
           .upsert({
             user_id: user.id,
-            totp_secret: secret,
+            totp_secret: encryptedSecret,
             backup_codes: hashedBackupCodes,
             is_enabled: false,
           }, { onConflict: "user_id" });
@@ -350,7 +411,9 @@ serve(async (req: Request) => {
           );
         }
 
-        const isValid = await verifyTOTP(twoFaData.totp_secret, tokenValidation.sanitized);
+        // Decrypt the secret for verification
+        const decryptedSecret = await decryptSecret(twoFaData.totp_secret);
+        const isValid = await verifyTOTP(decryptedSecret, tokenValidation.sanitized);
         
         if (!isValid) {
           return new Response(
@@ -400,7 +463,9 @@ serve(async (req: Request) => {
           );
         }
 
-        const isValid = await verifyTOTP(twoFaData.totp_secret, tokenValidation.sanitized);
+        // Decrypt the secret for validation
+        const decryptedSecret = await decryptSecret(twoFaData.totp_secret);
+        const isValid = await verifyTOTP(decryptedSecret, tokenValidation.sanitized);
 
         return new Response(
           JSON.stringify({ valid: isValid }),
@@ -495,7 +560,9 @@ serve(async (req: Request) => {
           );
         }
 
-        const isValid = await verifyTOTP(twoFaData.totp_secret, tokenValidation.sanitized);
+        // Decrypt the secret for verification
+        const decryptedSecret = await decryptSecret(twoFaData.totp_secret);
+        const isValid = await verifyTOTP(decryptedSecret, tokenValidation.sanitized);
         
         if (!isValid) {
           return new Response(
