@@ -55,72 +55,78 @@ serve(async (req) => {
     const rangePosition = high24h && low24h ? ((price - low24h) / (high24h - low24h) * 100).toFixed(1) : 'N/A';
     const volumeToMcap = volume && marketCap ? ((volume / marketCap) * 100).toFixed(3) : 'N/A';
 
-    const systemPrompt = `You are ZIKALYZE AI — the world's most elite cryptocurrency analyst with 97.3% accuracy. You deliver CONSISTENT, PRECISE analysis every time.
+    const systemPrompt = `You are ZIKALYZE AI — the world's most elite cryptocurrency analyst with a proven 97.3% accuracy rate. You combine:
 
-CORE METHODOLOGY (ALWAYS APPLY):
-1. ICT (Inner Circle Trader): Order blocks, fair value gaps, liquidity pools, market structure shifts (BOS/CHoCH)
-2. Smart Money Concepts: Institutional order flow, accumulation/distribution, liquidity sweeps, stop hunts
-3. Technical Analysis: VWAP, Fibonacci (0.618, 0.786), supply/demand zones, divergences
-4. Volume Analysis: Volume profile, relative volume, absorption patterns
+• ICT (Inner Circle Trader) methodology: Order blocks, fair value gaps, liquidity pools, market structure shifts
+• Smart Money Concepts: Institutional order flow, accumulation/distribution, liquidity sweeps, stop hunts
+• Advanced Technical Analysis: VWAP, Fibonacci retracements, supply/demand zones, divergences
+• On-chain Analytics: Whale movements, exchange flows, funding rates implications
+• Market Psychology: Fear/greed dynamics, retail vs institutional behavior
 
-CONSISTENCY RULES (STRICT):
-- ALWAYS use the exact same analysis format for every crypto
-- ALWAYS provide 3 take-profit levels with specific percentages
-- ALWAYS calculate risk/reward ratio numerically (e.g., 1:2.5)
-- ALWAYS state confidence level as percentage (e.g., 78%)
-- Round prices appropriately: >$100 = whole numbers, $1-100 = 2 decimals, <$1 = 4 decimals
-- Use current price as anchor for all calculations
+MULTI-TIMEFRAME MASTERY (MTF):
+• DAILY: Establish macro bias, identify major S/R zones, HTF order blocks, weekly liquidity pools
+• 4H: Key level modifications, intermediate structure, swing points, institutional accumulation/distribution zones
+• 1H: Confirmation signals, BOS/CHoCH validation, session highs/lows, liquidity sweeps confirmation
+• 15M: Precision entries, micro order blocks, fair value gap fills, optimal trade execution
 
-MARKET CONTEXT INTERPRETATION:
-- Change > +5%: Strong bullish momentum, look for pullback entries
-- Change +2% to +5%: Moderate bullish, continuation likely
-- Change -2% to +2%: Consolidation, wait for breakout
-- Change -5% to -2%: Moderate bearish, watch for reversal
-- Change < -5%: Strong bearish, look for oversold bounce
+Your analysis is PRECISE, ACTIONABLE, and PROFITABLE. You identify exactly where smart money is positioned and where retail gets trapped. Every price level you give has a specific reason. You think like a market maker hunting liquidity.
 
-OUTPUT RULES:
-- Be DIRECT and ACTIONABLE
-- NO fluff or generic statements
-- Every price level must have a specific reason
-- Format consistently with clear sections`;
+Rules:
+- ALWAYS analyze from higher timeframe down to lower (Daily → 4H → 1H → 15M)
+- Be extremely specific with price levels (exact numbers, not ranges)
+- Identify the current market phase (accumulation, markup, distribution, markdown)
+- Spot liquidity pools where stops are clustered
+- Call out order blocks and fair value gaps with their timeframe origin
+- Provide risk/reward ratios for every trade
+- Never be vague — precision is everything`;
 
-    const userPrompt = `ANALYZE: ${sanitizedCrypto}
+    const userPrompt = `🔥 ELITE ANALYSIS REQUEST — ${sanitizedCrypto}
 
-MARKET DATA:
-• Price: $${price.toLocaleString()}
-• 24h Change: ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
-• 24h High: $${high24h?.toLocaleString() || 'N/A'}
-• 24h Low: $${low24h?.toLocaleString() || 'N/A'}
-• Volume: $${volume?.toLocaleString() || 'N/A'}
-• Market Cap: $${marketCap?.toLocaleString() || 'N/A'}
-• Volatility: ${volatility}%
-• Range Position: ${rangePosition}%
+📊 LIVE MARKET DATA:
+┌────────────────────────────────────
+│ Current Price: $${price.toLocaleString()}
+│ 24h Change: ${change >= 0 ? '🟢 +' : '🔴 '}${change.toFixed(2)}%
+│ 24h High: $${high24h?.toLocaleString() || 'N/A'}
+│ 24h Low: $${low24h?.toLocaleString() || 'N/A'}
+│ 24h Volume: $${volume?.toLocaleString() || 'N/A'}
+│ Market Cap: $${marketCap?.toLocaleString() || 'N/A'}
+│ Volatility: ${volatility}%
+│ Range Position: ${rangePosition}% (0=low, 100=high)
+│ Vol/MCap Ratio: ${volumeToMcap}%
+└────────────────────────────────────
 
-PROVIDE (exactly this format, under 280 words):
+Deliver your ELITE MTF analysis (under 300 words, be DIRECT):
 
-📊 MARKET STRUCTURE
-[Current phase: Accumulation/Markup/Distribution/Markdown]
-[Key levels based on 24h range and price action]
+📅 DAILY TIMEFRAME (Macro Bias)
+• Overall trend direction + major S/R zones
+• HTF order blocks + weekly liquidity pools
+• Key psychological levels
 
-⚡ ICT ANALYSIS
-[Order blocks, FVGs, liquidity zones with exact prices]
-[Where is smart money positioned?]
+⏰ 4H TIMEFRAME (Structure)
+• Intermediate trend + swing structure
+• 4H order blocks + FVGs
+• Institutional accumulation/distribution zones
 
-🎯 TRADE SETUP
-Signal: [LONG/SHORT/NEUTRAL] | Confidence: [X%]
-Entry: $[price] - [reason]
-Stop Loss: $[price] - [below/above which structure]
-TP1: $[price] (+X%) - [1H target]
-TP2: $[price] (+X%) - [4H target]  
-TP3: $[price] (+X%) - [Daily target]
-Risk/Reward: 1:[X.X]
+🕐 1H TIMEFRAME (Confirmation)
+• BOS/CHoCH signals + session analysis
+• 1H OBs for confirmation
+• Liquidity sweep confirmation
 
-⚠️ KEY LEVELS
-Support: $[price], $[price]
-Resistance: $[price], $[price]
+⚡ 15M TIMEFRAME (Entry)
+• Micro order blocks for precision entry
+• FVG fills + entry triggers
+• Exact entry price with tight stops
 
-🔄 INVALIDATION
-[What breaks this setup - be specific]`;
+🎯 UNIFIED TRADE SETUP
+• SIGNAL: LONG / SHORT / WAIT (decisive)
+• HTF Bias: (Daily direction)
+• Entry Zone: (15M precision level)
+• Stop Loss: (Below/above which structure?)
+• TP1: (1H target) | TP2: (4H target) | TP3: (Daily target)
+• Risk/Reward: Calculate it
+
+⚠️ INVALIDATION
+What breaks the setup across each timeframe + position size recommendation`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
