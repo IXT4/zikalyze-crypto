@@ -34,10 +34,22 @@ interface CoinGeckoCoin {
 
 // Stablecoins to exclude
 const STABLECOINS = [
+  // USD stablecoins
   "usdt", "usdc", "busd", "dai", "tusd", "usdp", "usdd", "gusd", 
   "frax", "lusd", "susd", "eurs", "usdj", "fdusd", "pyusd", "eurc",
-  "xaut", "paxg", "ustc", "usde", "susde", "ethena-usde", "first-digital-usd",
-  "paypal-usd", "true-usd", "gemini-dollar", "pax-gold", "tether-gold"
+  "ustc", "usde", "susde", "cusd", "usdx", "husd", "nusd", "musd",
+  "dola", "usdk", "tribe", "fei", "mim", "spell", "ust", "usdn",
+  // Wrapped/pegged assets
+  "wbtc", "weth", "steth", "reth", "cbeth", "wsteth", "frxeth", "sfrxeth",
+  "hbtc", "renbtc", "tbtc", "sbtc", "pbtc", "obtc",
+  // Gold/commodity backed
+  "xaut", "paxg", "gold", "dgld", "pmgt",
+  // Other stable/wrapped
+  "wrapped-bitcoin", "staked-ether", "rocket-pool-eth", "coinbase-wrapped-staked-eth",
+  "lido-staked-ether", "frax-ether", "binance-peg-ethereum",
+  // PayPal, First Digital, etc
+  "paypal-usd", "first-digital-usd", "gemini-dollar", "pax-gold", "tether-gold",
+  "true-usd", "ethena-usde", "ethena", "sdai", "savingsdai"
 ];
 
 // Priority tokens to always include if available
