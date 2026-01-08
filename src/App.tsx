@@ -41,9 +41,10 @@ const PageLoader = () => (
   >
     <img 
       src={zikalyzeLogo} 
-      alt="" 
+      alt="Loading"
+      width={64}
+      height={64}
       className="h-16 w-16 animate-pulse opacity-80"
-      style={{ animation: 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
     />
   </div>
 );

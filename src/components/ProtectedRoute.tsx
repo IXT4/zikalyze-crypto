@@ -41,7 +41,9 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
       >
         <img 
           src={zikalyzeLogo} 
-          alt="" 
+          alt="Loading"
+          width={64}
+          height={64}
           className="h-16 w-16 animate-pulse opacity-80"
         />
       </div>
