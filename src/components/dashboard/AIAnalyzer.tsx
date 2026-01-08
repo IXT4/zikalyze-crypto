@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAnalysisHistory, AnalysisRecord } from "@/hooks/useAnalysisHistory";
 import { format } from "date-fns";
+import { Progress } from "@/components/ui/progress";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,7 +46,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const lastFrameTimeRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
-  const { history, loading: historyLoading, saveAnalysis, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
+  const { history, learningStats, loading: historyLoading, saveAnalysis, submitFeedback, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
+  const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
 
   const processingSteps = [
     "Connecting to AI...",
@@ -212,6 +214,18 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     toast.success("Analysis history cleared");
   };
 
+  const handleFeedback = async (recordId: string, wasCorrect: boolean) => {
+    setFeedbackLoading(recordId);
+    const success = await submitFeedback(recordId, wasCorrect);
+    setFeedbackLoading(null);
+    
+    if (success) {
+      toast.success(wasCorrect ? "Thanks! Marked as correct prediction 🎯" : "Thanks for the feedback! AI will learn from this.");
+    } else {
+      toast.error("Failed to submit feedback");
+    }
+  };
+
   const sentiment = change >= 0 ? "bullish" : "bearish";
 
   const handleCopy = async () => {
@@ -225,6 +239,9 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       toast.error("Failed to copy");
     }
   };
+
+  // Calculate displayed accuracy
+  const displayedAccuracy = learningStats?.accuracy_percentage ?? 95;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-6 overflow-hidden relative">
@@ -249,8 +266,13 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               <Brain className={cn("h-5 w-5 text-primary", isAnalyzing && "animate-spin")} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
-              <span className="text-xs text-muted-foreground">95% Accuracy • ICT Signals</span>
+              <h3 className="text-lg font-bold text-foreground">Zikalyze AI Brain</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{displayedAccuracy.toFixed(0)}% Accuracy</span>
+                {learningStats && learningStats.total_feedback > 0 && (
+                  <span className="text-xs text-primary/70">• {learningStats.total_feedback} feedback</span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -282,6 +304,33 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
             </div>
           </div>
         </div>
+
+        {/* Learning Stats Banner */}
+        {learningStats && learningStats.total_feedback >= 3 && (
+          <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-primary/10 to-chart-cyan/10 border border-primary/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Award className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">AI Learning Progress</span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {learningStats.correct_predictions}/{learningStats.total_feedback} correct
+              </span>
+            </div>
+            <div className="mt-2">
+              <Progress 
+                value={learningStats.accuracy_percentage || 0} 
+                className="h-2"
+              />
+            </div>
+            <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+              <span>Accuracy: {learningStats.accuracy_percentage?.toFixed(1) || 0}%</span>
+              {learningStats.avg_confidence_when_correct && (
+                <span>Avg confidence when correct: {learningStats.avg_confidence_when_correct.toFixed(0)}%</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* History Dropdown */}
         {showHistory && (
@@ -321,25 +370,36 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
             ) : history.length === 0 ? (
               <div className="text-center py-2 text-muted-foreground text-sm">No previous analyses</div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {history.map((record) => (
                   <div
                     key={record.id}
                     className={cn(
-                      "group relative w-full text-left p-2 rounded-lg transition-colors hover:bg-background/50",
-                      selectedHistory?.id === record.id && "bg-primary/10 border border-primary/30"
+                      "group relative w-full text-left p-3 rounded-lg transition-colors hover:bg-background/50 border border-transparent",
+                      selectedHistory?.id === record.id && "bg-primary/10 border-primary/30",
+                      record.was_correct === true && "border-success/30 bg-success/5",
+                      record.was_correct === false && "border-destructive/30 bg-destructive/5"
                     )}
                   >
                     <button
                       onClick={() => handleSelectHistory(record)}
                       className="w-full text-left"
                     >
-                      <div className="flex items-center justify-between pr-6">
+                      <div className="flex items-center justify-between pr-8">
                         <div className="flex items-center gap-2">
                           <Clock className="h-3 w-3 text-muted-foreground" />
                           <span className="text-xs text-foreground">
                             {format(new Date(record.created_at), "MMM d, h:mm a")}
                           </span>
+                          {record.was_correct !== null && (
+                            <span className={cn(
+                              "text-xs px-1.5 py-0.5 rounded flex items-center gap-1",
+                              record.was_correct ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
+                            )}>
+                              {record.was_correct ? <ThumbsUp className="h-3 w-3" /> : <ThumbsDown className="h-3 w-3" />}
+                              {record.was_correct ? "Correct" : "Incorrect"}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={cn(
@@ -359,6 +419,43 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                         </div>
                       )}
                     </button>
+                    
+                    {/* Feedback Buttons */}
+                    {record.was_correct === null && (
+                      <div className="mt-2 flex items-center gap-2 pt-2 border-t border-border/50">
+                        <span className="text-xs text-muted-foreground mr-2">Was this prediction correct?</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={feedbackLoading === record.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFeedback(record.id, true);
+                          }}
+                          className="h-6 px-2 text-xs text-success hover:text-success hover:bg-success/10"
+                        >
+                          <ThumbsUp className="h-3 w-3 mr-1" />
+                          Yes
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={feedbackLoading === record.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFeedback(record.id, false);
+                          }}
+                          className="h-6 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <ThumbsDown className="h-3 w-3 mr-1" />
+                          No
+                        </Button>
+                        {feedbackLoading === record.id && (
+                          <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />
+                        )}
+                      </div>
+                    )}
+                    
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -370,7 +467,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                         }
                         toast.success("Analysis deleted");
                       }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+                      className="absolute right-2 top-3 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
                       title="Delete this analysis"
                     >
                       <X className="h-3 w-3" />

@@ -21,10 +21,12 @@ export type Database = {
           change_24h: number
           confidence: number | null
           created_at: string
+          feedback_at: string | null
           id: string
           price: number
           symbol: string
           user_id: string | null
+          was_correct: boolean | null
         }
         Insert: {
           analysis_text: string
@@ -32,10 +34,12 @@ export type Database = {
           change_24h: number
           confidence?: number | null
           created_at?: string
+          feedback_at?: string | null
           id?: string
           price: number
           symbol: string
           user_id?: string | null
+          was_correct?: boolean | null
         }
         Update: {
           analysis_text?: string
@@ -43,10 +47,12 @@ export type Database = {
           change_24h?: number
           confidence?: number | null
           created_at?: string
+          feedback_at?: string | null
           id?: string
           price?: number
           symbol?: string
           user_id?: string | null
+          was_correct?: boolean | null
         }
         Relationships: []
       }
@@ -214,6 +220,18 @@ export type Database = {
       }
     }
     Views: {
+      ai_learning_stats: {
+        Row: {
+          accuracy_percentage: number | null
+          avg_confidence_when_correct: number | null
+          avg_confidence_when_incorrect: number | null
+          correct_predictions: number | null
+          incorrect_predictions: number | null
+          symbol: string | null
+          total_feedback: number | null
+        }
+        Relationships: []
+      }
       push_subscriptions_safe: {
         Row: {
           created_at: string | null
