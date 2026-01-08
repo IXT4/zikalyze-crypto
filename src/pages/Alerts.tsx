@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useCurrency } from "@/hooks/useCurrency";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { alertSound } from "@/lib/alertSound";
@@ -26,6 +27,7 @@ const Alerts = () => {
   const { alerts, loading, removeAlert } = usePriceAlerts();
   const { prices, getPriceBySymbol } = useCryptoPrices();
   const { isSupported, isSubscribed, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
+  const { formatPrice } = useCurrency();
   const [activeTab, setActiveTab] = useState<"active" | "history">("active");
   const [triggeredAlerts, setTriggeredAlerts] = useState<TriggeredAlert[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -282,7 +284,7 @@ const Alerts = () => {
                                 )}>
                                   {alert.condition === "above" ? `↑ ${t("alerts.above")}` : `↓ ${t("alerts.below")}`}
                                 </span>
-                                <span>${alert.target_price.toLocaleString()}</span>
+                                <span>{formatPrice(alert.target_price)}</span>
                               </div>
                             </div>
                           </div>
@@ -290,7 +292,7 @@ const Alerts = () => {
                           <div className="flex items-center gap-6">
                             <div className="text-right">
                               <div className="text-sm text-muted-foreground">{t("alerts.currentPrice")}</div>
-                              <div className="font-semibold text-foreground">${currentPrice.toLocaleString()}</div>
+                              <div className="font-semibold text-foreground">{formatPrice(currentPrice)}</div>
                             </div>
                             <div className="text-right w-20">
                               <div className="text-sm text-muted-foreground">{t("alerts.distance")}</div>
@@ -369,7 +371,7 @@ const Alerts = () => {
                               )}>
                                 {alert.condition === "above" ? `↑ ${t("alerts.above")}` : `↓ ${t("alerts.below")}`}
                               </span>
-                              <span>${alert.target_price.toLocaleString()}</span>
+                              <span>{formatPrice(alert.target_price)}</span>
                             </div>
                           </div>
                         </div>
@@ -377,7 +379,7 @@ const Alerts = () => {
                         <div className="flex items-center gap-6">
                           <div className="text-right">
                             <div className="text-sm text-muted-foreground">{t("alerts.setAt")}</div>
-                            <div className="text-sm text-foreground">${alert.current_price_at_creation.toLocaleString()}</div>
+                            <div className="text-sm text-foreground">{formatPrice(alert.current_price_at_creation)}</div>
                           </div>
                           <div className="text-right">
                             <div className="text-sm text-muted-foreground">{t("alerts.triggered")}</div>

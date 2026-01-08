@@ -40,11 +40,12 @@ export const useSettings = () => {
     setLoaded(true);
   }, []);
 
-  // Save settings to localStorage
+  // Save settings to localStorage (synchronous for immediate effect)
   const saveSettings = useCallback((newSettings: Partial<AppSettings>) => {
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
       try {
+        // Synchronously persist to localStorage
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       } catch (error) {
         console.error("Error saving settings:", error);

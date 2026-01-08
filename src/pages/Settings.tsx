@@ -82,28 +82,17 @@ const Settings = () => {
   ];
 
   const handleSave = () => {
-    // Persist settings (both React state + localStorage)
-    const updated = {
-      ...settings,
-      language: selectedLanguage,
-      currency: selectedCurrency,
-    };
-
-    saveSettings({ language: selectedLanguage, currency: selectedCurrency });
-
-    try {
-      // Ensure same-tick persistence for listeners that read from localStorage
-      localStorage.setItem("zikalyze_settings", JSON.stringify(updated));
-    } catch {
-      // ignore
-    }
-
-    // Change language in i18n
+    // Change language in i18n first
     const langCode = languageCodes[selectedLanguage] || "en";
     i18n.changeLanguage(langCode);
 
-    // Notify currency context + any other listeners
-    window.dispatchEvent(new Event("settingsChanged"));
+    // Persist settings (both React state + localStorage) via hook
+    saveSettings({ language: selectedLanguage, currency: selectedCurrency });
+
+    // Notify currency context + any other listeners immediately
+    setTimeout(() => {
+      window.dispatchEvent(new Event("settingsChanged"));
+    }, 0);
 
     toast({
       title: t("settings.settingsSaved"),

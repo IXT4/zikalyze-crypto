@@ -5,6 +5,7 @@ import { Search, User, TrendingUp, TrendingDown, BarChart3, Activity, PieChart }
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
+import { useCurrency } from "@/hooks/useCurrency";
 import AnalyticsChart from "@/components/dashboard/AnalyticsChart";
 import PredictiveChart from "@/components/dashboard/PredictiveChart";
 import DonutChart from "@/components/dashboard/DonutChart";
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 const Analytics = () => {
   const { prices, loading } = useCryptoPrices();
+  const { formatPrice, symbol: currencySymbol } = useCurrency();
   const [timeframe, setTimeframe] = useState("24h");
   const { t } = useTranslation();
 
@@ -80,7 +82,7 @@ const Analytics = () => {
                 <span className="text-sm text-muted-foreground">{t("analytics.totalMarketCap")}</span>
               </div>
               <div className="text-2xl font-bold text-foreground">
-                ${loading ? "..." : (totalMarketCap / 1e12).toFixed(2)}T
+                {currencySymbol}{loading ? "..." : (totalMarketCap / 1e12).toFixed(2)}T
               </div>
             </div>
 
@@ -92,7 +94,7 @@ const Analytics = () => {
                 <span className="text-sm text-muted-foreground">{t("analytics.volume24h")}</span>
               </div>
               <div className="text-2xl font-bold text-foreground">
-                ${loading ? "..." : (totalVolume / 1e9).toFixed(2)}B
+                {currencySymbol}{loading ? "..." : (totalVolume / 1e9).toFixed(2)}B
               </div>
             </div>
 
@@ -159,7 +161,7 @@ const Analytics = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold text-foreground">${coin.current_price?.toLocaleString()}</div>
+                      <div className="font-semibold text-foreground">{formatPrice(coin.current_price || 0)}</div>
                       <div className="text-sm text-success">+{coin.price_change_percentage_24h?.toFixed(2)}%</div>
                     </div>
                   </div>
@@ -184,7 +186,7 @@ const Analytics = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold text-foreground">${coin.current_price?.toLocaleString()}</div>
+                      <div className="font-semibold text-foreground">{formatPrice(coin.current_price || 0)}</div>
                       <div className="text-sm text-destructive">{coin.price_change_percentage_24h?.toFixed(2)}%</div>
                     </div>
                   </div>
