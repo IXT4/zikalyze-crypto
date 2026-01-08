@@ -2599,8 +2599,8 @@ serve(async (req) => {
       }
     }
     
-    const analysis = `🧠 ZIKALYZE AI BRAIN v8.0 — PRECISION ENTRY INTELLIGENCE
-Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
+    const analysis = `📊 ${sanitizedCrypto} ANALYSIS
+Price: $${priceNum.toLocaleString()} | ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📊 MULTI-TIMEFRAME CONFLUENCE
@@ -2747,10 +2747,8 @@ ${probabilities.bullProb > probabilities.bearProb + 15 ?
   `NEUTRAL — No clear edge. ${adaptiveLearning.currentScenario?.expectedOutcome === 'NEUTRAL' ? 'Scenario confirms caution.' : ''} Wait for ${rangePercent < 40 ? 'support confirmation' : rangePercent > 60 ? 'resistance rejection' : 'directional break'} with volume. Patience is a trade.`}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 Zikalyze AI Brain v8.0 — Precision Entry Intelligence
-15M Precision: ${mtfAnalysis.precisionEntry.timing} | Structure: ${mtfAnalysis.precisionEntry.structureStatus.split(' ')[0]}
-Patterns: ${allPatterns.length} | Memory: ${memory.length} | Accuracy: ${learningAccuracy}% | Confidence: ${adjustedConfidence}%
-🎓 Status: ${totalFeedback >= 10 ? 'Mature' : totalFeedback >= 5 ? 'Active' : 'Collecting'} — Your feedback accelerates learning!`;
+📊 Analysis Complete | Patterns: ${allPatterns.length} | Confidence: ${adjustedConfidence}%
+🎓 Your feedback helps improve future predictions!`;
 
     // Stream the analysis
     const encoder = new TextEncoder();
