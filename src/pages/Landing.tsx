@@ -3,30 +3,27 @@ import { Link, useNavigate } from "react-router-dom";
 import { TrendingUp, Sparkles, ArrowRight, BarChart3, Brain, Shield, Activity, Zap, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ZikalyzeSplash from "@/components/ZikalyzeSplash";
+import { useAuth } from "@/hooks/useAuth";
 
 const Landing = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    // Check if already logged in
-    const session = localStorage.getItem("wallet_session");
-    if (session) {
-      try {
-        const parsed = JSON.parse(session);
-        if (parsed.walletId && parsed.publicKey) {
-          navigate("/dashboard");
-          return;
-        }
-      } catch (e) {
-        // Invalid session
-      }
+    // Check if already logged in via Supabase Auth
+    if (!authLoading && user) {
+      navigate("/dashboard");
+      return;
     }
+    
     // Quick splash for branding
-    setTimeout(() => setLoading(false), 800);
-  }, [navigate]);
+    if (!authLoading) {
+      setTimeout(() => setLoading(false), 800);
+    }
+  }, [navigate, user, authLoading]);
 
-  if (loading) {
+  if (loading || authLoading) {
     return <ZikalyzeSplash message="Welcome to Zikalyze AI..." />;
   }
 

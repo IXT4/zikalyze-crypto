@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 export interface AnalysisRecord {
   id: string;
@@ -10,14 +11,19 @@ export interface AnalysisRecord {
   confidence: number | null;
   bias: string | null;
   created_at: string;
+  user_id: string | null;
 }
 
 export const useAnalysisHistory = (symbol: string) => {
   const [history, setHistory] = useState<AnalysisRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
 
   const fetchHistory = useCallback(async () => {
-    if (!symbol) return;
+    if (!symbol || !user) {
+      setHistory([]);
+      return;
+    }
     
     setLoading(true);
     try {
@@ -25,6 +31,7 @@ export const useAnalysisHistory = (symbol: string) => {
         .from("analysis_history")
         .select("*")
         .eq("symbol", symbol.toUpperCase())
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(10);
 
@@ -35,7 +42,7 @@ export const useAnalysisHistory = (symbol: string) => {
     } finally {
       setLoading(false);
     }
-  }, [symbol]);
+  }, [symbol, user]);
 
   const saveAnalysis = useCallback(async (
     analysisText: string,
@@ -44,6 +51,11 @@ export const useAnalysisHistory = (symbol: string) => {
     confidence?: number,
     bias?: string
   ) => {
+    if (!user) {
+      console.error("User not authenticated");
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from("analysis_history")
@@ -54,6 +66,7 @@ export const useAnalysisHistory = (symbol: string) => {
           analysis_text: analysisText,
           confidence: confidence || null,
           bias: bias || null,
+          user_id: user.id,
         });
 
       if (error) throw error;
@@ -63,7 +76,7 @@ export const useAnalysisHistory = (symbol: string) => {
     } catch (err) {
       console.error("Error saving analysis:", err);
     }
-  }, [symbol, fetchHistory]);
+  }, [symbol, fetchHistory, user]);
 
   useEffect(() => {
     fetchHistory();

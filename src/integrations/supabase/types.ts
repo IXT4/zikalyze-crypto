@@ -24,6 +24,7 @@ export type Database = {
           id: string
           price: number
           symbol: string
+          user_id: string | null
         }
         Insert: {
           analysis_text: string
@@ -34,6 +35,7 @@ export type Database = {
           id?: string
           price: number
           symbol: string
+          user_id?: string | null
         }
         Update: {
           analysis_text?: string
@@ -44,6 +46,7 @@ export type Database = {
           id?: string
           price?: number
           symbol?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -58,6 +61,7 @@ export type Database = {
           symbol: string
           target_price: number
           triggered_at: string | null
+          user_id: string | null
           user_wallet_id: string | null
         }
         Insert: {
@@ -70,6 +74,7 @@ export type Database = {
           symbol: string
           target_price: number
           triggered_at?: string | null
+          user_id?: string | null
           user_wallet_id?: string | null
         }
         Update: {
@@ -82,6 +87,7 @@ export type Database = {
           symbol?: string
           target_price?: number
           triggered_at?: string | null
+          user_id?: string | null
           user_wallet_id?: string | null
         }
         Relationships: [
