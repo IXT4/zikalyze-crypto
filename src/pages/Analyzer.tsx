@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Search, User } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import CryptoTicker from "@/components/dashboard/CryptoTicker";
 const Analyzer = () => {
   const [selectedCrypto, setSelectedCrypto] = useState("BTC");
   const { getPriceBySymbol, loading } = useCryptoPrices();
+  const { t } = useTranslation();
 
   const cryptoData: Record<string, { name: string; price: number; change: number }> = {
     BTC: { name: "Bitcoin", price: getPriceBySymbol("BTC")?.current_price || 86512, change: getPriceBySymbol("BTC")?.price_change_percentage_24h || -4.87 },
@@ -28,13 +30,13 @@ const Analyzer = () => {
       <main className="ml-16 lg:ml-64">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h1 className="text-2xl font-bold text-foreground">AI Analyzer</h1>
+          <h1 className="text-2xl font-bold text-foreground">{t("analyzer.title")}</h1>
           <div className="flex items-center gap-4">
             <div className="relative hidden md:block">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search"
+                placeholder={t("common.search")}
                 className="w-64 bg-secondary border-border pl-10"
               />
             </div>
@@ -62,29 +64,29 @@ const Analyzer = () => {
               </div>
               <div className="flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full ${loading ? "bg-warning" : "bg-success"} animate-pulse`} />
-                <span className="text-sm text-muted-foreground">{loading ? "LOADING..." : "LIVE"}</span>
+                <span className="text-sm text-muted-foreground">{loading ? t("common.loading") : t("common.live")}</span>
               </div>
             </div>
 
             <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <div className="text-sm text-muted-foreground">Current Price</div>
+                <div className="text-sm text-muted-foreground">{t("analyzer.currentPrice")}</div>
                 <div className="text-2xl font-bold text-foreground">${selected.price.toLocaleString()}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">24h Change</div>
+                <div className="text-sm text-muted-foreground">{t("analyzer.change24h")}</div>
                 <div className={`text-2xl font-bold ${selected.change >= 0 ? "text-success" : "text-destructive"}`}>
                   {selected.change >= 0 ? "+" : ""}{selected.change.toFixed(2)}%
                 </div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">24h High</div>
+                <div className="text-sm text-muted-foreground">{t("analyzer.high24h")}</div>
                 <div className="font-semibold text-foreground">
                   ${getPriceBySymbol(selectedCrypto)?.high_24h?.toLocaleString() || "---"}
                 </div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">24h Low</div>
+                <div className="text-sm text-muted-foreground">{t("analyzer.low24h")}</div>
                 <div className="font-semibold text-foreground">
                   ${getPriceBySymbol(selectedCrypto)?.low_24h?.toLocaleString() || "---"}
                 </div>
@@ -101,24 +103,24 @@ const Analyzer = () => {
 
           {/* Additional Analysis Tips */}
           <div className="rounded-2xl border border-border bg-card p-6">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Analysis Guide</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-4">{t("analyzer.analysisGuide")}</h3>
             <div className="grid md:grid-cols-3 gap-4">
               <div className="p-4 rounded-xl bg-secondary/50">
-                <h4 className="font-medium text-foreground mb-2">ICT Analysis</h4>
+                <h4 className="font-medium text-foreground mb-2">{t("analyzer.ictAnalysis")}</h4>
                 <p className="text-sm text-muted-foreground">
-                  Inner Circle Trader methodology focuses on institutional order flow, liquidity pools, and market structure.
+                  {t("analyzer.ictDesc")}
                 </p>
               </div>
               <div className="p-4 rounded-xl bg-secondary/50">
-                <h4 className="font-medium text-foreground mb-2">Smart Money Concepts</h4>
+                <h4 className="font-medium text-foreground mb-2">{t("analyzer.smartMoneyConcepts")}</h4>
                 <p className="text-sm text-muted-foreground">
-                  Track institutional investors and whale movements to identify accumulation and distribution patterns.
+                  {t("analyzer.smartMoneyDesc")}
                 </p>
               </div>
               <div className="p-4 rounded-xl bg-secondary/50">
-                <h4 className="font-medium text-foreground mb-2">VWAP Indicator</h4>
+                <h4 className="font-medium text-foreground mb-2">{t("analyzer.vwapIndicator")}</h4>
                 <p className="text-sm text-muted-foreground">
-                  Volume Weighted Average Price helps identify the true average price and potential support/resistance levels.
+                  {t("analyzer.vwapDesc")}
                 </p>
               </div>
             </div>

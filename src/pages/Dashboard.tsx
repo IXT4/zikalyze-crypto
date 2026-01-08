@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Search, User } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import CryptoTicker from "@/components/dashboard/CryptoTicker";
@@ -15,6 +16,7 @@ const Dashboard = () => {
   const [selectedCrypto, setSelectedCrypto] = useState("BTC");
   const [userName, setUserName] = useState<string | null>(null);
   const { prices, loading, getPriceBySymbol } = useCryptoPrices();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const session = localStorage.getItem("wallet_session");
@@ -45,13 +47,13 @@ const Dashboard = () => {
       <main className="ml-16 lg:ml-64">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h1 className="text-2xl font-bold text-foreground">Zikalyze</h1>
+          <h1 className="text-2xl font-bold text-foreground">{t("dashboard.title")}</h1>
           <div className="flex items-center gap-4">
             <div className="relative hidden md:block">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search"
+                placeholder={t("dashboard.searchPlaceholder")}
                 className="w-64 bg-secondary border-border pl-10"
               />
             </div>
@@ -102,7 +104,7 @@ const Dashboard = () => {
               </div>
               <div className="flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full ${loading ? "bg-warning" : "bg-success"} animate-pulse`} />
-                <span className="text-sm text-muted-foreground">{loading ? "LOADING..." : "LIVE"}</span>
+                <span className="text-sm text-muted-foreground">{loading ? t("common.loading") : t("common.live")}</span>
               </div>
             </div>
 
@@ -114,25 +116,25 @@ const Dashboard = () => {
                 <span className={selected.change >= 0 ? "text-success" : "text-destructive"}>
                   {selected.change >= 0 ? "↗" : "↘"} {Math.abs(selected.change).toFixed(2)}%
                 </span>
-                <span className="text-muted-foreground">24h</span>
+                <span className="text-muted-foreground">{t("dashboard.change24h")}</span>
               </div>
             </div>
 
             <div className="mt-6 grid grid-cols-4 gap-4">
               <div>
-                <div className="text-sm text-muted-foreground">24h High</div>
+                <div className="text-sm text-muted-foreground">{t("dashboard.high24h")}</div>
                 <div className="font-semibold text-foreground">${liveData?.high_24h?.toLocaleString() || "---"}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">24h Low</div>
+                <div className="text-sm text-muted-foreground">{t("dashboard.low24h")}</div>
                 <div className="font-semibold text-foreground">${liveData?.low_24h?.toLocaleString() || "---"}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">24h Volume</div>
+                <div className="text-sm text-muted-foreground">{t("dashboard.volume24h")}</div>
                 <div className="font-semibold text-foreground">${liveData?.total_volume ? (liveData.total_volume / 1e9).toFixed(2) + "B" : "---"}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">Market Cap</div>
+                <div className="text-sm text-muted-foreground">{t("dashboard.marketCap")}</div>
                 <div className="font-semibold text-foreground">${liveData?.market_cap ? (liveData.market_cap / 1e9).toFixed(2) + "B" : "---"}</div>
               </div>
             </div>

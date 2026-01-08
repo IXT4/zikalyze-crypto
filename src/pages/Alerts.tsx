@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Search, User, Bell, BellRing, Trash2, Clock, CheckCircle, AlertCircle, Volume2, BellOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ const Alerts = () => {
   const [activeTab, setActiveTab] = useState<"active" | "history">("active");
   const [triggeredAlerts, setTriggeredAlerts] = useState<TriggeredAlert[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const { t } = useTranslation();
 
   // Fetch triggered alerts history
   useEffect(() => {
@@ -88,7 +90,7 @@ const Alerts = () => {
 
   const handleTestSound = () => {
     alertSound.playAlertSound();
-    toast.info("Testing alert sound...");
+    toast.info(t("alerts.testSound") + "...");
   };
 
   const handleTogglePush = async () => {
@@ -108,14 +110,14 @@ const Alerts = () => {
         <header className="flex items-center justify-between border-b border-border px-6 py-4">
           <div className="flex items-center gap-3">
             <BellRing className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold text-foreground">Price Alerts</h1>
+            <h1 className="text-2xl font-bold text-foreground">{t("alerts.title")}</h1>
           </div>
           <div className="flex items-center gap-4">
             <div className="relative hidden md:block">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search alerts"
+                placeholder={t("alerts.searchAlerts")}
                 className="w-64 bg-secondary border-border pl-10"
               />
             </div>
@@ -133,7 +135,7 @@ const Alerts = () => {
                 <div className="p-2 rounded-lg bg-primary/20">
                   <Bell className="h-5 w-5 text-primary" />
                 </div>
-                <span className="text-sm text-muted-foreground">Active Alerts</span>
+                <span className="text-sm text-muted-foreground">{t("alerts.activeAlerts")}</span>
               </div>
               <div className="text-3xl font-bold text-foreground">{alerts.length}</div>
             </div>
@@ -143,7 +145,7 @@ const Alerts = () => {
                 <div className="p-2 rounded-lg bg-success/20">
                   <CheckCircle className="h-5 w-5 text-success" />
                 </div>
-                <span className="text-sm text-muted-foreground">Triggered Today</span>
+                <span className="text-sm text-muted-foreground">{t("alerts.triggeredToday")}</span>
               </div>
               <div className="text-3xl font-bold text-foreground">
                 {triggeredAlerts.filter(a => {
@@ -159,7 +161,7 @@ const Alerts = () => {
                 <div className="p-2 rounded-lg bg-chart-cyan/20">
                   <Clock className="h-5 w-5 text-chart-cyan" />
                 </div>
-                <span className="text-sm text-muted-foreground">Total Triggered</span>
+                <span className="text-sm text-muted-foreground">{t("alerts.totalTriggered")}</span>
               </div>
               <div className="text-3xl font-bold text-foreground">{triggeredAlerts.length}</div>
             </div>
@@ -178,7 +180,7 @@ const Alerts = () => {
                 )}
               >
                 <Bell className="h-4 w-4" />
-                Active Alerts
+                {t("alerts.activeAlerts")}
                 {alerts.length > 0 && (
                   <span className="bg-primary-foreground/20 text-primary-foreground px-1.5 py-0.5 rounded text-xs">
                     {alerts.length}
@@ -195,13 +197,13 @@ const Alerts = () => {
                 )}
               >
                 <Clock className="h-4 w-4" />
-                Alert History
+                {t("alerts.alertHistory")}
               </button>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleTestSound} className="gap-2">
                 <Volume2 className="h-4 w-4" />
-                Test Sound
+                {t("alerts.testSound")}
               </Button>
               {isSupported && (
                 <Button 
@@ -214,12 +216,12 @@ const Alerts = () => {
                   {isSubscribed ? (
                     <>
                       <BellRing className="h-4 w-4" />
-                      Push On
+                      {t("alerts.pushOn")}
                     </>
                   ) : (
                     <>
                       <BellOff className="h-4 w-4" />
-                      Enable Push
+                      {t("alerts.enablePush")}
                     </>
                   )}
                 </Button>
@@ -232,9 +234,9 @@ const Alerts = () => {
             {activeTab === "active" ? (
               <>
                 <div className="p-6 border-b border-border flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-foreground">Active Price Alerts</h3>
+                  <h3 className="text-lg font-semibold text-foreground">{t("alerts.activeAlerts")}</h3>
                   <span className="text-sm text-muted-foreground">
-                    Monitoring {alerts.length} alert{alerts.length !== 1 ? "s" : ""}
+                    {t("alerts.monitoring", { count: alerts.length })}
                   </span>
                 </div>
 
@@ -245,9 +247,9 @@ const Alerts = () => {
                 ) : alerts.length === 0 ? (
                   <div className="p-12 text-center">
                     <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h4 className="text-lg font-medium text-foreground mb-2">No Active Alerts</h4>
+                    <h4 className="text-lg font-medium text-foreground mb-2">{t("alerts.noActiveAlerts")}</h4>
                     <p className="text-sm text-muted-foreground">
-                      Set price alerts from the Dashboard to get notified when prices hit your targets.
+                      {t("alerts.noActiveAlertsDesc")}
                     </p>
                   </div>
                 ) : (
@@ -278,7 +280,7 @@ const Alerts = () => {
                                   "px-2 py-0.5 rounded text-xs font-medium",
                                   alert.condition === "above" ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
                                 )}>
-                                  {alert.condition === "above" ? "↑ Above" : "↓ Below"}
+                                  {alert.condition === "above" ? `↑ ${t("alerts.above")}` : `↓ ${t("alerts.below")}`}
                                 </span>
                                 <span>${alert.target_price.toLocaleString()}</span>
                               </div>
@@ -287,20 +289,20 @@ const Alerts = () => {
 
                           <div className="flex items-center gap-6">
                             <div className="text-right">
-                              <div className="text-sm text-muted-foreground">Current Price</div>
+                              <div className="text-sm text-muted-foreground">{t("alerts.currentPrice")}</div>
                               <div className="font-semibold text-foreground">${currentPrice.toLocaleString()}</div>
                             </div>
                             <div className="text-right w-20">
-                              <div className="text-sm text-muted-foreground">Distance</div>
+                              <div className="text-sm text-muted-foreground">{t("alerts.distance")}</div>
                               <div className={cn(
                                 "font-semibold",
                                 distancePercent > 0 ? "text-warning" : "text-success"
                               )}>
-                                {distancePercent > 0 ? `${distancePercent.toFixed(1)}%` : "Ready!"}
+                                {distancePercent > 0 ? `${distancePercent.toFixed(1)}%` : t("alerts.ready")}
                               </div>
                             </div>
                             <div className="w-32 hidden md:block">
-                              <div className="text-xs text-muted-foreground mb-1">Progress</div>
+                              <div className="text-xs text-muted-foreground mb-1">{t("alerts.progress")}</div>
                               <div className="h-2 bg-secondary rounded-full overflow-hidden">
                                 <div 
                                   className="h-full bg-primary transition-all duration-500 rounded-full"
@@ -326,11 +328,11 @@ const Alerts = () => {
             ) : (
               <>
                 <div className="p-6 border-b border-border flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-foreground">Triggered Alert History</h3>
+                  <h3 className="text-lg font-semibold text-foreground">{t("alerts.triggeredHistory")}</h3>
                   {triggeredAlerts.length > 0 && (
                     <Button variant="outline" size="sm" onClick={handleClearHistory}>
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Clear History
+                      {t("alerts.clearHistory")}
                     </Button>
                   )}
                 </div>
@@ -342,9 +344,9 @@ const Alerts = () => {
                 ) : triggeredAlerts.length === 0 ? (
                   <div className="p-12 text-center">
                     <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h4 className="text-lg font-medium text-foreground mb-2">No Alert History</h4>
+                    <h4 className="text-lg font-medium text-foreground mb-2">{t("alerts.noAlertHistory")}</h4>
                     <p className="text-sm text-muted-foreground">
-                      Triggered alerts will appear here once your price targets are hit.
+                      {t("alerts.noAlertHistoryDesc")}
                     </p>
                   </div>
                 ) : (
@@ -365,7 +367,7 @@ const Alerts = () => {
                                 "px-2 py-0.5 rounded text-xs font-medium",
                                 alert.condition === "above" ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
                               )}>
-                                {alert.condition === "above" ? "↑ Above" : "↓ Below"}
+                                {alert.condition === "above" ? `↑ ${t("alerts.above")}` : `↓ ${t("alerts.below")}`}
                               </span>
                               <span>${alert.target_price.toLocaleString()}</span>
                             </div>
@@ -374,11 +376,11 @@ const Alerts = () => {
 
                         <div className="flex items-center gap-6">
                           <div className="text-right">
-                            <div className="text-sm text-muted-foreground">Set At</div>
+                            <div className="text-sm text-muted-foreground">{t("alerts.setAt")}</div>
                             <div className="text-sm text-foreground">${alert.current_price_at_creation.toLocaleString()}</div>
                           </div>
                           <div className="text-right">
-                            <div className="text-sm text-muted-foreground">Triggered</div>
+                            <div className="text-sm text-muted-foreground">{t("alerts.triggered")}</div>
                             <div className="text-sm text-foreground">{formatDate(alert.triggered_at)}</div>
                           </div>
                         </div>

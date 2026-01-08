@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { TrendingUp, Mail, Lock, ArrowRight, Loader2, CheckCircle2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,14 +12,15 @@ import { useRateLimit } from "@/hooks/useRateLimit";
 import ZikalyzeSplash from "@/components/ZikalyzeSplash";
 import { z } from "zod";
 
-const emailSchema = z.string().email("Please enter a valid email address");
-const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
-
 const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const { user, loading: authLoading, signIn, signUp, resetPassword } = useAuth();
   const { checkRateLimit, recordLoginAttempt, formatRetryAfter } = useRateLimit();
+  
+  const emailSchema = z.string().email(t("validation.invalidEmail"));
+  const passwordSchema = z.string().min(6, t("validation.passwordMinLength"));
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -65,11 +67,11 @@ const Auth = () => {
     if (!rateLimitResult.allowed) {
       setIsLoading(false);
       setRateLimitError(
-        `Too many login attempts. Please try again in ${formatRetryAfter(rateLimitResult.retry_after)}.`
+        t("auth.tryAgainIn", { time: formatRetryAfter(rateLimitResult.retry_after) })
       );
       toast({
-        title: "Too many attempts",
-        description: `Please wait ${formatRetryAfter(rateLimitResult.retry_after)} before trying again.`,
+        title: t("auth.tooManyAttempts"),
+        description: t("auth.tryAgainIn", { time: formatRetryAfter(rateLimitResult.retry_after) }),
         variant: "destructive",
       });
       return;
@@ -85,15 +87,15 @@ const Auth = () => {
       if (error.message.includes("Invalid login credentials")) {
         const remainingAttempts = rateLimitResult.max_attempts - rateLimitResult.attempts - 1;
         toast({
-          title: "Invalid credentials",
+          title: t("auth.invalidCredentials"),
           description: remainingAttempts > 0 
-            ? `Please check your email and password. ${remainingAttempts} attempt${remainingAttempts > 1 ? 's' : ''} remaining.`
-            : "Please check your email and password and try again.",
+            ? t("auth.checkCredentials", { attempts: remainingAttempts })
+            : t("auth.checkCredentials", { attempts: 0 }),
           variant: "destructive",
         });
       } else {
         toast({
-          title: "Sign in failed",
+          title: t("auth.signInFailed"),
           description: error.message,
           variant: "destructive",
         });
@@ -106,8 +108,8 @@ const Auth = () => {
     setIsLoading(false);
 
     toast({
-      title: "Welcome back!",
-      description: "Successfully signed in to Zikalyze.",
+      title: t("auth.welcomeBack"),
+      description: t("auth.signInSuccess"),
     });
     navigate("/dashboard");
   };
@@ -127,7 +129,7 @@ const Auth = () => {
 
     if (error) {
       toast({
-        title: "Reset failed",
+        title: t("auth.resetFailed"),
         description: error.message,
         variant: "destructive",
       });
@@ -135,8 +137,8 @@ const Auth = () => {
     }
 
     toast({
-      title: "Check your email",
-      description: "We've sent you a password reset link.",
+      title: t("auth.checkEmailForReset"),
+      description: t("auth.resetLinkSent"),
     });
     setShowForgotPassword(false);
   };
@@ -152,13 +154,13 @@ const Auth = () => {
     if (error) {
       if (error.message.includes("already registered")) {
         toast({
-          title: "Account exists",
-          description: "This email is already registered. Please sign in instead.",
+          title: t("auth.accountExists"),
+          description: t("auth.accountExistsDesc"),
           variant: "destructive",
         });
       } else {
         toast({
-          title: "Sign up failed",
+          title: t("auth.signUpFailed"),
           description: error.message,
           variant: "destructive",
         });
@@ -177,7 +179,7 @@ const Auth = () => {
 
     if (error) {
       toast({
-        title: "Failed to resend",
+        title: t("auth.failedToResend"),
         description: error.message,
         variant: "destructive",
       });
@@ -185,13 +187,13 @@ const Auth = () => {
     }
 
     toast({
-      title: "Email sent!",
-      description: "We've sent another verification link to your email.",
+      title: t("auth.emailSent"),
+      description: t("auth.anotherVerificationSent"),
     });
   };
 
   if (authLoading) {
-    return <ZikalyzeSplash message="Loading..." />;
+    return <ZikalyzeSplash message={t("common.loading")} />;
   }
 
   return (
@@ -215,8 +217,8 @@ const Auth = () => {
         <div className="rounded-2xl border border-border bg-card/80 backdrop-blur-xl p-8 shadow-2xl">
           <Tabs defaultValue="signin" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              <TabsTrigger value="signin">{t("auth.signIn")}</TabsTrigger>
+              <TabsTrigger value="signup">{t("auth.signUp")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="signin">
@@ -228,13 +230,13 @@ const Auth = () => {
               )}
               <form onSubmit={handleSignIn} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="signin-email">Email</Label>
+                  <Label htmlFor="signin-email">{t("auth.email")}</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signin-email"
                       type="email"
-                      placeholder="Enter your email"
+                      placeholder={t("auth.enterEmail")}
                       value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);
@@ -250,13 +252,13 @@ const Auth = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="signin-password">Password</Label>
+                  <Label htmlFor="signin-password">{t("auth.password")}</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signin-password"
                       type="password"
-                      placeholder="Enter your password"
+                      placeholder={t("auth.enterPassword")}
                       value={password}
                       onChange={(e) => {
                         setPassword(e.target.value);
@@ -276,7 +278,7 @@ const Auth = () => {
                     onClick={() => setShowForgotPassword(true)}
                     className="text-sm text-primary hover:underline"
                   >
-                    Forgot password?
+                    {t("auth.forgotPassword")}
                   </button>
                 </div>
 
@@ -290,7 +292,7 @@ const Auth = () => {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      Sign In <ArrowRight className="ml-2 h-4 w-4" />
+                      {t("auth.signIn")} <ArrowRight className="ml-2 h-4 w-4" />
                     </>
                   )}
                 </Button>
@@ -300,13 +302,13 @@ const Auth = () => {
             <TabsContent value="signup">
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
+                  <Label htmlFor="signup-email">{t("auth.email")}</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signup-email"
                       type="email"
-                      placeholder="Enter your email"
+                      placeholder={t("auth.enterEmail")}
                       value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);
@@ -321,13 +323,13 @@ const Auth = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
+                  <Label htmlFor="signup-password">{t("auth.password")}</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signup-password"
                       type="password"
-                      placeholder="Create a password (min. 6 characters)"
+                      placeholder={t("auth.createPassword")}
                       value={password}
                       onChange={(e) => {
                         setPassword(e.target.value);
@@ -350,7 +352,7 @@ const Auth = () => {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      Create Account <ArrowRight className="ml-2 h-4 w-4" />
+                      {t("auth.createAccount")} <ArrowRight className="ml-2 h-4 w-4" />
                     </>
                   )}
                 </Button>
@@ -359,7 +361,7 @@ const Auth = () => {
           </Tabs>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            By continuing, you agree to our Terms of Service and Privacy Policy.
+            {t("auth.termsAgreement")}
           </p>
         </div>
 
@@ -372,14 +374,13 @@ const Auth = () => {
                   <CheckCircle2 className="h-8 w-8 text-primary" />
                 </div>
               </div>
-              <h3 className="text-xl font-bold mb-2">Check your email</h3>
+              <h3 className="text-xl font-bold mb-2">{t("auth.checkEmail")}</h3>
               <p className="text-muted-foreground mb-4">
-                We've sent a verification link to:
+                {t("auth.verificationSent")}
               </p>
               <p className="font-medium text-foreground mb-6 break-all">{email}</p>
               <p className="text-sm text-muted-foreground mb-6">
-                Click the link in your email to verify your account and complete signup. 
-                The link will expire in 24 hours.
+                {t("auth.verificationExpiry")}
               </p>
               <div className="space-y-3">
                 <Button
@@ -390,12 +391,12 @@ const Auth = () => {
                   {isResending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Sending...
+                      {t("auth.sending")}
                     </>
                   ) : (
                     <>
                       <Mail className="mr-2 h-4 w-4" />
-                      Resend Verification Email
+                      {t("auth.resendVerification")}
                     </>
                   )}
                 </Button>
@@ -408,10 +409,10 @@ const Auth = () => {
                     setPassword("");
                   }}
                 >
-                  Back to Sign In
+                  {t("auth.backToSignIn")}
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  Still not receiving emails? Check your spam folder.
+                  {t("auth.checkSpam")}
                 </p>
               </div>
             </div>
@@ -422,19 +423,19 @@ const Auth = () => {
         {showForgotPassword && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
             <div className="rounded-2xl border border-border bg-card p-8 shadow-2xl w-full max-w-md mx-4">
-              <h3 className="text-xl font-bold mb-2">Reset Password</h3>
+              <h3 className="text-xl font-bold mb-2">{t("auth.resetPassword")}</h3>
               <p className="text-muted-foreground mb-4">
-                Enter your email and we'll send you a reset link.
+                {t("auth.resetPasswordDesc")}
               </p>
               <form onSubmit={handleForgotPassword} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="reset-email">Email</Label>
+                  <Label htmlFor="reset-email">{t("auth.email")}</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="reset-email"
                       type="email"
-                      placeholder="Enter your email"
+                      placeholder={t("auth.enterEmail")}
                       value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);
@@ -454,7 +455,7 @@ const Auth = () => {
                     className="flex-1"
                     onClick={() => setShowForgotPassword(false)}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                   <Button
                     type="submit"
@@ -464,7 +465,7 @@ const Auth = () => {
                     {isLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      "Send Reset Link"
+                      t("auth.sendResetLink")
                     )}
                   </Button>
                 </div>

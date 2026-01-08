@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Search, User, TrendingUp, TrendingDown, BarChart3, Activity, PieChart } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils";
 const Analytics = () => {
   const { prices, loading } = useCryptoPrices();
   const [timeframe, setTimeframe] = useState("24h");
+  const { t } = useTranslation();
 
   const timeframes = ["1h", "24h", "7d", "30d", "1y"];
 
@@ -33,13 +35,13 @@ const Analytics = () => {
       <main className="ml-16 lg:ml-64">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h1 className="text-2xl font-bold text-foreground">Analytics</h1>
+          <h1 className="text-2xl font-bold text-foreground">{t("analytics.title")}</h1>
           <div className="flex items-center gap-4">
             <div className="relative hidden md:block">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search"
+                placeholder={t("common.search")}
                 className="w-64 bg-secondary border-border pl-10"
               />
             </div>
@@ -75,7 +77,7 @@ const Analytics = () => {
                 <div className="p-2 rounded-lg bg-primary/20">
                   <PieChart className="h-5 w-5 text-primary" />
                 </div>
-                <span className="text-sm text-muted-foreground">Total Market Cap</span>
+                <span className="text-sm text-muted-foreground">{t("analytics.totalMarketCap")}</span>
               </div>
               <div className="text-2xl font-bold text-foreground">
                 ${loading ? "..." : (totalMarketCap / 1e12).toFixed(2)}T
@@ -87,7 +89,7 @@ const Analytics = () => {
                 <div className="p-2 rounded-lg bg-chart-cyan/20">
                   <BarChart3 className="h-5 w-5 text-chart-cyan" />
                 </div>
-                <span className="text-sm text-muted-foreground">24h Volume</span>
+                <span className="text-sm text-muted-foreground">{t("analytics.volume24h")}</span>
               </div>
               <div className="text-2xl font-bold text-foreground">
                 ${loading ? "..." : (totalVolume / 1e9).toFixed(2)}B
@@ -103,7 +105,7 @@ const Analytics = () => {
                     <TrendingDown className="h-5 w-5 text-destructive" />
                   )}
                 </div>
-                <span className="text-sm text-muted-foreground">Avg 24h Change</span>
+                <span className="text-sm text-muted-foreground">{t("analytics.avgChange24h")}</span>
               </div>
               <div className={cn("text-2xl font-bold", avgChange >= 0 ? "text-success" : "text-destructive")}>
                 {avgChange >= 0 ? "+" : ""}{avgChange.toFixed(2)}%
@@ -115,7 +117,7 @@ const Analytics = () => {
                 <div className="p-2 rounded-lg bg-warning/20">
                   <Activity className="h-5 w-5 text-warning" />
                 </div>
-                <span className="text-sm text-muted-foreground">Tracked Assets</span>
+                <span className="text-sm text-muted-foreground">{t("analytics.trackedAssets")}</span>
               </div>
               <div className="text-2xl font-bold text-foreground">
                 {loading ? "..." : prices.length}
@@ -144,7 +146,7 @@ const Analytics = () => {
             <div className="rounded-2xl border border-border bg-card p-6">
               <div className="flex items-center gap-2 mb-4">
                 <TrendingUp className="h-5 w-5 text-success" />
-                <h3 className="text-lg font-semibold text-foreground">Top Gainers</h3>
+                <h3 className="text-lg font-semibold text-foreground">{t("analytics.topGainers")}</h3>
               </div>
               <div className="space-y-3">
                 {topGainers.map((coin, index) => (
@@ -169,7 +171,7 @@ const Analytics = () => {
             <div className="rounded-2xl border border-border bg-card p-6">
               <div className="flex items-center gap-2 mb-4">
                 <TrendingDown className="h-5 w-5 text-destructive" />
-                <h3 className="text-lg font-semibold text-foreground">Top Losers</h3>
+                <h3 className="text-lg font-semibold text-foreground">{t("analytics.topLosers")}</h3>
               </div>
               <div className="space-y-3">
                 {topLosers.map((coin, index) => (

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   TrendingUp,
   LayoutDashboard,
@@ -15,20 +16,21 @@ import { cn } from "@/lib/utils";
 import ZikalyzeSplash from "@/components/ZikalyzeSplash";
 import { useAuth } from "@/hooks/useAuth";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: BarChart3, label: "Analytics", path: "/dashboard/analytics" },
-  { icon: Brain, label: "AI Analyzer", path: "/dashboard/analyzer" },
-  { icon: BellRing, label: "Alerts", path: "/dashboard/alerts" },
-  { icon: Wallet, label: "Portfolio", path: "/dashboard/portfolio" },
-  { icon: Settings, label: "Settings", path: "/dashboard/settings" },
-];
-
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut } = useAuth();
+  const { t } = useTranslation();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const menuItems = [
+    { icon: LayoutDashboard, label: t("sidebar.dashboard"), path: "/dashboard" },
+    { icon: BarChart3, label: t("sidebar.analytics"), path: "/dashboard/analytics" },
+    { icon: Brain, label: t("sidebar.aiAnalyzer"), path: "/dashboard/analyzer" },
+    { icon: BellRing, label: t("sidebar.alerts"), path: "/dashboard/alerts" },
+    { icon: Wallet, label: t("sidebar.portfolio"), path: "/dashboard/portfolio" },
+    { icon: Settings, label: t("sidebar.settings"), path: "/dashboard/settings" },
+  ];
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -40,7 +42,7 @@ const Sidebar = () => {
   };
 
   if (isLoggingOut) {
-    return <ZikalyzeSplash message="Signing out..." />;
+    return <ZikalyzeSplash message={t("sidebar.signingOut")} />;
   }
 
   return (
@@ -81,14 +83,14 @@ const Sidebar = () => {
       <div className="flex flex-col gap-2 px-3">
         <button className="flex items-center gap-3 rounded-xl px-3 py-3 text-muted-foreground transition-all hover:bg-secondary hover:text-foreground">
           <Search className="h-5 w-5" />
-          <span className="hidden lg:block">Search</span>
+          <span className="hidden lg:block">{t("sidebar.search")}</span>
         </button>
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 rounded-xl px-3 py-3 text-muted-foreground transition-all hover:bg-destructive/20 hover:text-destructive"
         >
           <LogOut className="h-5 w-5" />
-          <span className="hidden lg:block">Logout</span>
+          <span className="hidden lg:block">{t("sidebar.logout")}</span>
         </button>
       </div>
     </aside>
