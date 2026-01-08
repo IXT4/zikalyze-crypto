@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Search, User } from "lucide-react";
+import { PageTransition } from "@/components/PageTransition";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
@@ -29,8 +30,9 @@ const Analyzer = () => {
   const selected = cryptoData[selectedCrypto];
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
+    <PageTransition>
+      <div className="min-h-screen bg-background">
+        <Sidebar />
 
       <main className="ml-16 lg:ml-64">
         {/* Header */}
@@ -139,7 +141,8 @@ const Analyzer = () => {
           </div>
         </div>
       </main>
-    </div>
+      </div>
+    </PageTransition>
   );
 };
 
