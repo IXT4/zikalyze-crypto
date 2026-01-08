@@ -3,6 +3,7 @@ import { Webhook } from 'https://esm.sh/standardwebhooks@1.0.0'
 import { Resend } from 'https://esm.sh/resend@4.0.0'
 import { render } from 'https://esm.sh/@react-email/render@0.0.12'
 import { VerificationEmail } from './_templates/verification.tsx'
+import { PasswordResetEmail } from './_templates/password-reset.tsx'
 
 const resend = new Resend(Deno.env.get('RESEND_API_KEY') as string)
 const hookSecret = Deno.env.get('SEND_EMAIL_HOOK_SECRET') as string
@@ -37,28 +38,51 @@ Deno.serve(async (req) => {
 
     console.log(`Processing ${email_action_type} email for ${user.email}`)
 
-    // Only handle signup/email verification
-    if (email_action_type !== 'signup' && email_action_type !== 'email_change') {
-      console.log(`Skipping email type: ${email_action_type}`)
-      return new Response(JSON.stringify({}), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const defaultRedirect = redirect_to || `${supabaseUrl.replace('.supabase.co', '')}/`
 
-    const html = render(
-      React.createElement(VerificationEmail, {
-        supabase_url: Deno.env.get('SUPABASE_URL') ?? '',
-        token_hash,
-        redirect_to: redirect_to || `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '')}/`,
-        email_action_type,
-      })
-    )
+    let html: string
+    let subject: string
+
+    // Handle different email types
+    switch (email_action_type) {
+      case 'signup':
+      case 'email_change':
+        html = render(
+          React.createElement(VerificationEmail, {
+            supabase_url: supabaseUrl,
+            token_hash,
+            redirect_to: defaultRedirect,
+            email_action_type,
+          })
+        )
+        subject = 'Verify your Zikalyze account'
+        break
+
+      case 'recovery':
+        html = render(
+          React.createElement(PasswordResetEmail, {
+            supabase_url: supabaseUrl,
+            token_hash,
+            redirect_to: redirect_to || `${window?.location?.origin || ''}/reset-password`,
+            email_action_type,
+          })
+        )
+        subject = 'Reset your Zikalyze password'
+        break
+
+      default:
+        console.log(`Skipping unsupported email type: ${email_action_type}`)
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+    }
 
     const { error } = await resend.emails.send({
       from: 'Zikalyze <onboarding@resend.dev>',
       to: [user.email],
-      subject: 'Verify your Zikalyze account',
+      subject,
       html,
     })
 
@@ -67,7 +91,7 @@ Deno.serve(async (req) => {
       throw error
     }
 
-    console.log(`Successfully sent verification email to ${user.email}`)
+    console.log(`Successfully sent ${email_action_type} email to ${user.email}`)
 
     return new Response(JSON.stringify({}), {
       status: 200,
