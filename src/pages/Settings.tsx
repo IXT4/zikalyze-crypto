@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
 import TwoFactorAuth from "@/components/settings/TwoFactorAuth";
+import { SessionManagement } from "@/components/settings/SessionManagement";
 import { languageCodes } from "@/i18n/config";
 
 const emailSchema = z.string().email("Please enter a valid email address");
@@ -502,6 +503,9 @@ const Settings = () => {
                   <div className="space-y-4">
                     {/* Two-Factor Authentication Component */}
                     <TwoFactorAuth />
+
+                    {/* Active Sessions */}
+                    <SessionManagement />
 
                     <div className="p-4 rounded-xl bg-secondary/50">
                       <div className="font-medium text-foreground mb-2">Change Password</div>
