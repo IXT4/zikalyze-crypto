@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useCryptoPrices, CryptoPrice } from "@/hooks/useCryptoPrices";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
+import { useCurrency } from "@/hooks/useCurrency";
 import { TrendingUp, TrendingDown, Bell, X, BellRing, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +25,8 @@ type PriceFlash = "up" | "down" | null;
 const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
   const { prices, loading: pricesLoading } = useCryptoPrices();
   const { alerts, loading: alertsLoading, createAlert, removeAlert, checkAlerts } = usePriceAlerts();
+  const { formatPrice, symbol: currencySymbol } = useCurrency();
+  const { t } = useTranslation();
   const [alertDialogOpen, setAlertDialogOpen] = useState(false);
   const [selectedCryptoForAlert, setSelectedCryptoForAlert] = useState<CryptoPrice | null>(null);
   const [targetPrice, setTargetPrice] = useState("");
@@ -140,7 +144,7 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
             <h3 className="text-lg font-bold text-foreground">Top 100 Cryptocurrencies</h3>
             <span className="rounded bg-success/20 px-1.5 py-0.5 text-[10px] font-medium text-success flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-              Live
+              {t("common.live")}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -203,11 +207,11 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                       <Bell className="w-3 h-3 text-primary" />
                       <span className="font-medium">{alert.symbol}</span>
                       <span className="text-muted-foreground">
-                        {alert.condition} ${alert.target_price.toLocaleString()}
+                        {alert.condition} {formatPrice(alert.target_price)}
                       </span>
                       {crypto && (
                         <span className="text-muted-foreground">
-                          (now: ${currentPrice.toLocaleString()})
+                          (now: {formatPrice(currentPrice)})
                         </span>
                       )}
                       <button
@@ -282,9 +286,7 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                               : "text-foreground"
                         }`}
                       >
-                        ${crypto.current_price < 1 
-                          ? crypto.current_price.toFixed(6) 
-                          : crypto.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatPrice(crypto.current_price)}
                       </span>
                     </td>
                     <td className="py-3 text-right">
@@ -294,7 +296,7 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                       </div>
                     </td>
                     <td className="py-3 text-right text-sm text-muted-foreground hidden sm:table-cell">
-                      ${crypto.market_cap ? (crypto.market_cap / 1e9).toFixed(2) + "B" : "---"}
+                      {currencySymbol}{crypto.market_cap ? (crypto.market_cap / 1e9).toFixed(2) + "B" : "---"}
                     </td>
                     <td className="py-3 text-right text-sm text-muted-foreground hidden md:table-cell">
                       {crypto.circulating_supply 
@@ -306,17 +308,13 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                         : "---"} {crypto.symbol.toUpperCase()}
                     </td>
                     <td className="py-3 text-right text-sm text-muted-foreground hidden lg:table-cell">
-                      ${crypto.high_24h < 1 
-                        ? crypto.high_24h?.toFixed(6) 
-                        : crypto.high_24h?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "---"}
+                      {crypto.high_24h ? formatPrice(crypto.high_24h) : "---"}
                     </td>
                     <td className="py-3 text-right text-sm text-muted-foreground hidden lg:table-cell">
-                      ${crypto.low_24h < 1 
-                        ? crypto.low_24h?.toFixed(6) 
-                        : crypto.low_24h?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "---"}
+                      {crypto.low_24h ? formatPrice(crypto.low_24h) : "---"}
                     </td>
                     <td className="py-3 text-right text-sm text-muted-foreground hidden xl:table-cell">
-                      ${(crypto.total_volume / 1e6).toFixed(1)}M
+                      {currencySymbol}{(crypto.total_volume / 1e6).toFixed(1)}M
                     </td>
                     <td className="py-3 text-center">
                       <Button
@@ -361,7 +359,7 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
               <div>
                 <div className="font-medium">{selectedCryptoForAlert?.name}</div>
                 <div className="text-sm text-muted-foreground">
-                  Current: ${selectedCryptoForAlert?.current_price.toLocaleString()}
+                  Current: {selectedCryptoForAlert ? formatPrice(selectedCryptoForAlert.current_price) : "---"}
                 </div>
               </div>
             </div>
@@ -405,10 +403,6 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
               <Bell className="w-4 h-4 mr-2" />
               Create Alert
             </Button>
-
-            <p className="text-xs text-muted-foreground text-center">
-              You'll receive a browser notification when the price target is hit.
-            </p>
           </div>
         </DialogContent>
       </Dialog>

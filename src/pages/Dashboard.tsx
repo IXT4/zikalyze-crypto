@@ -9,6 +9,7 @@ import AIMetrics from "@/components/dashboard/AIMetrics";
 import AIAnalyzer from "@/components/dashboard/AIAnalyzer";
 import Top100CryptoList from "@/components/dashboard/Top100CryptoList";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
+import { useCurrency } from "@/hooks/useCurrency";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -17,6 +18,7 @@ const Dashboard = () => {
   const [userName, setUserName] = useState<string | null>(null);
   const { prices, loading, getPriceBySymbol } = useCryptoPrices();
   const { t } = useTranslation();
+  const { formatPrice, symbol: currencySymbol } = useCurrency();
 
   useEffect(() => {
     const session = localStorage.getItem("wallet_session");
@@ -110,7 +112,7 @@ const Dashboard = () => {
 
             <div className="mt-6">
               <div className="text-4xl font-bold text-foreground">
-                ${selected.price < 1 ? selected.price.toFixed(6) : selected.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {formatPrice(selected.price)}
               </div>
               <div className="mt-2 flex items-center gap-2">
                 <span className={selected.change >= 0 ? "text-success" : "text-destructive"}>
@@ -123,19 +125,19 @@ const Dashboard = () => {
             <div className="mt-6 grid grid-cols-4 gap-4">
               <div>
                 <div className="text-sm text-muted-foreground">{t("dashboard.high24h")}</div>
-                <div className="font-semibold text-foreground">${liveData?.high_24h?.toLocaleString() || "---"}</div>
+                <div className="font-semibold text-foreground">{liveData?.high_24h ? formatPrice(liveData.high_24h) : "---"}</div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground">{t("dashboard.low24h")}</div>
-                <div className="font-semibold text-foreground">${liveData?.low_24h?.toLocaleString() || "---"}</div>
+                <div className="font-semibold text-foreground">{liveData?.low_24h ? formatPrice(liveData.low_24h) : "---"}</div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground">{t("dashboard.volume24h")}</div>
-                <div className="font-semibold text-foreground">${liveData?.total_volume ? (liveData.total_volume / 1e9).toFixed(2) + "B" : "---"}</div>
+                <div className="font-semibold text-foreground">{currencySymbol}{liveData?.total_volume ? (liveData.total_volume / 1e9).toFixed(2) + "B" : "---"}</div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground">{t("dashboard.marketCap")}</div>
-                <div className="font-semibold text-foreground">${liveData?.market_cap ? (liveData.market_cap / 1e9).toFixed(2) + "B" : "---"}</div>
+                <div className="font-semibold text-foreground">{currencySymbol}{liveData?.market_cap ? (liveData.market_cap / 1e9).toFixed(2) + "B" : "---"}</div>
               </div>
             </div>
           </div>

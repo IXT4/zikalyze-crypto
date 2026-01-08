@@ -20,6 +20,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
+import { useCurrency } from "@/hooks/useCurrency";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Holding {
@@ -36,6 +37,7 @@ const STORAGE_KEY = "zikalyze_portfolio_holdings";
 const Portfolio = () => {
   const { prices, loading, getPriceBySymbol, getPriceById, refetch } = useCryptoPrices();
   const { t } = useTranslation();
+  const { formatPrice, convertPrice } = useCurrency();
   
   // Load holdings from localStorage on mount
   const [holdings, setHoldings] = useState<Holding[]>(() => {
@@ -194,7 +196,7 @@ const Portfolio = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-foreground">
-                  ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatPrice(totalValue)}
                 </div>
               </CardContent>
             </Card>
@@ -208,7 +210,7 @@ const Portfolio = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-foreground">
-                  ${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatPrice(totalCost)}
                 </div>
               </CardContent>
             </Card>
@@ -226,7 +228,7 @@ const Portfolio = () => {
               </CardHeader>
               <CardContent>
                 <div className={`text-2xl font-bold ${totalPnL >= 0 ? "text-success" : "text-destructive"}`}>
-                  {totalPnL >= 0 ? "+" : ""}${totalPnL.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {totalPnL >= 0 ? "+" : ""}{formatPrice(totalPnL)}
                   <span className="ml-2 text-sm">
                     ({totalPnLPercent >= 0 ? "+" : ""}{totalPnLPercent.toFixed(2)}%)
                   </span>
@@ -277,18 +279,18 @@ const Portfolio = () => {
                             </div>
                           </td>
                           <td className="py-4 text-right text-foreground">{holding.amount}</td>
-                          <td className="py-4 text-right text-muted-foreground">${holding.buyPrice.toLocaleString()}</td>
+                          <td className="py-4 text-right text-muted-foreground">{formatPrice(holding.buyPrice)}</td>
                           <td className="py-4 text-right">
-                            <div className="text-foreground">${currentPrice.toLocaleString()}</div>
+                            <div className="text-foreground">{formatPrice(currentPrice)}</div>
                             <div className={`text-xs ${priceChange >= 0 ? "text-success" : "text-destructive"}`}>
                               {priceChange >= 0 ? "+" : ""}{priceChange.toFixed(2)}%
                             </div>
                           </td>
                           <td className="py-4 text-right font-medium text-foreground">
-                            ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {formatPrice(value)}
                           </td>
                           <td className={`py-4 text-right font-medium ${pnl >= 0 ? "text-success" : "text-destructive"}`}>
-                            {pnl >= 0 ? "+" : ""}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {pnl >= 0 ? "+" : ""}{formatPrice(pnl)}
                             <span className="ml-1 text-xs">
                               ({pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%)
                             </span>

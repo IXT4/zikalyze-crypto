@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { CryptoPrice } from "@/hooks/useCryptoPrices";
+import { useCurrency } from "@/hooks/useCurrency";
 
 const cryptoMeta = [
   { symbol: "BTC", name: "Bitcoin", color: "text-warning" },
@@ -17,6 +18,8 @@ interface CryptoTickerProps {
 }
 
 const CryptoTicker = ({ selected, onSelect, getPriceBySymbol, loading }: CryptoTickerProps) => {
+  const { formatPrice } = useCurrency();
+  
   return (
     <div className="flex flex-wrap gap-3">
       {cryptoMeta.map((crypto) => {
@@ -47,7 +50,7 @@ const CryptoTicker = ({ selected, onSelect, getPriceBySymbol, loading }: CryptoT
               </span>
             </div>
             <span className="text-lg font-semibold text-foreground">
-              {loading ? "..." : `$${price.toLocaleString()}`}
+              {loading ? "..." : formatPrice(price)}
             </span>
           </button>
         );
