@@ -12,6 +12,7 @@ export interface CryptoPrice {
   total_volume: number;
   market_cap: number;
   market_cap_rank: number;
+  circulating_supply: number;
   lastUpdate?: number;
   source?: string;
 }
@@ -28,6 +29,7 @@ interface CoinGeckoCoin {
   total_volume: number;
   market_cap: number;
   market_cap_rank: number;
+  circulating_supply: number;
 }
 
 // Stablecoins to exclude
@@ -133,6 +135,7 @@ export const useCryptoPrices = () => {
         total_volume: coin.total_volume || 0,
         market_cap: coin.market_cap || 0,
         market_cap_rank: index + 1,
+        circulating_supply: coin.circulating_supply || 0,
         lastUpdate: Date.now(),
         source: "CoinGecko",
       }));
