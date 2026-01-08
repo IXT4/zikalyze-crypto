@@ -135,7 +135,17 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    fetchRates();
+    // Defer the API call to avoid blocking initial render
+    // Use requestIdleCallback if available, otherwise setTimeout
+    const deferredFetch = () => {
+      if ('requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(() => fetchRates(), { timeout: 2000 });
+      } else {
+        setTimeout(fetchRates, 100);
+      }
+    };
+    
+    deferredFetch();
     
     // Refresh rates every hour
     const interval = setInterval(fetchRates, RATES_CACHE_DURATION);
