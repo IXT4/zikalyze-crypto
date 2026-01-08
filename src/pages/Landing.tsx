@@ -22,8 +22,8 @@ const Landing = () => {
         // Invalid session
       }
     }
-    // Show splash for branding
-    setTimeout(() => setLoading(false), 2000);
+    // Quick splash for branding
+    setTimeout(() => setLoading(false), 800);
   }, [navigate]);
 
   if (loading) {
