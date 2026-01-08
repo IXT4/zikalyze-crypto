@@ -54,7 +54,7 @@ const Sidebar = () => {
   }
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-16 flex-col items-center border-r border-border bg-card py-6 lg:w-64">
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-16 flex-col items-center border-r border-border bg-card py-6 lg:w-64 transition-all duration-200">
       {/* Logo */}
       <Link to="/dashboard" className="mb-8 flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary glow-purple">
@@ -74,10 +74,10 @@ const Sidebar = () => {
               key={item.path}
               to={item.path}
               className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-3 transition-all",
+                "flex items-center gap-3 rounded-xl px-3 py-3 transition-all duration-150 ease-out active:scale-[0.98]",
                 isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  ? "bg-primary text-primary-foreground shadow-md"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground hover:translate-x-1"
               )}
             >
               <item.icon className="h-5 w-5 flex-shrink-0" />
