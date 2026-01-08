@@ -26,8 +26,46 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🧠 ZIKALYZE AI BRAIN v3.0 — ELITE COGNITIVE SYSTEM
+// 🧠 ZIKALYZE AI BRAIN v4.0 — REAL-TIME CHART INTELLIGENCE
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// Real candlestick data from exchanges
+interface Candle {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  timestamp: number;
+}
+
+interface RealChartData {
+  candles: Candle[];
+  source: string;
+  timeframe: string;
+  realPatterns: string[];
+  trendAnalysis: {
+    direction: 'BULLISH' | 'BEARISH' | 'SIDEWAYS';
+    strength: number;
+    swingHighs: number[];
+    swingLows: number[];
+    higherHighs: boolean;
+    higherLows: boolean;
+    lowerHighs: boolean;
+    lowerLows: boolean;
+  };
+  volumeProfile: {
+    averageVolume: number;
+    currentVsAvg: number;
+    volumeTrend: 'INCREASING' | 'DECREASING' | 'STABLE';
+    climacticVolume: boolean;
+  };
+  candlePatterns: string[];
+  supportResistance: {
+    supports: number[];
+    resistances: number[];
+  };
+}
 
 interface MarketMemory {
   symbol: string;
@@ -263,6 +301,300 @@ const CRYPTO_KNOWLEDGE: Record<string, {
     liquidityZones: "Major support at $0.50 and $1.00"
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 📊 REAL-TIME CHART DATA FETCHER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const BINANCE_SYMBOL_MAP: Record<string, string> = {
+  BTC: 'BTCUSDT', ETH: 'ETHUSDT', SOL: 'SOLUSDT', XRP: 'XRPUSDT', DOGE: 'DOGEUSDT',
+  ADA: 'ADAUSDT', AVAX: 'AVAXUSDT', LINK: 'LINKUSDT', DOT: 'DOTUSDT', MATIC: 'MATICUSDT',
+  SHIB: 'SHIBUSDT', LTC: 'LTCUSDT', UNI: 'UNIUSDT', ATOM: 'ATOMUSDT', XLM: 'XLMUSDT',
+  FIL: 'FILUSDT', NEAR: 'NEARUSDT', APT: 'APTUSDT', ARB: 'ARBUSDT', OP: 'OPUSDT',
+  SUI: 'SUIUSDT', PEPE: 'PEPEUSDT', WIF: 'WIFUSDT', BONK: 'BONKUSDT', RENDER: 'RENDERUSDT',
+};
+
+async function fetchRealChartData(crypto: string): Promise<RealChartData | null> {
+  const symbol = BINANCE_SYMBOL_MAP[crypto];
+  if (!symbol) {
+    console.log(`⚠️ No Binance symbol mapping for ${crypto}, using fallback analysis`);
+    return null;
+  }
+  
+  try {
+    // Fetch 4H candles (100 candles = ~16 days of data)
+    const response = await fetch(
+      `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=4h&limit=100`,
+      { 
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(8000) 
+      }
+    );
+    
+    if (!response.ok) {
+      console.log(`⚠️ Binance API error: ${response.status}`);
+      return null;
+    }
+    
+    const data = await response.json() as number[][];
+    
+    if (!Array.isArray(data) || data.length < 20) {
+      console.log(`⚠️ Insufficient candle data for ${crypto}`);
+      return null;
+    }
+    
+    // Parse candles
+    const candles: Candle[] = data.map((k: number[]) => ({
+      timestamp: k[0],
+      open: parseFloat(String(k[1])),
+      high: parseFloat(String(k[2])),
+      low: parseFloat(String(k[3])),
+      close: parseFloat(String(k[4])),
+      volume: parseFloat(String(k[5]))
+    }));
+    
+    console.log(`✅ Fetched ${candles.length} real candles for ${crypto} from Binance`);
+    
+    // Analyze the real chart data
+    return analyzeRealChart(candles, crypto);
+    
+  } catch (error) {
+    console.log(`⚠️ Failed to fetch real chart data: ${error}`);
+    return null;
+  }
+}
+
+function analyzeRealChart(candles: Candle[], crypto: string): RealChartData {
+  const recent = candles.slice(-50); // Focus on last 50 candles (8+ days)
+  const currentCandle = candles[candles.length - 1];
+  
+  // ═══ Swing High/Low Detection ═══
+  const swingHighs: number[] = [];
+  const swingLows: number[] = [];
+  
+  for (let i = 2; i < recent.length - 2; i++) {
+    const c = recent[i];
+    const prev1 = recent[i - 1];
+    const prev2 = recent[i - 2];
+    const next1 = recent[i + 1];
+    const next2 = recent[i + 2];
+    
+    // Swing High: Higher than 2 candles before and after
+    if (c.high > prev1.high && c.high > prev2.high && c.high > next1.high && c.high > next2.high) {
+      swingHighs.push(c.high);
+    }
+    // Swing Low: Lower than 2 candles before and after
+    if (c.low < prev1.low && c.low < prev2.low && c.low < next1.low && c.low < next2.low) {
+      swingLows.push(c.low);
+    }
+  }
+  
+  // ═══ Trend Analysis (HH/HL/LH/LL) ═══
+  const recentHighs = swingHighs.slice(-4);
+  const recentLows = swingLows.slice(-4);
+  
+  let higherHighs = false;
+  let higherLows = false;
+  let lowerHighs = false;
+  let lowerLows = false;
+  
+  if (recentHighs.length >= 2) {
+    higherHighs = recentHighs[recentHighs.length - 1] > recentHighs[recentHighs.length - 2];
+    lowerHighs = recentHighs[recentHighs.length - 1] < recentHighs[recentHighs.length - 2];
+  }
+  if (recentLows.length >= 2) {
+    higherLows = recentLows[recentLows.length - 1] > recentLows[recentLows.length - 2];
+    lowerLows = recentLows[recentLows.length - 1] < recentLows[recentLows.length - 2];
+  }
+  
+  let direction: 'BULLISH' | 'BEARISH' | 'SIDEWAYS' = 'SIDEWAYS';
+  let trendStrength = 50;
+  
+  if (higherHighs && higherLows) {
+    direction = 'BULLISH';
+    trendStrength = 75 + Math.min(recentHighs.length * 5, 20);
+  } else if (lowerHighs && lowerLows) {
+    direction = 'BEARISH';
+    trendStrength = 75 + Math.min(recentLows.length * 5, 20);
+  } else if (higherHighs && lowerLows) {
+    direction = 'SIDEWAYS';
+    trendStrength = 40;
+  } else if (lowerHighs && higherLows) {
+    direction = 'SIDEWAYS';
+    trendStrength = 35;
+  }
+  
+  // ═══ Volume Profile Analysis ═══
+  const volumes = recent.map(c => c.volume);
+  const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+  const recentVolumes = volumes.slice(-5);
+  const recentAvgVol = recentVolumes.reduce((a, b) => a + b, 0) / recentVolumes.length;
+  const olderVolumes = volumes.slice(0, 20);
+  const olderAvgVol = olderVolumes.reduce((a, b) => a + b, 0) / olderVolumes.length;
+  
+  const currentVsAvg = (currentCandle.volume / avgVolume) * 100;
+  const volumeTrend = recentAvgVol > olderAvgVol * 1.3 ? 'INCREASING' : 
+                      recentAvgVol < olderAvgVol * 0.7 ? 'DECREASING' : 'STABLE';
+  const climacticVolume = currentCandle.volume > avgVolume * 2.5;
+  
+  // ═══ Candlestick Pattern Detection ═══
+  const candlePatterns: string[] = [];
+  const last = candles.slice(-5);
+  
+  for (let i = 1; i < last.length; i++) {
+    const c = last[i];
+    const prev = last[i - 1];
+    const body = Math.abs(c.close - c.open);
+    const upperWick = c.high - Math.max(c.open, c.close);
+    const lowerWick = Math.min(c.open, c.close) - c.low;
+    const totalRange = c.high - c.low;
+    const prevBody = Math.abs(prev.close - prev.open);
+    
+    // Bullish Engulfing
+    if (c.close > c.open && prev.close < prev.open && 
+        c.close > prev.open && c.open < prev.close && body > prevBody * 1.2) {
+      candlePatterns.push('Bullish Engulfing (REAL) ✓');
+    }
+    
+    // Bearish Engulfing
+    if (c.close < c.open && prev.close > prev.open &&
+        c.open > prev.close && c.close < prev.open && body > prevBody * 1.2) {
+      candlePatterns.push('Bearish Engulfing (REAL) ✓');
+    }
+    
+    // Hammer (bullish reversal)
+    if (totalRange > 0 && lowerWick > body * 2 && upperWick < body * 0.3 && c.close > c.open) {
+      candlePatterns.push('Hammer (REAL) ✓');
+    }
+    
+    // Shooting Star (bearish reversal)
+    if (totalRange > 0 && upperWick > body * 2 && lowerWick < body * 0.3 && c.close < c.open) {
+      candlePatterns.push('Shooting Star (REAL) ✓');
+    }
+    
+    // Doji
+    if (totalRange > 0 && body < totalRange * 0.1) {
+      candlePatterns.push('Doji — Indecision');
+    }
+    
+    // Strong Bullish Candle
+    if (body > totalRange * 0.7 && c.close > c.open && body > avgVolume * 0.0001) {
+      candlePatterns.push('Strong Bullish Candle ✓');
+    }
+    
+    // Strong Bearish Candle
+    if (body > totalRange * 0.7 && c.close < c.open) {
+      candlePatterns.push('Strong Bearish Candle ✓');
+    }
+  }
+  
+  // ═══ Support/Resistance from Swing Points ═══
+  const allPrices = recent.flatMap(c => [c.high, c.low]);
+  const priceRange = Math.max(...allPrices) - Math.min(...allPrices);
+  const tolerance = priceRange * 0.02;
+  
+  // Cluster swing lows for support
+  const supports = clusterLevels(swingLows, tolerance).slice(0, 3);
+  // Cluster swing highs for resistance
+  const resistances = clusterLevels(swingHighs, tolerance).slice(0, 3);
+  
+  // ═══ Real Pattern Recognition ═══
+  const realPatterns: string[] = [];
+  
+  // Double Bottom Detection
+  if (swingLows.length >= 2) {
+    const lastTwo = swingLows.slice(-2);
+    if (Math.abs(lastTwo[0] - lastTwo[1]) < lastTwo[0] * 0.02) {
+      realPatterns.push('Double Bottom forming (REAL CHART)');
+    }
+  }
+  
+  // Double Top Detection
+  if (swingHighs.length >= 2) {
+    const lastTwo = swingHighs.slice(-2);
+    if (Math.abs(lastTwo[0] - lastTwo[1]) < lastTwo[0] * 0.02) {
+      realPatterns.push('Double Top forming (REAL CHART)');
+    }
+  }
+  
+  // Break of Structure
+  if (swingHighs.length >= 2 && currentCandle.close > swingHighs[swingHighs.length - 2]) {
+    realPatterns.push('Bullish Break of Structure (REAL)');
+  }
+  if (swingLows.length >= 2 && currentCandle.close < swingLows[swingLows.length - 2]) {
+    realPatterns.push('Bearish Break of Structure (REAL)');
+  }
+  
+  // Liquidity Sweep Detection
+  if (swingLows.length > 0) {
+    const recentLow = Math.min(...swingLows.slice(-2));
+    if (currentCandle.low < recentLow && currentCandle.close > recentLow) {
+      realPatterns.push('Sellside Liquidity Sweep + Reclaim (REAL)');
+    }
+  }
+  if (swingHighs.length > 0) {
+    const recentHigh = Math.max(...swingHighs.slice(-2));
+    if (currentCandle.high > recentHigh && currentCandle.close < recentHigh) {
+      realPatterns.push('Buyside Liquidity Sweep + Rejection (REAL)');
+    }
+  }
+  
+  // Volume Climax
+  if (climacticVolume) {
+    realPatterns.push(currentCandle.close > currentCandle.open ? 
+      'Climactic Buying Volume (REAL)' : 'Climactic Selling Volume (REAL)');
+  }
+  
+  return {
+    candles,
+    source: 'Binance 4H',
+    timeframe: '4H',
+    realPatterns,
+    trendAnalysis: {
+      direction,
+      strength: trendStrength,
+      swingHighs,
+      swingLows,
+      higherHighs,
+      higherLows,
+      lowerHighs,
+      lowerLows
+    },
+    volumeProfile: {
+      averageVolume: avgVolume,
+      currentVsAvg,
+      volumeTrend,
+      climacticVolume
+    },
+    candlePatterns: [...new Set(candlePatterns)].slice(0, 5),
+    supportResistance: {
+      supports,
+      resistances
+    }
+  };
+}
+
+function clusterLevels(levels: number[], tolerance: number): number[] {
+  if (levels.length === 0) return [];
+  const sorted = [...levels].sort((a, b) => a - b);
+  const clusters: number[][] = [];
+  let currentCluster: number[] = [sorted[0]];
+  
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] - sorted[i - 1] <= tolerance) {
+      currentCluster.push(sorted[i]);
+    } else {
+      clusters.push(currentCluster);
+      currentCluster = [sorted[i]];
+    }
+  }
+  clusters.push(currentCluster);
+  
+  // Return average of each cluster, sorted by cluster size (most touches = strongest)
+  return clusters
+    .sort((a, b) => b.length - a.length)
+    .map(c => c.reduce((a, b) => a + b, 0) / c.length);
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🧬 WYCKOFF PHASE DETECTION
@@ -1057,10 +1389,22 @@ serve(async (req) => {
     const validatedVolume = volumeValidation.value;
     const validatedMarketCap = marketCapValidation.value;
     
-    console.log(`🧠 AI Brain v3.0 analyzing ${sanitizedCrypto} at $${validatedPrice} with ${validatedChange}% change`);
+    console.log(`🧠 AI Brain v4.0 analyzing ${sanitizedCrypto} at $${validatedPrice} with ${validatedChange}% change`);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // 🧠 CORE AI BRAIN v3.0 CALCULATIONS
+    // 📊 FETCH REAL CHART DATA FROM BINANCE
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    const realChartData = await fetchRealChartData(sanitizedCrypto);
+    
+    if (realChartData) {
+      console.log(`📈 Real chart analysis complete: ${realChartData.trendAnalysis.direction} trend, ${realChartData.realPatterns.length} patterns, ${realChartData.candlePatterns.length} candle patterns`);
+    } else {
+      console.log(`⚠️ Using fallback analysis without real chart data`);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 🧠 CORE AI BRAIN v4.0 CALCULATIONS
     // ═══════════════════════════════════════════════════════════════════════════
     
     const priceNum = validatedPrice;
@@ -1282,27 +1626,80 @@ serve(async (req) => {
     const trendEmoji = validatedChange >= 0 ? "▲" : "▼";
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // 🧠 GENERATE ELITE AI ANALYSIS
+    // 🧠 GENERATE ELITE AI ANALYSIS v4.0 WITH REAL CHART DATA
     // ═══════════════════════════════════════════════════════════════════════════
     
-    const analysis = `🧠 ZIKALYZE AI BRAIN v3.0 — ELITE ANALYSIS
-Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
+    // Build real chart section if available
+    const realChartSection = realChartData ? `
+📊 LIVE CHART ANALYSIS (${realChartData.source})
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Data: ${realChartData.candles.length} candles analyzed | Timeframe: ${realChartData.timeframe}
 
+🎯 REAL TREND STRUCTURE
+Direction: ${realChartData.trendAnalysis.direction} (Strength: ${realChartData.trendAnalysis.strength}%)
+Structure: ${realChartData.trendAnalysis.higherHighs ? 'HH ✓ ' : ''}${realChartData.trendAnalysis.higherLows ? 'HL ✓ ' : ''}${realChartData.trendAnalysis.lowerHighs ? 'LH ✓ ' : ''}${realChartData.trendAnalysis.lowerLows ? 'LL ✓' : ''}
+Swing Highs: ${realChartData.trendAnalysis.swingHighs.slice(-3).map(h => `$${h.toFixed(2)}`).join(' → ') || 'N/A'}
+Swing Lows: ${realChartData.trendAnalysis.swingLows.slice(-3).map(l => `$${l.toFixed(2)}`).join(' → ') || 'N/A'}
+
+🕯️ CANDLESTICK PATTERNS (REAL)
+${realChartData.candlePatterns.length > 0 ? realChartData.candlePatterns.map((p, i) => `${i + 1}. ${p}`).join('\n') : 'No significant patterns in recent candles'}
+
+📈 CHART PATTERNS (REAL)
+${realChartData.realPatterns.length > 0 ? realChartData.realPatterns.map((p, i) => `${i + 1}. ${p}`).join('\n') : 'No major formations detected'}
+
+📊 VOLUME PROFILE (REAL)
+Current vs Average: ${realChartData.volumeProfile.currentVsAvg.toFixed(0)}%
+Volume Trend: ${realChartData.volumeProfile.volumeTrend}
+${realChartData.volumeProfile.climacticVolume ? '⚠️ CLIMACTIC VOLUME DETECTED — potential reversal/continuation signal' : 'Normal volume activity'}
+
+🎯 REAL SUPPORT/RESISTANCE
+Supports: ${realChartData.supportResistance.supports.slice(0, 3).map(s => `$${s.toFixed(2)}`).join(' | ') || 'N/A'}
+Resistances: ${realChartData.supportResistance.resistances.slice(0, 3).map(r => `$${r.toFixed(2)}`).join(' | ') || 'N/A'}
+` : `
+📊 CHART DATA STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ Real-time chart data unavailable — using algorithmic analysis only.
+`;
+
+    // Combine real chart patterns with algorithmic patterns
+    const allPatterns = realChartData 
+      ? [...realChartData.realPatterns, ...realChartData.candlePatterns, ...patterns]
+      : patterns;
+    
+    // Adjust confidence based on real chart data
+    const adjustedConfidence = realChartData 
+      ? Math.min(95, probabilities.confidence + (realChartData.realPatterns.length * 3))
+      : probabilities.confidence;
+    
+    // Adjust bias based on real trend
+    let finalBias = bias;
+    if (realChartData) {
+      if (realChartData.trendAnalysis.direction === 'BULLISH' && realChartData.trendAnalysis.strength >= 70) {
+        finalBias = 'LONG';
+      } else if (realChartData.trendAnalysis.direction === 'BEARISH' && realChartData.trendAnalysis.strength >= 70) {
+        finalBias = 'SHORT';
+      }
+    }
+    
+    const analysis = `🧠 ZIKALYZE AI BRAIN v4.0 — REAL-TIME INTELLIGENCE
+Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
+${realChartData ? '🔴 LIVE CHART DATA CONNECTED' : '⚪ Algorithmic Mode'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${realChartSection}
 💭 CHAIN-OF-THOUGHT REASONING
 ${thoughts.map(t => `[Step ${t.step}] ${t.thought}
 → Conclusion: ${t.conclusion} (Weight: ${t.weight}/10)`).join('\n\n')}
 
-🔍 DETECTED PATTERNS (${patterns.length})
-${patterns.map((p, i) => `${i + 1}. ${p}`).join('\n')}
-Pattern Confluence: ${patterns.length >= 5 ? 'EXCELLENT ⭐⭐⭐⭐⭐' : patterns.length >= 4 ? 'STRONG ⭐⭐⭐⭐' : patterns.length >= 3 ? 'GOOD ⭐⭐⭐' : patterns.length >= 2 ? 'MODERATE ⭐⭐' : 'DEVELOPING ⭐'}
+🔍 DETECTED PATTERNS (${allPatterns.length})
+${allPatterns.slice(0, 8).map((p, i) => `${i + 1}. ${p}`).join('\n')}
+Pattern Confluence: ${allPatterns.length >= 6 ? 'EXCELLENT ⭐⭐⭐⭐⭐' : allPatterns.length >= 4 ? 'STRONG ⭐⭐⭐⭐' : allPatterns.length >= 3 ? 'GOOD ⭐⭐⭐' : allPatterns.length >= 2 ? 'MODERATE ⭐⭐' : 'DEVELOPING ⭐'}
 
 📊 PROBABILITY MATRIX
 Bull Probability: ${probabilities.bullProb}% ${'█'.repeat(Math.round(probabilities.bullProb / 5))}${'░'.repeat(20 - Math.round(probabilities.bullProb / 5))}
 Bear Probability: ${probabilities.bearProb}% ${'█'.repeat(Math.round(probabilities.bearProb / 5))}${'░'.repeat(20 - Math.round(probabilities.bearProb / 5))}
 Neutral Zone: ${probabilities.neutralProb}%
 Primary Bias: ${probabilities.bullProb > probabilities.bearProb + 10 ? 'BULLISH 🟢' : probabilities.bearProb > probabilities.bullProb + 10 ? 'BEARISH 🔴' : 'NEUTRAL ⚪'}
-Confidence: ${probabilities.confidence}%
+Confidence: ${adjustedConfidence}%${realChartData ? ' (boosted by real chart data)' : ''}
 
 📈 WYCKOFF PHASE ANALYSIS
 Phase: ${wyckoffPhase.phase} — ${wyckoffPhase.subPhase}
@@ -1350,18 +1747,18 @@ Session: ${sessionContext}
 📐 SMART MONEY LEVELS
 Order Block (Bull): $${obBullishLow.toFixed(2)} - $${obBullishHigh.toFixed(2)}
 Order Block (Bear): $${obBearishLow.toFixed(2)} - $${obBearishHigh.toFixed(2)}
-Fair Value Gap: ${bias === 'LONG' ? fvgBullishZone : fvgBearishZone}
-OTE Zone (61.8-78.6%): ${bias === 'LONG' ? oteZoneBullish : oteZoneBearish}
+Fair Value Gap: ${finalBias === 'LONG' ? fvgBullishZone : fvgBearishZone}
+OTE Zone (61.8-78.6%): ${finalBias === 'LONG' ? oteZoneBullish : oteZoneBearish}
 Equilibrium: $${equilibrium.toFixed(2)}
 
 ⏱️ 15M PRECISION ENTRY
-Micro Order Block: ${bias === 'LONG' ? microOBBullish : microOBBearish}
-Entry Trigger: ${bias === 'LONG' ? 'Bullish BOS/CHoCH on 15M with volume' : 'Bearish BOS/CHoCH on 15M with volume'}
-Optimal Entry: $${bias === 'LONG' ? bullEntry : bearEntry}
-Confirmation: ${bias === 'LONG' ? 'Bullish engulfing or hammer at OB' : 'Bearish engulfing or shooting star at OB'}
+Micro Order Block: ${finalBias === 'LONG' ? microOBBullish : microOBBearish}
+Entry Trigger: ${finalBias === 'LONG' ? 'Bullish BOS/CHoCH on 15M with volume' : 'Bearish BOS/CHoCH on 15M with volume'}
+Optimal Entry: $${finalBias === 'LONG' ? bullEntry : bearEntry}
+Confirmation: ${finalBias === 'LONG' ? 'Bullish engulfing or hammer at OB' : 'Bearish engulfing or shooting star at OB'}
 
-🟢 BULL CASE ${bias === 'LONG' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
-Probability: ${probabilities.bullProb}% | Confidence: ${probabilities.confidence}%
+🟢 BULL CASE ${finalBias === 'LONG' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
+Probability: ${probabilities.bullProb}% | Confidence: ${adjustedConfidence}%
 Entry Zone: $${bullEntry} — OTE/Order Block confluence
 Stop Loss: $${bullStop} — Below structure low
 TP1: $${bullTP1} (+${((Number(bullTP1) - priceNum) / priceNum * 100).toFixed(1)}%) — First resistance
@@ -1370,8 +1767,8 @@ TP3: $${bullTP3} (+${((Number(bullTP3) - priceNum) / priceNum * 100).toFixed(1)}
 TP4: $${bullTP4} (+${((Number(bullTP4) - priceNum) / priceNum * 100).toFixed(1)}%) — 1.618 extension
 R:R = 1:${bullRR} ${Number(bullRR) >= 3 ? '✓ Excellent' : Number(bullRR) >= 2 ? '◐ Good' : '⚠️ Consider'}
 
-🔴 BEAR CASE ${bias === 'SHORT' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
-Probability: ${probabilities.bearProb}% | Confidence: ${100 - probabilities.confidence}%
+🔴 BEAR CASE ${finalBias === 'SHORT' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
+Probability: ${probabilities.bearProb}% | Confidence: ${100 - adjustedConfidence}%
 Entry Zone: $${bearEntry} — Premium zone rejection
 Stop Loss: $${bearStop} — Above structure high
 TP1: $${bearTarget1.toFixed(2)} | TP2: $${bearTarget2.toFixed(2)} | TP3: $${bearTarget3.toFixed(2)} | TP4: $${bearTarget4.toFixed(2)}
@@ -1391,14 +1788,15 @@ ${allInsights.slice(0, 7).map((ins, i) => `${i + 1}. ${ins}`).join('\n')}
 
 🎯 EXECUTIVE SUMMARY
 ${probabilities.bullProb > probabilities.bearProb + 15 ? 
-  `BULLISH BIAS with ${probabilities.confidence}% confidence. ${patterns.length >= 3 ? 'Strong pattern confluence supports longs.' : 'Developing setup.'} ${wyckoffPhase.phase === 'ACCUMULATION' ? 'Wyckoff accumulation active.' : ''} ${marketStructure.lastCHoCH === 'BULLISH' ? 'CHoCH confirms reversal.' : ''} Target: $${bullTP2} with stop at $${bullStop}.` :
+  `BULLISH BIAS with ${adjustedConfidence}% confidence. ${allPatterns.length >= 3 ? 'Strong pattern confluence supports longs.' : 'Developing setup.'} ${wyckoffPhase.phase === 'ACCUMULATION' ? 'Wyckoff accumulation active.' : ''} ${marketStructure.lastCHoCH === 'BULLISH' ? 'CHoCH confirms reversal.' : ''} ${realChartData?.trendAnalysis.direction === 'BULLISH' ? 'Real chart confirms bullish trend.' : ''} Target: $${bullTP2} with stop at $${bullStop}.` :
   probabilities.bearProb > probabilities.bullProb + 15 ?
-  `BEARISH BIAS with ${probabilities.confidence}% confidence. ${patterns.length >= 3 ? 'Strong pattern confluence supports shorts.' : 'Developing setup.'} ${wyckoffPhase.phase === 'DISTRIBUTION' ? 'Wyckoff distribution active.' : ''} ${marketStructure.lastCHoCH === 'BEARISH' ? 'CHoCH confirms reversal.' : ''} Target: $${bearTarget2.toFixed(2)} with stop at $${bearStop}.` :
+  `BEARISH BIAS with ${adjustedConfidence}% confidence. ${allPatterns.length >= 3 ? 'Strong pattern confluence supports shorts.' : 'Developing setup.'} ${wyckoffPhase.phase === 'DISTRIBUTION' ? 'Wyckoff distribution active.' : ''} ${marketStructure.lastCHoCH === 'BEARISH' ? 'CHoCH confirms reversal.' : ''} ${realChartData?.trendAnalysis.direction === 'BEARISH' ? 'Real chart confirms bearish trend.' : ''} Target: $${bearTarget2.toFixed(2)} with stop at $${bearStop}.` :
   `NEUTRAL — No clear edge. Wait for ${rangePercent < 40 ? 'support confirmation' : rangePercent > 60 ? 'resistance rejection' : 'directional break'} with volume. Patience is a trade.`}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 Zikalyze AI Brain v3.0 — Elite Cognitive System
-Patterns: ${patterns.length} | Memory: ${memory.length} | Accuracy: ${learningAccuracy}% | Confidence: ${probabilities.confidence}%
+🧠 Zikalyze AI Brain v4.0 — Real-Time Chart Intelligence
+${realChartData ? `📊 Live Data: ${realChartData.source} | Candles: ${realChartData.candles.length}` : '⚙️ Algorithmic Mode'}
+Patterns: ${allPatterns.length} | Memory: ${memory.length} | Accuracy: ${learningAccuracy}% | Confidence: ${adjustedConfidence}%
 🎓 Learning: ${totalFeedback >= 10 ? 'Mature' : totalFeedback >= 5 ? 'Active' : 'Collecting'} — Your feedback shapes predictions!`;
 
     // Stream the analysis
