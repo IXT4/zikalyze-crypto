@@ -13,8 +13,8 @@ import {
   BellRing,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
 import { useAuth } from "@/hooks/useAuth";
+import zikalyzeLogo from "@/assets/zikalyze-logo.png";
 
 const Sidebar = () => {
   const location = useLocation();
@@ -46,7 +46,7 @@ const Sidebar = () => {
       <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <img 
-            src="/pwa-192x192.png" 
+            src={zikalyzeLogo} 
             alt="Loading" 
             className="h-12 w-12 animate-spin"
           />

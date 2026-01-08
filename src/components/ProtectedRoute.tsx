@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import zikalyzeLogo from "@/assets/zikalyze-logo.png";
 import { useSessionTimeout } from "@/hooks/useSessionTimeout";
 import SessionTimeoutModal from "@/components/SessionTimeoutModal";
 import { toast } from "sonner";
@@ -35,7 +36,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <img 
-          src="/pwa-192x192.png" 
+          src={zikalyzeLogo} 
           alt="Loading" 
           className="h-12 w-12 animate-spin"
         />

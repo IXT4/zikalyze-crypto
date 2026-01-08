@@ -3,9 +3,9 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { TrendingUp, Sparkles, ArrowRight, BarChart3, Brain, Shield, Activity, Zap, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import zikalyzeLogo from "@/assets/zikalyze-logo.png";
 
 const Landing = () => {
   const [loading, setLoading] = useState(true);
@@ -46,7 +46,7 @@ const Landing = () => {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <img 
-          src="/pwa-192x192.png" 
+          src={zikalyzeLogo} 
           alt="Loading" 
           className="h-12 w-12 animate-spin"
         />

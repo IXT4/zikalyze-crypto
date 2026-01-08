@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useRateLimit } from "@/hooks/useRateLimit";
+import zikalyzeLogo from "@/assets/zikalyze-logo.png";
 
 import { z } from "zod";
 
@@ -196,7 +197,7 @@ const Auth = () => {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <img 
-          src="/pwa-192x192.png" 
+          src={zikalyzeLogo} 
           alt="Loading" 
           className="h-12 w-12 animate-spin"
         />
