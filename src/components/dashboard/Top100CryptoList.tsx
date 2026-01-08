@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useCryptoPrices, CryptoPrice } from "@/hooks/useCryptoPrices";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
 import { TrendingUp, TrendingDown, Bell, X, BellRing } from "lucide-react";
@@ -17,6 +17,9 @@ interface Top100CryptoListProps {
   selected: string;
 }
 
+// Track price changes for flash animations
+type PriceFlash = "up" | "down" | null;
+
 const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
   const { prices, loading: pricesLoading } = useCryptoPrices();
   const { alerts, loading: alertsLoading, createAlert, removeAlert, checkAlerts } = usePriceAlerts();
@@ -24,6 +27,46 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
   const [selectedCryptoForAlert, setSelectedCryptoForAlert] = useState<CryptoPrice | null>(null);
   const [targetPrice, setTargetPrice] = useState("");
   const [alertCondition, setAlertCondition] = useState<"above" | "below">("above");
+  
+  // Track previous prices for flash animation
+  const prevPricesRef = useRef<Map<string, number>>(new Map());
+  const [priceFlashes, setPriceFlashes] = useState<Map<string, PriceFlash>>(new Map());
+
+  // Detect price changes and trigger flash animations
+  useEffect(() => {
+    if (prices.length === 0) return;
+
+    const newFlashes = new Map<string, PriceFlash>();
+    
+    prices.forEach((crypto) => {
+      const prevPrice = prevPricesRef.current.get(crypto.symbol);
+      if (prevPrice !== undefined && prevPrice !== crypto.current_price) {
+        if (crypto.current_price > prevPrice) {
+          newFlashes.set(crypto.symbol, "up");
+        } else if (crypto.current_price < prevPrice) {
+          newFlashes.set(crypto.symbol, "down");
+        }
+      }
+      prevPricesRef.current.set(crypto.symbol, crypto.current_price);
+    });
+
+    if (newFlashes.size > 0) {
+      setPriceFlashes(prev => {
+        const merged = new Map(prev);
+        newFlashes.forEach((value, key) => merged.set(key, value));
+        return merged;
+      });
+
+      // Clear flashes after animation
+      setTimeout(() => {
+        setPriceFlashes(prev => {
+          const updated = new Map(prev);
+          newFlashes.forEach((_, key) => updated.delete(key));
+          return updated;
+        });
+      }, 600);
+    }
+  }, [prices]);
 
   // Check alerts whenever prices update
   useEffect(() => {
@@ -163,6 +206,7 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                 const isPositive = crypto.price_change_percentage_24h >= 0;
                 const isSelected = crypto.symbol.toUpperCase() === selected;
                 const hasAlert = alerts.some(a => a.symbol === crypto.symbol.toUpperCase());
+                const flash = priceFlashes.get(crypto.symbol);
                 
                 return (
                   <tr
@@ -189,10 +233,20 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 text-right font-medium text-foreground text-sm">
-                      ${crypto.current_price < 1 
-                        ? crypto.current_price.toFixed(6) 
-                        : crypto.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <td className="py-3 text-right">
+                      <span 
+                        className={`font-medium text-sm transition-all duration-150 inline-block px-1.5 py-0.5 rounded ${
+                          flash === "up" 
+                            ? "bg-success/20 text-success animate-price-flash-up" 
+                            : flash === "down" 
+                              ? "bg-destructive/20 text-destructive animate-price-flash-down" 
+                              : "text-foreground"
+                        }`}
+                      >
+                        ${crypto.current_price < 1 
+                          ? crypto.current_price.toFixed(6) 
+                          : crypto.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </td>
                     <td className="py-3 text-right">
                       <div className={`flex items-center justify-end gap-1 text-sm ${isPositive ? "text-success" : "text-destructive"}`}>
