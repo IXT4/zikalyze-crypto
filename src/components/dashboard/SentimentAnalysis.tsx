@@ -23,9 +23,9 @@ interface SentimentData {
     url: string;
   }>;
   social: {
-    twitter: { mentions: number; sentiment: number; trending: boolean };
-    reddit: { mentions: number; sentiment: number; activeThreads: number };
-    telegram: { mentions: number; sentiment: number };
+    twitter: { mentions: number; sentiment: number; trending: boolean; followers?: number };
+    reddit: { mentions: number; sentiment: number; activeThreads: number; subscribers?: number };
+    telegram: { mentions: number; sentiment: number; channelUsers?: number };
     overall: { score: number; label: string; change24h: number };
     trendingTopics: string[];
     influencerMentions: Array<{ name: string; followers: string; sentiment: string }>;
@@ -304,7 +304,14 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
                 </div>
                 <div className="text-lg font-bold">{(data.social.twitter.mentions / 1000).toFixed(1)}K</div>
                 <Progress value={data.social.twitter.sentiment} className="h-1.5 mt-2" />
-                <span className="text-xs text-muted-foreground">{data.social.twitter.sentiment}% positive</span>
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-xs text-muted-foreground">{data.social.twitter.sentiment}% positive</span>
+                  {data.social.twitter.followers && data.social.twitter.followers > 0 && (
+                    <span className="text-xs text-primary font-medium">
+                      {(data.social.twitter.followers / 1000000).toFixed(1)}M followers
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="rounded-lg border border-border p-3">
@@ -316,7 +323,14 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
                 </div>
                 <div className="text-lg font-bold">{(data.social.reddit.mentions / 1000).toFixed(1)}K</div>
                 <Progress value={data.social.reddit.sentiment} className="h-1.5 mt-2" />
-                <span className="text-xs text-muted-foreground">{data.social.reddit.activeThreads} active threads</span>
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-xs text-muted-foreground">{data.social.reddit.activeThreads} active</span>
+                  {data.social.reddit.subscribers && data.social.reddit.subscribers > 0 && (
+                    <span className="text-xs text-primary font-medium">
+                      {(data.social.reddit.subscribers / 1000000).toFixed(1)}M subs
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="rounded-lg border border-border p-3">
@@ -328,7 +342,14 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
                 </div>
                 <div className="text-lg font-bold">{(data.social.telegram.mentions / 1000).toFixed(1)}K</div>
                 <Progress value={data.social.telegram.sentiment} className="h-1.5 mt-2" />
-                <span className="text-xs text-muted-foreground">{data.social.telegram.sentiment}% positive</span>
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-xs text-muted-foreground">{data.social.telegram.sentiment}% positive</span>
+                  {data.social.telegram.channelUsers && data.social.telegram.channelUsers > 0 && (
+                    <span className="text-xs text-primary font-medium">
+                      {(data.social.telegram.channelUsers / 1000).toFixed(0)}K users
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
