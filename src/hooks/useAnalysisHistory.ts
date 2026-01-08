@@ -78,9 +78,43 @@ export const useAnalysisHistory = (symbol: string) => {
     }
   }, [symbol, fetchHistory, user]);
 
+  const deleteAnalysis = useCallback(async (id: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from("analysis_history")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      fetchHistory();
+    } catch (err) {
+      console.error("Error deleting analysis:", err);
+    }
+  }, [user, fetchHistory]);
+
+  const clearAllHistory = useCallback(async () => {
+    if (!user || !symbol) return;
+
+    try {
+      const { error } = await supabase
+        .from("analysis_history")
+        .delete()
+        .eq("symbol", symbol.toUpperCase())
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      setHistory([]);
+    } catch (err) {
+      console.error("Error clearing history:", err);
+    }
+  }, [user, symbol]);
+
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
 
-  return { history, loading, saveAnalysis, refreshHistory: fetchHistory };
+  return { history, loading, saveAnalysis, deleteAnalysis, clearAllHistory, refreshHistory: fetchHistory };
 };
