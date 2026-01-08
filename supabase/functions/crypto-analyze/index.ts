@@ -215,6 +215,17 @@ serve(async (req) => {
     const fvgBullishZone = `$${(lowNum + range * 0.25).toFixed(2)} - $${(lowNum + range * 0.35).toFixed(2)}`;
     const fvgBearishZone = `$${(highNum - range * 0.35).toFixed(2)} - $${(highNum - range * 0.25).toFixed(2)}`;
     
+    // 15M MICRO-LEVEL CALCULATIONS
+    const microRange = range * 0.15; // 15% of 24h range for micro analysis
+    const microOBBullish = `$${(lowNum + range * 0.05).toFixed(2)} - $${(lowNum + range * 0.10).toFixed(2)}`;
+    const microOBBearish = `$${(highNum - range * 0.10).toFixed(2)} - $${(highNum - range * 0.05).toFixed(2)}`;
+    const microFVGBullish = `$${(lowNum + range * 0.12).toFixed(2)} - $${(lowNum + range * 0.18).toFixed(2)}`;
+    const microFVGBearish = `$${(highNum - range * 0.18).toFixed(2)} - $${(highNum - range * 0.12).toFixed(2)}`;
+    const oteZoneBullish = `$${(lowNum + range * 0.21).toFixed(2)} - $${(lowNum + range * 0.38).toFixed(2)}`; // 62-79% retracement
+    const oteZoneBearish = `$${(highNum - range * 0.38).toFixed(2)} - $${(highNum - range * 0.21).toFixed(2)}`;
+    const microStopBullish = (lowNum - range * 0.03).toFixed(2);
+    const microStopBearish = (highNum + range * 0.03).toFixed(2);
+    
     // Alternative targets for bear case
     const bearTarget1 = lowNum - (range * 0.382);
     const bearTarget2 = lowNum - (range * 0.618);
@@ -270,7 +281,15 @@ MULTI-TIMEFRAME STRUCTURE:
 📅 WEEKLY/DAILY: Macro trend, major order blocks, Wyckoff phases
 ⏰ 4H: Intermediate structure, swing analysis, refined bias
 🕐 1H: Entry confirmation, session analysis, BOS/CHoCH
-⚡ 15M/5M: Precision entries, micro order blocks, tight stops
+⏱️ 15M: PRECISION ENTRIES — micro order blocks, micro FVGs, tight stops, sniper execution
+⚡ 5M: Scalp confirmations, micro structure breaks
+
+15M MICRO-LEVEL PRECISION (CRITICAL FOR ENTRIES):
+- Micro Order Blocks: Last down-candle before impulse up (bullish) or last up-candle before impulse down (bearish) on 15M
+- Micro FVGs: 15M imbalances within higher timeframe zones — high probability fill targets
+- Micro BOS/CHoCH: 15M structure shifts for entry confirmation
+- Optimal Trade Entry (OTE): 62-79% retracement of 15M swing for precision entries
+- Session Timing: London/NY open micro sweeps into 15M OBs
 
 ICT CORE CONCEPTS:
 - Order Blocks: Institutional footprints — refined by volume clusters
@@ -285,7 +304,8 @@ CRITICAL RULES:
 3. Include volume, RSI, and macro context in analysis
 4. Narrow zones to precise high-volume clusters
 5. Calculate confidence with data substantiation
-6. Keep analysis under 450 words — elite precision with depth`;
+6. 15M SECTION IS MANDATORY — always provide micro OB, micro FVG, and exact entry with structure context
+7. Keep analysis under 500 words — elite precision with depth`;
 
     const userPrompt = `🔮 ZIKALYZE AI ANALYSIS — ${sanitizedCrypto}
 
@@ -313,11 +333,21 @@ RSI Estimate:      ${rsiEstimate.toFixed(1)} ${rsiEstimate > 70 ? '[OVERBOUGHT]'
 RSI Divergence:    ${rsiDivergence}
 Price/Vol Signal:  ${priceVsVolume}
 
-📍 REFINED ORDER BLOCK ZONES
+📍 REFINED ORDER BLOCK ZONES (4H/1H)
 Bullish OB:        $${obBullishLow.toFixed(2)} - $${obBullishHigh.toFixed(2)}
 Bearish OB:        $${obBearishLow.toFixed(2)} - $${obBearishHigh.toFixed(2)}
 Bullish FVG:       ${fvgBullishZone}
 Bearish FVG:       ${fvgBearishZone}
+
+⏱️ 15M MICRO-LEVEL ZONES (PRECISION ENTRIES)
+Micro OB Bull:     ${microOBBullish} [last down-candle before impulse]
+Micro OB Bear:     ${microOBBearish} [last up-candle before impulse]
+Micro FVG Bull:    ${microFVGBullish} [15M imbalance - high prob fill]
+Micro FVG Bear:    ${microFVGBearish} [15M imbalance - high prob fill]
+OTE Zone Bull:     ${oteZoneBullish} [62-79% retracement]
+OTE Zone Bear:     ${oteZoneBearish} [62-79% retracement]
+Micro Stop Bull:   $${microStopBullish} [below 15M structure]
+Micro Stop Bear:   $${microStopBearish} [above 15M structure]
 
 📐 FIBONACCI LEVELS
 Fib 0.618:         $${fibRetrace618.toFixed(2)}
@@ -378,9 +408,15 @@ Session: [Asian/London/NY context]
 Liquidity: [Swept/Targeting $X]
 Entry Zone: $[refined 1H zone]
 
-⚡ 15M ENTRY
-Micro OB: $[exact level]
-Optimal Entry: $[price]
+⏱️ 15M PRECISION ENTRY (CRITICAL)
+Micro Order Block: $[exact 15M OB zone] — [last opposing candle before impulse]
+Micro FVG: $[15M imbalance zone] — [fill target within HTF zone]
+15M Structure: [BOS/CHoCH status on 15M]
+OTE Zone (62-79%): $[15M swing retracement zone]
+Optimal Entry: $[exact sniper entry] — [confluence: micro OB + FVG + OTE]
+Micro Stop: $[tight stop below/above 15M structure]
+Session Context: [Asian range / London sweep / NY continuation]
+
 
 🟢 BULL CASE (${bias === 'LONG' ? 'PRIMARY' : 'ALTERNATIVE'})
 Signal: LONG | Confidence: ${calculatedConfidence}%
