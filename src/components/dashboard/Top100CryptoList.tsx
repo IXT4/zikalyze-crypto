@@ -314,11 +314,14 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                       {crypto.low_24h ? formatPrice(crypto.low_24h) : "---"}
                     </td>
                     <td className="py-3 text-right text-sm text-muted-foreground hidden xl:table-cell">
-                      {crypto.total_volume 
-                        ? `${currencySymbol}${crypto.total_volume >= 1e9 
-                            ? (crypto.total_volume / 1e9).toFixed(2) + "B" 
-                            : (crypto.total_volume / 1e6).toFixed(1) + "M"}`
-                        : "---"}
+                      {(() => {
+                        const v = crypto.total_volume;
+                        if (!v) return "---";
+                        if (v >= 1e9) return `${currencySymbol}${(v / 1e9).toFixed(2)}B`;
+                        if (v >= 1e6) return `${currencySymbol}${(v / 1e6).toFixed(1)}M`;
+                        if (v >= 1e3) return `${currencySymbol}${(v / 1e3).toFixed(1)}K`;
+                        return `${currencySymbol}${v.toFixed(0)}`;
+                      })()}
                     </td>
                     <td className="py-3 text-center">
                       <Button
