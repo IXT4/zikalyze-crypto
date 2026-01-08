@@ -19,6 +19,11 @@ const Analyzer = () => {
     SOL: { name: "Solana", price: getPriceBySymbol("SOL")?.current_price || 127.18, change: getPriceBySymbol("SOL")?.price_change_percentage_24h || -6.85 },
     XRP: { name: "Ripple", price: getPriceBySymbol("XRP")?.current_price || 2.05, change: getPriceBySymbol("XRP")?.price_change_percentage_24h || -6.63 },
     DOGE: { name: "Dogecoin", price: getPriceBySymbol("DOGE")?.current_price || 0.1376, change: getPriceBySymbol("DOGE")?.price_change_percentage_24h || -7.84 },
+    KAS: { name: "Kaspa", price: getPriceBySymbol("KAS")?.current_price || 0.12, change: getPriceBySymbol("KAS")?.price_change_percentage_24h || 2.5 },
+    ADA: { name: "Cardano", price: getPriceBySymbol("ADA")?.current_price || 0.45, change: getPriceBySymbol("ADA")?.price_change_percentage_24h || -3.2 },
+    AVAX: { name: "Avalanche", price: getPriceBySymbol("AVAX")?.current_price || 28.5, change: getPriceBySymbol("AVAX")?.price_change_percentage_24h || -4.1 },
+    LINK: { name: "Chainlink", price: getPriceBySymbol("LINK")?.current_price || 14.2, change: getPriceBySymbol("LINK")?.price_change_percentage_24h || -2.8 },
+    DOT: { name: "Polkadot", price: getPriceBySymbol("DOT")?.current_price || 5.8, change: getPriceBySymbol("DOT")?.price_change_percentage_24h || -3.5 },
   };
 
   const selected = cryptoData[selectedCrypto];

@@ -8,6 +8,11 @@ const cryptoMeta = [
   { symbol: "SOL", name: "Solana", color: "text-chart-cyan" },
   { symbol: "XRP", name: "Ripple", color: "text-muted-foreground" },
   { symbol: "DOGE", name: "Dogecoin", color: "text-warning" },
+  { symbol: "KAS", name: "Kaspa", color: "text-chart-cyan" },
+  { symbol: "ADA", name: "Cardano", color: "text-primary" },
+  { symbol: "AVAX", name: "Avalanche", color: "text-destructive" },
+  { symbol: "LINK", name: "Chainlink", color: "text-primary" },
+  { symbol: "DOT", name: "Polkadot", color: "text-chart-pink" },
 ];
 
 interface CryptoTickerProps {
