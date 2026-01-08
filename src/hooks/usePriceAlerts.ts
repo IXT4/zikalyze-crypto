@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { alertSound } from "@/lib/alertSound";
 import { isSoundEnabled } from "@/hooks/useSettings";
+import { useAuth } from "@/hooks/useAuth";
 
 export interface PriceAlert {
   id: string;
@@ -14,31 +15,38 @@ export interface PriceAlert {
   is_triggered: boolean;
   triggered_at: string | null;
   created_at: string;
-  user_wallet_id: string | null;
+  user_id: string | null;
 }
 
 export const usePriceAlerts = () => {
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const notificationPermission = useRef<NotificationPermission>("default");
+  const { user } = useAuth();
 
   // Request notification permission on mount
   useEffect(() => {
     if ("Notification" in window) {
       Notification.requestPermission().then((permission) => {
         notificationPermission.current = permission;
-        console.log("Notification permission:", permission);
       });
     }
   }, []);
 
   // Fetch alerts from database
   const fetchAlerts = useCallback(async () => {
+    if (!user) {
+      setAlerts([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from("price_alerts")
         .select("*")
         .eq("is_triggered", false)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -56,11 +64,13 @@ export const usePriceAlerts = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   // Subscribe to realtime changes
   useEffect(() => {
     fetchAlerts();
+
+    if (!user) return;
 
     const channel = supabase
       .channel("price-alerts-changes")
@@ -70,9 +80,9 @@ export const usePriceAlerts = () => {
           event: "*",
           schema: "public",
           table: "price_alerts",
+          filter: `user_id=eq.${user.id}`,
         },
-        (payload) => {
-          console.log("Price alert change:", payload);
+        () => {
           fetchAlerts();
         }
       )
@@ -81,7 +91,7 @@ export const usePriceAlerts = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchAlerts]);
+  }, [fetchAlerts, user]);
 
   // Create a new alert
   const createAlert = async (
@@ -91,6 +101,11 @@ export const usePriceAlerts = () => {
     condition: "above" | "below",
     currentPrice: number
   ): Promise<boolean> => {
+    if (!user) {
+      toast.error("Please sign in to create alerts");
+      return false;
+    }
+
     try {
       const { error } = await supabase.from("price_alerts").insert({
         symbol: symbol.toUpperCase(),
@@ -98,6 +113,7 @@ export const usePriceAlerts = () => {
         target_price: targetPrice,
         condition,
         current_price_at_creation: currentPrice,
+        user_id: user.id,
       });
 
       if (error) {
