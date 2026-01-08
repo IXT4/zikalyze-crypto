@@ -28,7 +28,7 @@ interface SentimentData {
     telegram: { mentions: number; sentiment: number; channelUsers?: number };
     overall: { score: number; label: string; change24h: number };
     trendingTopics: string[];
-    influencerMentions: Array<{ name: string; followers: string; sentiment: string; handle?: string }>;
+    influencerMentions: Array<{ name: string; followers: string; sentiment: string; handle?: string; relevance?: string }>;
   };
   fearGreed: {
     value: number;
@@ -449,13 +449,18 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
                             <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
                           )}
                         </div>
-                        <div className="text-xs text-muted-foreground flex items-center gap-2">
+                        <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                           <span className="flex items-center gap-1">
                             <Users className="h-3 w-3" />
-                            {influencer.followers} followers
+                            {influencer.followers}
                           </span>
                           {influencer.handle && (
                             <span className="text-[#1DA1F2] group-hover:underline">@{influencer.handle}</span>
+                          )}
+                          {influencer.relevance && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                              {influencer.relevance}
+                            </Badge>
                           )}
                         </div>
                       </div>

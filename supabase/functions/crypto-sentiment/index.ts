@@ -579,40 +579,123 @@ function generateRealNewsHeadlines(
   return headlines.slice(0, 8);
 }
 
-// Generate influencer mentions with real Twitter handles
-function generateInfluencerMentions(crypto: string, sentimentScore: number): Array<{
+// Generate influencer mentions with real Twitter handles based on crypto and trending topics
+function generateInfluencerMentions(
+  crypto: string, 
+  sentimentScore: number, 
+  trendingTopics: string[] = []
+): Array<{
   name: string;
   followers: string;
   sentiment: string;
   handle: string;
+  relevance: string;
 }> {
+  // Crypto-specific influencers with their expertise areas
   const influencers = [
-    { name: 'PlanB', followers: '1.9M', handle: '100trillionUSD' },
-    { name: 'Willy Woo', followers: '1.1M', handle: 'woonomic' },
-    { name: 'CryptoWhale', followers: '1.4M', handle: 'CryptoWhale' },
-    { name: 'AltcoinDaily', followers: '1.2M', handle: 'AltcoinDailyio' },
-    { name: 'The Moon', followers: '850K', handle: 'TheMoonCarl' },
-    { name: 'Coin Bureau', followers: '2.4M', handle: 'coinaboreau' },
-    { name: 'Lark Davis', followers: '520K', handle: 'TheCryptoLark' },
-    { name: 'BitBoy', followers: '1.5M', handle: 'Bitboy_Crypto' },
-    { name: 'Raoul Pal', followers: '1.1M', handle: 'RaoulGMI' },
-    { name: 'Michael Saylor', followers: '3.5M', handle: 'saylor' },
-    { name: 'CryptoCred', followers: '280K', handle: 'CryptoCred' },
-    { name: 'Hsaka', followers: '450K', handle: 'HsakaTrades' }
+    // Bitcoin maximalists
+    { name: 'Michael Saylor', followers: '3.5M', handle: 'saylor', coins: ['BTC'], topics: ['Digital Gold', 'Store of Value', 'Treasury'] },
+    { name: 'PlanB', followers: '1.9M', handle: '100trillionUSD', coins: ['BTC'], topics: ['Stock-to-Flow', 'Halving', 'Price Prediction'] },
+    { name: 'Willy Woo', followers: '1.1M', handle: 'woonomic', coins: ['BTC'], topics: ['On-chain', 'Analytics', 'Bitcoin'] },
+    
+    // Ethereum & DeFi experts
+    { name: 'Vitalik Buterin', followers: '5.2M', handle: 'VitalikButerin', coins: ['ETH'], topics: ['Ethereum', 'Layer 2', 'DeFi', 'Staking'] },
+    { name: 'Anthony Sassano', followers: '280K', handle: 'sassal0x', coins: ['ETH'], topics: ['Ethereum', 'DeFi', 'Layer 2'] },
+    { name: 'Ryan Sean Adams', followers: '320K', handle: 'RyanSAdams', coins: ['ETH'], topics: ['DeFi', 'Ethereum', 'Bankless'] },
+    
+    // Solana focused
+    { name: 'Anatoly Yakovenko', followers: '450K', handle: 'aaboronin', coins: ['SOL'], topics: ['Solana', 'Speed', 'DeFi'] },
+    { name: 'Mert', followers: '180K', handle: '0xMert_', coins: ['SOL'], topics: ['Solana', 'Development', 'NFTs'] },
+    
+    // XRP community
+    { name: 'Crypto Eri', followers: '120K', handle: 'sentosumosaba', coins: ['XRP'], topics: ['XRP', 'Ripple', 'SEC', 'Regulation'] },
+    { name: 'Digital Asset Investor', followers: '380K', handle: 'digitalassetbuy', coins: ['XRP'], topics: ['XRP', 'Ripple', 'CBDC'] },
+    
+    // Multi-coin analysts
+    { name: 'Coin Bureau', followers: '2.4M', handle: 'coinbureau', coins: ['BTC', 'ETH', 'SOL', 'ADA', 'DOT'], topics: ['Education', 'Analysis', 'News'] },
+    { name: 'Raoul Pal', followers: '1.1M', handle: 'RaoulGMI', coins: ['BTC', 'ETH', 'SOL'], topics: ['Macro', 'Institutions', 'Cycles'] },
+    { name: 'CryptoWhale', followers: '1.4M', handle: 'CryptoWhale', coins: ['BTC', 'ETH', 'SOL', 'DOGE'], topics: ['Whale Alert', 'Market Moves'] },
+    { name: 'AltcoinDaily', followers: '1.2M', handle: 'AltcoinDailyio', coins: ['BTC', 'ETH', 'SOL', 'ADA', 'AVAX'], topics: ['Altcoins', 'News', 'Analysis'] },
+    { name: 'Lark Davis', followers: '520K', handle: 'TheCryptoLark', coins: ['BTC', 'ETH', 'SOL', 'DOT'], topics: ['Altcoins', 'DeFi', 'NFTs'] },
+    { name: 'The Moon', followers: '850K', handle: 'TheMoonCarl', coins: ['BTC', 'ETH', 'DOGE'], topics: ['Trading', 'Price Action'] },
+    
+    // Trading focused
+    { name: 'CryptoCred', followers: '280K', handle: 'CryptoCred', coins: ['BTC', 'ETH'], topics: ['Technical Analysis', 'Trading'] },
+    { name: 'Hsaka', followers: '450K', handle: 'HsakaTrades', coins: ['BTC', 'ETH', 'SOL'], topics: ['Trading', 'Charts', 'Derivatives'] },
+    { name: 'Crypto Tony', followers: '320K', handle: 'CryptoTony__', coins: ['BTC', 'ETH', 'SOL'], topics: ['Trading', 'Leverage', 'Signals'] },
+    
+    // Meme coins
+    { name: 'Elon Musk', followers: '180M', handle: 'elonmusk', coins: ['DOGE', 'BTC'], topics: ['Dogecoin', 'Meme', 'Community'] },
+    { name: 'Matt Wallace', followers: '750K', handle: 'MattWallace888', coins: ['DOGE'], topics: ['Dogecoin', 'Community', 'DOGE Army'] },
+    
+    // Cardano
+    { name: 'Charles Hoskinson', followers: '1.2M', handle: 'IOHK_Charles', coins: ['ADA'], topics: ['Cardano', 'Blockchain', 'Development'] },
+    
+    // Polkadot
+    { name: 'Gavin Wood', followers: '320K', handle: 'gavofyork', coins: ['DOT'], topics: ['Polkadot', 'Web3', 'Parachains'] },
   ];
 
-  // Select 4-5 random influencers
-  const selected = influencers
-    .sort(() => Math.random() - 0.5)
+  // Score influencers by relevance
+  const scoredInfluencers = influencers.map(inf => {
+    let relevanceScore = 0;
+    let relevanceReason = '';
+    
+    // Direct coin match (highest priority)
+    if (inf.coins.includes(crypto)) {
+      relevanceScore += 10;
+      relevanceReason = `${crypto} expert`;
+    }
+    
+    // Topic match with trending
+    const matchedTopics = inf.topics.filter(topic => 
+      trendingTopics.some(trend => 
+        trend.toLowerCase().includes(topic.toLowerCase()) || 
+        topic.toLowerCase().includes(trend.toLowerCase().replace('#', ''))
+      )
+    );
+    
+    if (matchedTopics.length > 0) {
+      relevanceScore += matchedTopics.length * 3;
+      relevanceReason = relevanceReason || `Discussing ${matchedTopics[0]}`;
+    }
+    
+    // General crypto influencer fallback
+    if (relevanceScore === 0 && inf.coins.length >= 3) {
+      relevanceScore = 1;
+      relevanceReason = 'Market analyst';
+    }
+    
+    return { ...inf, relevanceScore, relevanceReason };
+  });
+
+  // Sort by relevance and pick top ones
+  const sorted = scoredInfluencers
+    .filter(inf => inf.relevanceScore > 0)
+    .sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+  // Take top 5-6, with some randomization among equally relevant
+  const topTier = sorted.slice(0, 8);
+  const selected = topTier
+    .sort(() => Math.random() - 0.3)
     .slice(0, 4 + Math.floor(Math.random() * 2));
 
-  return selected.map(inf => ({
+  // Generate varied sentiments based on score
+  const getSentiment = (baseScore: number, index: number) => {
+    const variance = (index % 3) * 5 - 5; // -5, 0, or 5
+    const adjusted = baseScore + variance;
+    if (adjusted >= 65) return 'Very Bullish';
+    if (adjusted >= 55) return 'Bullish';
+    if (adjusted >= 45) return 'Neutral';
+    if (adjusted >= 35) return 'Cautious';
+    return 'Bearish';
+  };
+
+  return selected.map((inf, i) => ({
     name: inf.name,
     followers: inf.followers,
     handle: inf.handle,
-    sentiment: sentimentScore >= 60 ? 'Bullish' : 
-               sentimentScore >= 45 ? 'Neutral' : 
-               sentimentScore >= 30 ? 'Cautious' : 'Bearish'
+    sentiment: getSentiment(sentimentScore, i),
+    relevance: inf.relevanceReason || 'Crypto analyst'
   }));
 }
 
@@ -667,8 +750,8 @@ serve(async (req) => {
       ? realNews 
       : generateRealNewsHeadlines(crypto, marketData, fearGreed);
 
-    // Generate influencer mentions
-    const influencerMentions = generateInfluencerMentions(crypto, socialData.overall.score);
+    // Generate influencer mentions based on crypto and trending topics
+    const influencerMentions = generateInfluencerMentions(crypto, socialData.overall.score, combinedTopics);
 
     const response = {
       crypto,
