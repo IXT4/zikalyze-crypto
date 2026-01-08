@@ -8,7 +8,8 @@
     "live": "LIVE",
     "getStarted": "Get Started",
     "learnMore": "Learn More",
-    "returnHome": "Return to Home"
+    "returnHome": "Return to Home",
+    "back": "Back"
   },
   "landing": {
     "heroTagline": "AI-Powered Crypto Analysis",
@@ -258,5 +259,51 @@
     "invalidEmail": "Please enter a valid email address",
     "passwordMinLength": "Password must be at least 6 characters",
     "passwordsNoMatch": "Passwords do not match"
+  },
+  "install": {
+    "title": "Install Zikalyze",
+    "subtitle": "Get the full app experience with offline access and quick launch",
+    "installed": "App Installed!",
+    "installedDesc": "Zikalyze is installed on your device. You can find it on your home screen.",
+    "quickInstall": "Quick Install Available",
+    "quickInstallDesc": "Your browser supports one-click installation",
+    "installNow": "Install Now",
+    "instructions": "Installation Instructions",
+    "instructionsDesc": "Follow the steps for your device",
+    "backToApp": "Back to Zikalyze",
+    "benefit1Title": "Quick Access",
+    "benefit1Desc": "Launch from home screen",
+    "benefit2Title": "Works Offline",
+    "benefit2Desc": "Access cached data anytime",
+    "benefit3Title": "Full Screen",
+    "benefit3Desc": "No browser UI distractions",
+    "ios": {
+      "step1Title": "Open in Safari",
+      "step1Desc": "Make sure you're viewing this page in Safari browser, not Chrome or another browser.",
+      "step2Title": "Tap the Share button",
+      "step2Desc": "Look for the share icon (square with arrow) at the bottom of your screen.",
+      "step3Title": "Select \"Add to Home Screen\"",
+      "step3Desc": "Scroll down in the share menu and tap 'Add to Home Screen'.",
+      "step4Title": "Tap \"Add\"",
+      "step4Desc": "Confirm by tapping Add in the top right corner. The app icon will appear on your home screen."
+    },
+    "android": {
+      "step1Title": "Open in Chrome",
+      "step1Desc": "Make sure you're viewing this page in Chrome browser for the best experience.",
+      "step2Title": "Tap the menu button",
+      "step2Desc": "Look for the three dots (⋮) in the top right corner of Chrome.",
+      "step3Title": "Select \"Add to Home screen\"",
+      "step3Desc": "Find and tap 'Add to Home screen' or 'Install app' in the menu.",
+      "step4Title": "Confirm installation",
+      "step4Desc": "Tap 'Add' or 'Install' to confirm. The app will be added to your home screen."
+    },
+    "desktop": {
+      "step1Title": "Use Chrome or Edge",
+      "step1Desc": "Open this page in Google Chrome, Microsoft Edge, or another Chromium-based browser.",
+      "step2Title": "Look for the install icon",
+      "step2Desc": "Click the install icon (⊕) in the address bar, or use the menu (⋮) → 'Install Zikalyze'.",
+      "step3Title": "Confirm installation",
+      "step3Desc": "Click 'Install' in the popup dialog. The app will open in its own window."
+    }
   }
 }
