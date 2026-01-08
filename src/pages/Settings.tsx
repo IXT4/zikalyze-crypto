@@ -1,21 +1,28 @@
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/dashboard/Sidebar";
-import { Search, User, Bell, Shield, Palette, Globe, Moon, Sun, Save, Volume2, VolumeX } from "lucide-react";
+import { Search, User, Bell, Shield, Palette, Globe, Moon, Sun, Save, Volume2, VolumeX, Mail, Lock, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
 import { useSettings } from "@/hooks/useSettings";
 import { alertSound } from "@/lib/alertSound";
+import { useAuth } from "@/hooks/useAuth";
+import { z } from "zod";
+
+const emailSchema = z.string().email("Please enter a valid email address");
+const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 const Settings = () => {
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { settings, saveSettings, toggleSetting } = useSettings();
+  const { user, updatePassword, updateEmail } = useAuth();
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState("profile");
 
   // Avoid hydration mismatch
   useEffect(() => {
@@ -36,7 +43,17 @@ const Settings = () => {
     }
   };
 
+  // Profile form state
+  const [newEmail, setNewEmail] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string; confirmPassword?: string }>({});
+
   const tabs = [
+    { id: "profile", label: "Profile", icon: User },
     { id: "general", label: "General", icon: Globe },
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "appearance", label: "Appearance", icon: Palette },
@@ -48,6 +65,73 @@ const Settings = () => {
       title: "Settings Saved",
       description: "Your preferences have been updated successfully.",
     });
+  };
+
+  const handleEmailUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrors({});
+    
+    const emailResult = emailSchema.safeParse(newEmail);
+    if (!emailResult.success) {
+      setErrors({ email: emailResult.error.errors[0].message });
+      return;
+    }
+    
+    setIsUpdatingEmail(true);
+    const { error } = await updateEmail(newEmail);
+    setIsUpdatingEmail(false);
+    
+    if (error) {
+      toast({
+        title: "Email update failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    toast({
+      title: "Verification email sent",
+      description: "Please check your new email to confirm the change.",
+    });
+    setNewEmail("");
+  };
+
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrors({});
+    
+    const passwordResult = passwordSchema.safeParse(newPassword);
+    if (!passwordResult.success) {
+      setErrors({ password: passwordResult.error.errors[0].message });
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      setErrors({ confirmPassword: "Passwords do not match" });
+      return;
+    }
+    
+    setIsUpdatingPassword(true);
+    const { error } = await updatePassword(newPassword);
+    setIsUpdatingPassword(false);
+    
+    if (error) {
+      toast({
+        title: "Password update failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    toast({
+      title: "Password updated",
+      description: "Your password has been changed successfully.",
+    });
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
   };
 
   return (
@@ -97,6 +181,118 @@ const Settings = () => {
 
             {/* Settings Content */}
             <div className="rounded-2xl border border-border bg-card p-6">
+              {activeTab === "profile" && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Account Information</h3>
+                    
+                    <div className="p-4 rounded-xl bg-secondary/50 mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
+                          <User className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-foreground">{user?.email}</div>
+                          <div className="text-sm text-muted-foreground">
+                            Member since {user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Change Email */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Change Email</h3>
+                    <form onSubmit={handleEmailUpdate} className="space-y-4">
+                      <div className="p-4 rounded-xl bg-secondary/50 space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="new-email">New Email Address</Label>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="new-email"
+                              type="email"
+                              placeholder="Enter new email"
+                              value={newEmail}
+                              onChange={(e) => {
+                                setNewEmail(e.target.value);
+                                setErrors((prev) => ({ ...prev, email: undefined }));
+                              }}
+                              className="pl-10"
+                            />
+                          </div>
+                          {errors.email && (
+                            <p className="text-sm text-destructive">{errors.email}</p>
+                          )}
+                        </div>
+                        <Button type="submit" disabled={isUpdatingEmail || !newEmail}>
+                          {isUpdatingEmail ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : null}
+                          Update Email
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Change Password */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Change Password</h3>
+                    <form onSubmit={handlePasswordUpdate} className="space-y-4">
+                      <div className="p-4 rounded-xl bg-secondary/50 space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="new-password">New Password</Label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="new-password"
+                              type="password"
+                              placeholder="Enter new password"
+                              value={newPassword}
+                              onChange={(e) => {
+                                setNewPassword(e.target.value);
+                                setErrors((prev) => ({ ...prev, password: undefined }));
+                              }}
+                              className="pl-10"
+                            />
+                          </div>
+                          {errors.password && (
+                            <p className="text-sm text-destructive">{errors.password}</p>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="confirm-password">Confirm New Password</Label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="confirm-password"
+                              type="password"
+                              placeholder="Confirm new password"
+                              value={confirmPassword}
+                              onChange={(e) => {
+                                setConfirmPassword(e.target.value);
+                                setErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+                              }}
+                              className="pl-10"
+                            />
+                          </div>
+                          {errors.confirmPassword && (
+                            <p className="text-sm text-destructive">{errors.confirmPassword}</p>
+                          )}
+                        </div>
+                        <Button type="submit" disabled={isUpdatingPassword || !newPassword || !confirmPassword}>
+                          {isUpdatingPassword ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : null}
+                          Update Password
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
               {activeTab === "general" && (
                 <div className="space-y-6">
                   <div>
