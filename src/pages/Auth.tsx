@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { TrendingUp, Mail, Lock, ArrowRight, Loader2, CheckCircle2 } from "lucide-react";
+import { TrendingUp, Mail, Lock, ArrowRight, Loader2, CheckCircle2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useRateLimit } from "@/hooks/useRateLimit";
 import ZikalyzeSplash from "@/components/ZikalyzeSplash";
 import { z } from "zod";
 
@@ -17,6 +18,7 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, loading: authLoading, signIn, signUp, resetPassword } = useAuth();
+  const { checkRateLimit, recordLoginAttempt, formatRetryAfter } = useRateLimit();
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,6 +27,7 @@ const Auth = () => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showEmailConfirmation, setShowEmailConfirmation] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [rateLimitError, setRateLimitError] = useState<string | null>(null);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -54,15 +57,38 @@ const Auth = () => {
     e.preventDefault();
     if (!validateForm()) return;
     
+    setRateLimitError(null);
     setIsLoading(true);
+    
+    // Check rate limit before attempting sign in
+    const rateLimitResult = await checkRateLimit(email);
+    if (!rateLimitResult.allowed) {
+      setIsLoading(false);
+      setRateLimitError(
+        `Too many login attempts. Please try again in ${formatRetryAfter(rateLimitResult.retry_after)}.`
+      );
+      toast({
+        title: "Too many attempts",
+        description: `Please wait ${formatRetryAfter(rateLimitResult.retry_after)} before trying again.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const { error } = await signIn(email, password);
-    setIsLoading(false);
-
+    
     if (error) {
+      // Record failed attempt
+      await recordLoginAttempt(email, false);
+      setIsLoading(false);
+      
       if (error.message.includes("Invalid login credentials")) {
+        const remainingAttempts = rateLimitResult.max_attempts - rateLimitResult.attempts - 1;
         toast({
           title: "Invalid credentials",
-          description: "Please check your email and password and try again.",
+          description: remainingAttempts > 0 
+            ? `Please check your email and password. ${remainingAttempts} attempt${remainingAttempts > 1 ? 's' : ''} remaining.`
+            : "Please check your email and password and try again.",
           variant: "destructive",
         });
       } else {
@@ -74,6 +100,10 @@ const Auth = () => {
       }
       return;
     }
+
+    // Record successful attempt (clears failed attempts)
+    await recordLoginAttempt(email, true);
+    setIsLoading(false);
 
     toast({
       title: "Welcome back!",
@@ -190,6 +220,12 @@ const Auth = () => {
             </TabsList>
 
             <TabsContent value="signin">
+              {rateLimitError && (
+                <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-start gap-2">
+                  <ShieldAlert className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                  <p className="text-sm text-destructive">{rateLimitError}</p>
+                </div>
+              )}
               <form onSubmit={handleSignIn} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="signin-email">Email</Label>
@@ -203,6 +239,7 @@ const Auth = () => {
                       onChange={(e) => {
                         setEmail(e.target.value);
                         setErrors((prev) => ({ ...prev, email: undefined }));
+                        setRateLimitError(null);
                       }}
                       className="pl-10"
                     />
