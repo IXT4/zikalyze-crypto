@@ -50,6 +50,113 @@ serve(async (req) => {
 
     console.log(`Analyzing ${sanitizedCrypto} at $${price} with ${change}% change`);
 
+    // Fetch real-time ETF flow data
+    let etfFlowData = {
+      totalNetFlow: 'N/A',
+      btcNetFlow: 'N/A',
+      ethNetFlow: 'N/A',
+      flowTrend: 'N/A',
+      sentiment: 'NEUTRAL' as string,
+      dailyChange: 'N/A'
+    };
+
+    try {
+      // Fetch BTC ETF flow data from CoinGlass public API
+      const etfResponse = await fetch('https://api.coinglass.com/api/etf/v3/inflow?symbol=BTC&interval=d1', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Zikalyze-AI/1.0'
+        }
+      });
+      
+      if (etfResponse.ok) {
+        const etfData = await etfResponse.json();
+        console.log('ETF Flow data received:', JSON.stringify(etfData).substring(0, 300));
+        
+        if (etfData.data && Array.isArray(etfData.data) && etfData.data.length > 0) {
+          const latestFlow = etfData.data[etfData.data.length - 1];
+          const previousFlow = etfData.data.length > 1 ? etfData.data[etfData.data.length - 2] : null;
+          
+          const netFlow = latestFlow.totalNetAsset || latestFlow.netAsset || latestFlow.inflow || 0;
+          etfFlowData.btcNetFlow = `$${(netFlow / 1e6).toFixed(1)}M`;
+          etfFlowData.totalNetFlow = etfFlowData.btcNetFlow;
+          
+          // Determine flow trend
+          if (previousFlow) {
+            const prevFlow = previousFlow.totalNetAsset || previousFlow.netAsset || previousFlow.inflow || 0;
+            const flowChange = netFlow - prevFlow;
+            etfFlowData.dailyChange = `$${(flowChange / 1e6).toFixed(1)}M`;
+            
+            if (netFlow > 100e6) etfFlowData.flowTrend = 'STRONG_INFLOW';
+            else if (netFlow > 0) etfFlowData.flowTrend = 'STEADY_INFLOW';
+            else if (netFlow < -100e6) etfFlowData.flowTrend = 'STRONG_OUTFLOW';
+            else if (netFlow < 0) etfFlowData.flowTrend = 'STEADY_OUTFLOW';
+            else etfFlowData.flowTrend = 'NEUTRAL';
+          }
+          
+          // Calculate sentiment based on flow magnitude
+          if (netFlow > 200e6) etfFlowData.sentiment = 'EXTREME_BULLISH';
+          else if (netFlow > 100e6) etfFlowData.sentiment = 'STRONG_BULLISH';
+          else if (netFlow > 0) etfFlowData.sentiment = 'BULLISH';
+          else if (netFlow < -200e6) etfFlowData.sentiment = 'EXTREME_BEARISH';
+          else if (netFlow < -100e6) etfFlowData.sentiment = 'STRONG_BEARISH';
+          else if (netFlow < 0) etfFlowData.sentiment = 'BEARISH';
+        }
+      } else {
+        console.log('ETF API response status:', etfResponse.status);
+      }
+    } catch (etfError) {
+      console.log('ETF flow fetch error (non-critical):', etfError);
+    }
+
+    // Fallback: Alternative CoinGlass endpoint
+    if (etfFlowData.totalNetFlow === 'N/A') {
+      try {
+        const altResponse = await fetch('https://open-api.coinglass.com/public/v2/etf?symbol=BTC', {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        if (altResponse.ok) {
+          const altData = await altResponse.json();
+          if (altData.data && altData.data.length > 0) {
+            const latest = altData.data[0];
+            const flow = latest.netFlow || latest.totalNetFlow || 0;
+            etfFlowData.btcNetFlow = `$${(flow / 1e6).toFixed(1)}M`;
+            etfFlowData.totalNetFlow = etfFlowData.btcNetFlow;
+            etfFlowData.sentiment = flow > 50e6 ? 'BULLISH' : flow < -50e6 ? 'BEARISH' : 'NEUTRAL';
+            etfFlowData.flowTrend = flow > 0 ? 'INFLOW' : 'OUTFLOW';
+          }
+        }
+      } catch (altError) {
+        console.log('Alternative ETF source error:', altError);
+      }
+    }
+
+    // Fetch ETH ETF data if applicable
+    if (sanitizedCrypto === 'ETH') {
+      try {
+        const ethEtfResponse = await fetch('https://api.coinglass.com/api/etf/v3/inflow?symbol=ETH&interval=d1', {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        if (ethEtfResponse.ok) {
+          const ethEtfData = await ethEtfResponse.json();
+          if (ethEtfData.data && ethEtfData.data.length > 0) {
+            const latestEthFlow = ethEtfData.data[ethEtfData.data.length - 1];
+            const ethFlow = latestEthFlow.totalNetAsset || latestEthFlow.netAsset || 0;
+            etfFlowData.ethNetFlow = `$${(ethFlow / 1e6).toFixed(1)}M`;
+          }
+        }
+      } catch (ethError) {
+        console.log('ETH ETF fetch error:', ethError);
+      }
+    }
+
+    console.log('Final ETF Flow Data:', JSON.stringify(etfFlowData));
+
     // Calculate key metrics for analysis
     const volatility = high24h && low24h ? ((high24h - low24h) / low24h * 100).toFixed(2) : 'N/A';
     const rangePosition = high24h && low24h ? ((price - low24h) / (high24h - low24h) * 100).toFixed(1) : 'N/A';
@@ -113,14 +220,17 @@ serve(async (req) => {
     const bearTarget2 = lowNum - (range * 0.618);
     const bearTarget3 = lowNum - range;
     
-    // Calculate confidence based on multiple factors
+    // Calculate confidence based on multiple factors including ETF flows
     const baseConfidence = 65;
     const volatilityBonus = Number(volatility) > 5 ? 5 : Number(volatility) > 3 ? 3 : 0;
     const volumeBonus = volumeStrength === 'HIGH' ? 8 : volumeStrength === 'MODERATE' ? 4 : 0;
     const trendBonus = Math.abs(change) > 5 ? 7 : Math.abs(change) > 2 ? 4 : 0;
     const confluenceBonus = (rangePercent < 35 && change > 0) || (rangePercent > 65 && change < 0) ? 6 : 0;
     const divergencePenalty = priceVsVolume !== 'CONVERGENT' ? -5 : 0;
-    const calculatedConfidence = Math.min(92, Math.max(55, baseConfidence + volatilityBonus + volumeBonus + trendBonus + confluenceBonus + divergencePenalty));
+    const etfBonus = etfFlowData.sentiment.includes('BULLISH') && change > 0 ? 5 : 
+                     etfFlowData.sentiment.includes('BEARISH') && change < 0 ? 5 : 
+                     etfFlowData.sentiment === 'NEUTRAL' ? 0 : -3;
+    const calculatedConfidence = Math.min(95, Math.max(55, baseConfidence + volatilityBonus + volumeBonus + trendBonus + confluenceBonus + divergencePenalty + etfBonus));
 
     const systemPrompt = `You are ZIKALYZE AI — the world's most advanced cryptocurrency trading intelligence system. You deliver institutional-grade multi-timeframe analysis using ICT (Inner Circle Trader) methodology, Smart Money Concepts, and comprehensive market context.
 
@@ -140,8 +250,10 @@ ELITE ANALYSIS FRAMEWORK:
 - Bearish Divergence: Price makes higher high, RSI makes lower high — reversal setup
 - Hidden Divergence: Continuation signals within trends
 
-🔗 ON-CHAIN METRICS (Interpret based on market conditions):
-- ETF Flows: Institutional demand/supply pressure
+🔗 ETF FLOW & ON-CHAIN METRICS:
+- ETF Flows: REAL-TIME institutional demand/supply — inflows = bullish accumulation, outflows = distribution
+- ETF Flow Trend: Accelerating inflows signal strong institutional conviction
+- ETF Sentiment: Derived from net flow magnitude — key institutional indicator
 - Exchange Reserves: Decreasing = bullish (accumulation), Increasing = bearish (distribution)
 - Active Addresses: Network activity indicator — higher = more interest
 - Whale Transactions: Large movements signal institutional activity
@@ -215,15 +327,28 @@ Equilibrium:       $${midPoint.toFixed(2)}
 💰 MARKET DATA
 Volume 24h:        $${volume?.toLocaleString() || 'N/A'}
 Market Cap:        $${marketCap?.toLocaleString() || 'N/A'}
+
+📡 REAL-TIME ETF FLOW DATA
+BTC ETF Net Flow:  ${etfFlowData.btcNetFlow}
+ETH ETF Net Flow:  ${etfFlowData.ethNetFlow}
+Flow Trend:        ${etfFlowData.flowTrend}
+Daily Change:      ${etfFlowData.dailyChange}
+ETF Sentiment:     ${etfFlowData.sentiment} ${etfFlowData.sentiment.includes('BULLISH') ? '🟢' : etfFlowData.sentiment.includes('BEARISH') ? '🔴' : '⚪'}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 SYSTEM DETECTION: Phase = ${marketPhase} | HTF Bias = ${bias}
-CALCULATED CONFIDENCE: ${calculatedConfidence}% (Vol: +${volumeBonus}, Trend: +${trendBonus}, Confluence: +${confluenceBonus}${divergencePenalty < 0 ? ', Divergence: ' + divergencePenalty : ''})
+CALCULATED CONFIDENCE: ${calculatedConfidence}% (Vol: +${volumeBonus}, Trend: +${trendBonus}, Confluence: +${confluenceBonus}, ETF: ${etfBonus >= 0 ? '+' : ''}${etfBonus}${divergencePenalty < 0 ? ', Divergence: ' + divergencePenalty : ''})
 
 DELIVER ANALYSIS IN THIS EXACT FORMAT:
 
 🔮 ZIKALYZE AI ANALYSIS
 Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${change >= 0 ? '▲' : '▼'} ${Math.abs(change).toFixed(2)}%
+
+📡 ETF INSTITUTIONAL FLOW
+BTC ETF: ${etfFlowData.btcNetFlow} | Trend: ${etfFlowData.flowTrend} | Sentiment: ${etfFlowData.sentiment}
+[Interpret ETF flow impact on price action — institutional demand/supply pressure]
+[If inflows: Smart money accumulating — bullish signal]
+[If outflows: Distribution phase — bearish signal]
 
 📊 VOLUME PROFILE & RSI
 POC: $${poc.toFixed(2)} — [magnetic level behavior]
