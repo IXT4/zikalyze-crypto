@@ -413,6 +413,14 @@ const Settings = () => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Save Button for General Settings */}
+                  <div className="pt-4 border-t border-border">
+                    <Button onClick={handleSave} className="gap-2">
+                      <Save className="h-4 w-4" />
+                      Save Changes
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -586,13 +594,6 @@ const Settings = () => {
                 </div>
               )}
 
-              {/* Save Button */}
-              <div className="mt-6 pt-6 border-t border-border">
-                <Button onClick={handleSave} className="gap-2">
-                  <Save className="h-4 w-4" />
-                  Save Changes
-                </Button>
-              </div>
             </div>
           </div>
         </div>
