@@ -114,15 +114,7 @@ export type Database = {
           user_id?: string | null
           user_wallet_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "price_alerts_user_wallet_id_fkey"
-            columns: ["user_wallet_id"]
-            isOneToOne: false
-            referencedRelation: "user_wallets"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       push_subscriptions: {
         Row: {
@@ -181,27 +173,6 @@ export type Database = {
           totp_secret?: string | null
           updated_at?: string
           user_id?: string
-        }
-        Relationships: []
-      }
-      user_wallets: {
-        Row: {
-          created_at: string
-          id: string
-          name: string | null
-          public_key: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          name?: string | null
-          public_key: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string | null
-          public_key?: string
         }
         Relationships: []
       }
