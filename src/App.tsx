@@ -8,6 +8,7 @@ import { ThemeProvider } from "next-themes";
 import { CurrencyProvider } from "@/hooks/useCurrency";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { PWAInstallBanner } from "./components/PWAInstallBanner";
+import { ZikalyzeWatermark } from "./components/ZikalyzeWatermark";
 import { useSessionTracking } from "./hooks/useSessionTracking";
 import zikalyzeLogo from "@/assets/zikalyze-logo.png";
 
@@ -46,6 +47,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <PWAInstallBanner />
+          <ZikalyzeWatermark />
           <BrowserRouter>
             <Suspense fallback={<PageLoader />}>
               <Routes>
