@@ -150,9 +150,11 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                 <th className="pb-3 font-medium">Name</th>
                 <th className="pb-3 font-medium text-right">Price</th>
                 <th className="pb-3 font-medium text-right">24h %</th>
-                <th className="pb-3 font-medium text-right hidden sm:table-cell">24h High</th>
-                <th className="pb-3 font-medium text-right hidden sm:table-cell">24h Low</th>
-                <th className="pb-3 font-medium text-right hidden md:table-cell">Volume</th>
+                <th className="pb-3 font-medium text-right hidden sm:table-cell">Market Cap</th>
+                <th className="pb-3 font-medium text-right hidden md:table-cell">Circulating Supply</th>
+                <th className="pb-3 font-medium text-right hidden lg:table-cell">24h High</th>
+                <th className="pb-3 font-medium text-right hidden lg:table-cell">24h Low</th>
+                <th className="pb-3 font-medium text-right hidden xl:table-cell">Volume</th>
                 <th className="pb-3 font-medium text-center">Alert</th>
               </tr>
             </thead>
@@ -199,16 +201,28 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                       </div>
                     </td>
                     <td className="py-3 text-right text-sm text-muted-foreground hidden sm:table-cell">
+                      ${crypto.market_cap ? (crypto.market_cap / 1e9).toFixed(2) + "B" : "---"}
+                    </td>
+                    <td className="py-3 text-right text-sm text-muted-foreground hidden md:table-cell">
+                      {crypto.circulating_supply 
+                        ? (crypto.circulating_supply >= 1e9 
+                          ? (crypto.circulating_supply / 1e9).toFixed(2) + "B" 
+                          : crypto.circulating_supply >= 1e6 
+                            ? (crypto.circulating_supply / 1e6).toFixed(2) + "M"
+                            : crypto.circulating_supply.toLocaleString())
+                        : "---"} {crypto.symbol.toUpperCase()}
+                    </td>
+                    <td className="py-3 text-right text-sm text-muted-foreground hidden lg:table-cell">
                       ${crypto.high_24h < 1 
                         ? crypto.high_24h?.toFixed(6) 
                         : crypto.high_24h?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "---"}
                     </td>
-                    <td className="py-3 text-right text-sm text-muted-foreground hidden sm:table-cell">
+                    <td className="py-3 text-right text-sm text-muted-foreground hidden lg:table-cell">
                       ${crypto.low_24h < 1 
                         ? crypto.low_24h?.toFixed(6) 
                         : crypto.low_24h?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "---"}
                     </td>
-                    <td className="py-3 text-right text-sm text-muted-foreground hidden md:table-cell">
+                    <td className="py-3 text-right text-sm text-muted-foreground hidden xl:table-cell">
                       ${(crypto.total_volume / 1e6).toFixed(1)}M
                     </td>
                     <td className="py-3 text-center">
