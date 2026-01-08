@@ -21,8 +21,8 @@ const ZikalyzeSplash = ({ message = "Loading..." }: ZikalyzeSplashProps) => {
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary to-accent opacity-50 blur-xl animate-pulse" />
           
           {/* Logo */}
-          <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary/80 shadow-2xl animate-logo-bounce">
-            <TrendingUp className="h-10 w-10 text-primary-foreground" />
+          <div className="relative flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow-2xl animate-logo-bounce">
+            <TrendingUp className="h-7 w-7 text-primary-foreground" />
           </div>
           
           {/* Rotating ring */}
