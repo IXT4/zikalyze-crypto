@@ -54,19 +54,19 @@ const Sidebar = () => {
   }
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-16 flex-col items-center border-r border-border bg-card py-6 lg:w-64">
+    <aside className="fixed left-0 top-0 z-40 flex h-screen h-[100dvh] w-16 flex-col items-center border-r border-border bg-card py-4 lg:w-64 lg:py-6 safe-area-inset-top">
       {/* Logo */}
-      <Link to="/dashboard" className="mb-8 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary glow-purple">
-          <TrendingUp className="h-5 w-5 text-primary-foreground" />
+      <Link to="/dashboard" className="mb-6 flex items-center gap-3 lg:mb-8">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary glow-purple lg:h-10 lg:w-10">
+          <TrendingUp className="h-4 w-4 text-primary-foreground lg:h-5 lg:w-5" />
         </div>
-        <span className="hidden text-xl font-bold text-foreground lg:block">
+        <span className="hidden text-lg font-bold text-foreground lg:block lg:text-xl">
           Zikalyze
         </span>
       </Link>
 
       {/* Navigation */}
-      <nav className="flex flex-1 flex-col gap-2 px-3">
+      <nav className="flex flex-1 flex-col gap-1.5 px-2 lg:gap-2 lg:px-3 custom-scrollbar overflow-y-auto">
         {menuItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
@@ -74,31 +74,31 @@ const Sidebar = () => {
               key={item.path}
               to={item.path}
               className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-3 transition-all",
+                "flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition-all lg:rounded-xl lg:px-3 lg:py-3",
                 isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  ? "bg-primary text-primary-foreground glow-cyan"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground active:scale-95"
               )}
             >
-              <item.icon className="h-5 w-5 flex-shrink-0" />
-              <span className="hidden lg:block">{item.label}</span>
+              <item.icon className="h-4 w-4 flex-shrink-0 lg:h-5 lg:w-5" />
+              <span className="hidden lg:block text-sm">{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
       {/* Bottom Actions */}
-      <div className="flex flex-col gap-2 px-3">
-        <button className="flex items-center gap-3 rounded-xl px-3 py-3 text-muted-foreground transition-all hover:bg-secondary hover:text-foreground">
-          <Search className="h-5 w-5" />
-          <span className="hidden lg:block">{t("sidebar.search")}</span>
+      <div className="flex flex-col gap-1.5 px-2 mt-2 lg:gap-2 lg:px-3 safe-area-inset-bottom">
+        <button className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-muted-foreground transition-all hover:bg-secondary hover:text-foreground active:scale-95 lg:rounded-xl lg:px-3 lg:py-3">
+          <Search className="h-4 w-4 lg:h-5 lg:w-5" />
+          <span className="hidden lg:block text-sm">{t("sidebar.search")}</span>
         </button>
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 rounded-xl px-3 py-3 text-muted-foreground transition-all hover:bg-destructive/20 hover:text-destructive"
+          className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-muted-foreground transition-all hover:bg-destructive/20 hover:text-destructive active:scale-95 lg:rounded-xl lg:px-3 lg:py-3"
         >
-          <LogOut className="h-5 w-5" />
-          <span className="hidden lg:block">{t("sidebar.logout")}</span>
+          <LogOut className="h-4 w-4 lg:h-5 lg:w-5" />
+          <span className="hidden lg:block text-sm">{t("sidebar.logout")}</span>
         </button>
       </div>
     </aside>
