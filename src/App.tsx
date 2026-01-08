@@ -8,6 +8,13 @@ import { ThemeProvider } from "next-themes";
 import { CurrencyProvider } from "@/hooks/useCurrency";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { PWAInstallBanner } from "./components/PWAInstallBanner";
+import { useSessionTracking } from "./hooks/useSessionTracking";
+
+// Session tracking wrapper component
+function SessionTracker({ children }: { children: React.ReactNode }) {
+  useSessionTracking();
+  return <>{children}</>;
+}
 // Lazy load page components for code splitting
 const Landing = lazy(() => import("./pages/Landing"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -45,12 +52,12 @@ const App = () => (
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/login" element={<Auth />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
-                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                <Route path="/dashboard/portfolio" element={<ProtectedRoute><Portfolio /></ProtectedRoute>} />
-                <Route path="/dashboard/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-                <Route path="/dashboard/analyzer" element={<ProtectedRoute><Analyzer /></ProtectedRoute>} />
-                <Route path="/dashboard/alerts" element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
-                <Route path="/dashboard/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                <Route path="/dashboard" element={<ProtectedRoute><SessionTracker><Dashboard /></SessionTracker></ProtectedRoute>} />
+                <Route path="/dashboard/portfolio" element={<ProtectedRoute><SessionTracker><Portfolio /></SessionTracker></ProtectedRoute>} />
+                <Route path="/dashboard/analytics" element={<ProtectedRoute><SessionTracker><Analytics /></SessionTracker></ProtectedRoute>} />
+                <Route path="/dashboard/analyzer" element={<ProtectedRoute><SessionTracker><Analyzer /></SessionTracker></ProtectedRoute>} />
+                <Route path="/dashboard/alerts" element={<ProtectedRoute><SessionTracker><Alerts /></SessionTracker></ProtectedRoute>} />
+                <Route path="/dashboard/settings" element={<ProtectedRoute><SessionTracker><Settings /></SessionTracker></ProtectedRoute>} />
                 <Route path="/install" element={<Install />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
