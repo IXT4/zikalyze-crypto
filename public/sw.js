@@ -1,8 +1,9 @@
 // Service Worker for Push Notifications and Offline Caching
-const CACHE_NAME = 'zikalyze-v1';
+const CACHE_NAME = 'zikalyze-v2';
 const STATIC_ASSETS = [
   '/',
-  '/favicon.ico'
+  '/favicon.ico',
+  '/offline.html'
 ];
 
 // Install - cache static assets
@@ -58,7 +59,7 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
+        .catch(() => caches.match(request).then((cached) => cached || caches.match('/offline.html')))
     );
     return;
   }
