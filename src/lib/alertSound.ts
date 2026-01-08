@@ -3,6 +3,7 @@
 class AlertSoundPlayer {
   private audioContext: AudioContext | null = null;
   private isPlaying = false;
+  private unlocked = false;
 
   private getAudioContext(): AudioContext {
     if (!this.audioContext || this.audioContext.state === "closed") {
@@ -11,6 +12,32 @@ class AlertSoundPlayer {
       this.audioContext = new AudioContextClass();
     }
     return this.audioContext;
+  }
+
+  // Unlock audio context on first user interaction
+  unlock(): void {
+    if (this.unlocked) return;
+    
+    try {
+      const ctx = this.getAudioContext();
+      
+      // Create and play a silent buffer to unlock
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+      
+      // Resume if suspended
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+      
+      this.unlocked = true;
+      console.log("Audio context unlocked");
+    } catch (error) {
+      console.error("Error unlocking audio context:", error);
+    }
   }
 
   // Play a success/alert chime sound
@@ -71,33 +98,40 @@ class AlertSoundPlayer {
   }
 
   private playSecondChime(ctx: AudioContext): void {
-    const now = ctx.currentTime;
-    const frequencies = [783.99, 987.77, 1174.66]; // G5, B5, D6
+    try {
+      const now = ctx.currentTime;
+      const frequencies = [783.99, 987.77, 1174.66]; // G5, B5, D6
 
-    frequencies.forEach((freq, index) => {
-      const oscillator = ctx.createOscillator();
-      const gainNode = ctx.createGain();
+      frequencies.forEach((freq, index) => {
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
 
-      oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
 
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(freq, now);
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(freq, now);
 
-      const startTime = now + index * 0.06;
-      const duration = 0.4;
+        const startTime = now + index * 0.06;
+        const duration = 0.4;
 
-      gainNode.gain.setValueAtTime(0, startTime);
-      gainNode.gain.linearRampToValueAtTime(0.25, startTime + 0.02);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        gainNode.gain.setValueAtTime(0, startTime);
+        gainNode.gain.linearRampToValueAtTime(0.25, startTime + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
 
-      oscillator.start(startTime);
-      oscillator.stop(startTime + duration);
-    });
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+      });
+    } catch (error) {
+      console.error("Error playing second chime:", error);
+    }
   }
 
   // Play a simple beep for testing
   async playTestSound(): Promise<void> {
+    // Also unlock when testing
+    this.unlock();
+    
     try {
       const ctx = this.getAudioContext();
       
@@ -127,3 +161,18 @@ class AlertSoundPlayer {
 
 // Singleton instance
 export const alertSound = new AlertSoundPlayer();
+
+// Auto-unlock on first user interaction
+if (typeof window !== "undefined") {
+  const unlockAudio = () => {
+    alertSound.unlock();
+    // Remove listeners after first interaction
+    document.removeEventListener("click", unlockAudio);
+    document.removeEventListener("touchstart", unlockAudio);
+    document.removeEventListener("keydown", unlockAudio);
+  };
+  
+  document.addEventListener("click", unlockAudio, { once: true });
+  document.addEventListener("touchstart", unlockAudio, { once: true });
+  document.addEventListener("keydown", unlockAudio, { once: true });
+}
