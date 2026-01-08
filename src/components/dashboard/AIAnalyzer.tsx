@@ -249,7 +249,6 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               size="sm"
               onClick={() => setShowHistory(!showHistory)}
               className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
-              disabled={history.length === 0 && !historyLoading}
             >
               <History className="h-4 w-4" />
               <span className="text-xs hidden sm:inline">History</span>
