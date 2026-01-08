@@ -32,12 +32,12 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     }
   }, [user, loading, navigate]);
 
-  // Show minimal loading only during initial auth check, not blocking
-  if (loading && !user) {
-    return null;
+  // Return empty div with matching background during loading to prevent flash
+  if (loading) {
+    return <div className="min-h-screen bg-background" />;
   }
 
-  if (!loading && !user) return null;
+  if (!user) return null;
 
   return (
     <>
