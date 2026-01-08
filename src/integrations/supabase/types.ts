@@ -327,6 +327,7 @@ export type Database = {
         }
         Returns: Json
       }
+      is_authenticated: { Args: never; Returns: boolean }
       record_login_attempt: {
         Args: { p_email: string; p_ip_address?: string; p_success: boolean }
         Returns: undefined
