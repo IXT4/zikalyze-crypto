@@ -314,7 +314,11 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                       {crypto.low_24h ? formatPrice(crypto.low_24h) : "---"}
                     </td>
                     <td className="py-3 text-right text-sm text-muted-foreground hidden xl:table-cell">
-                      {currencySymbol}{(crypto.total_volume / 1e6).toFixed(1)}M
+                      {crypto.total_volume 
+                        ? `${currencySymbol}${crypto.total_volume >= 1e9 
+                            ? (crypto.total_volume / 1e9).toFixed(2) + "B" 
+                            : (crypto.total_volume / 1e6).toFixed(1) + "M"}`
+                        : "---"}
                     </td>
                     <td className="py-3 text-center">
                       <Button
