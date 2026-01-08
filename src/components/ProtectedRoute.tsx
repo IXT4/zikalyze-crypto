@@ -17,7 +17,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const handleTimeout = useCallback(async () => {
     await signOut();
     toast.info("You have been signed out due to inactivity");
-    navigate("/auth");
+    navigate("/");
   }, [signOut, navigate]);
 
   const { showWarning, remainingTime, extendSession } = useSessionTimeout({
