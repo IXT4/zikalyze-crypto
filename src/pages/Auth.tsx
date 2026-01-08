@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { TrendingUp, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { TrendingUp, Mail, Lock, ArrowRight, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,7 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showEmailConfirmation, setShowEmailConfirmation] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   // Redirect if already logged in
@@ -134,11 +135,8 @@ const Auth = () => {
       return;
     }
 
-    toast({
-      title: "Account created!",
-      description: "Welcome to Zikalyze. Redirecting to dashboard...",
-    });
-    navigate("/dashboard");
+    // Show email confirmation screen
+    setShowEmailConfirmation(true);
   };
 
   if (authLoading) {
@@ -305,6 +303,44 @@ const Auth = () => {
             By continuing, you agree to our Terms of Service and Privacy Policy.
           </p>
         </div>
+
+        {/* Email Confirmation Screen */}
+        {showEmailConfirmation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="rounded-2xl border border-border bg-card p-8 shadow-2xl w-full max-w-md mx-4 text-center">
+              <div className="flex justify-center mb-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/20">
+                  <CheckCircle2 className="h-8 w-8 text-primary" />
+                </div>
+              </div>
+              <h3 className="text-xl font-bold mb-2">Check your email</h3>
+              <p className="text-muted-foreground mb-4">
+                We've sent a verification link to:
+              </p>
+              <p className="font-medium text-foreground mb-6 break-all">{email}</p>
+              <p className="text-sm text-muted-foreground mb-6">
+                Click the link in your email to verify your account and complete signup. 
+                The link will expire in 24 hours.
+              </p>
+              <div className="space-y-3">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setShowEmailConfirmation(false);
+                    setEmail("");
+                    setPassword("");
+                  }}
+                >
+                  Back to Sign In
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Didn't receive the email? Check your spam folder or try signing up again.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Forgot Password Modal */}
         {showForgotPassword && (
