@@ -1,4 +1,5 @@
-import { Link, useLocation } from "react-router-dom";
+import { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   TrendingUp,
   LayoutDashboard,
@@ -11,6 +12,7 @@ import {
   BellRing,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ZikalyzeSplash from "@/components/ZikalyzeSplash";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -23,6 +25,21 @@ const menuItems = [
 
 const Sidebar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = () => {
+    setIsLoggingOut(true);
+    localStorage.removeItem("wallet_session");
+    
+    setTimeout(() => {
+      navigate("/");
+    }, 800);
+  };
+
+  if (isLoggingOut) {
+    return <ZikalyzeSplash message="Signing out..." />;
+  }
 
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-16 flex-col items-center border-r border-border bg-card py-6 lg:w-64">
@@ -64,13 +81,13 @@ const Sidebar = () => {
           <Search className="h-5 w-5" />
           <span className="hidden lg:block">Search</span>
         </button>
-        <Link
-          to="/"
+        <button
+          onClick={handleLogout}
           className="flex items-center gap-3 rounded-xl px-3 py-3 text-muted-foreground transition-all hover:bg-destructive/20 hover:text-destructive"
         >
           <LogOut className="h-5 w-5" />
           <span className="hidden lg:block">Logout</span>
-        </Link>
+        </button>
       </div>
     </aside>
   );
