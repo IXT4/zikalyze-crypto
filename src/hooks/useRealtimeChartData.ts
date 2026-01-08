@@ -91,7 +91,7 @@ const formatTime = (date: Date): string => {
   });
 };
 
-const fetchWithTimeout = async (url: string, timeoutMs = 5000): Promise<Response> => {
+const fetchWithTimeout = async (url: string, timeoutMs = 15000): Promise<Response> => {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -99,6 +99,20 @@ const fetchWithTimeout = async (url: string, timeoutMs = 5000): Promise<Response
   } finally {
     clearTimeout(timeout);
   }
+};
+
+// Retry wrapper for fetch functions
+const fetchWithRetry = async <T>(
+  fetchFn: () => Promise<T | null>,
+  retries = 2,
+  delayMs = 1000
+): Promise<T | null> => {
+  for (let i = 0; i <= retries; i++) {
+    const result = await fetchFn();
+    if (result !== null) return result;
+    if (i < retries) await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+  return null;
 };
 
 // Cache with TTL
@@ -423,10 +437,18 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
         let data: ChartDataPoint[] | null = null;
 
         switch (exchange) {
-          case "binance": data = await fetchBinanceData(symbol, exchangeSymbol); break;
-          case "coinbase": data = await fetchCoinbaseData(symbol, exchangeSymbol); break;
-          case "kraken": data = await fetchKrakenData(symbol, exchangeSymbol); break;
-          case "coingecko": data = await fetchCoinGeckoData(symbol, exchangeSymbol); break;
+          case "binance": 
+            data = await fetchWithRetry(() => fetchBinanceData(symbol, exchangeSymbol)); 
+            break;
+          case "coinbase": 
+            data = await fetchWithRetry(() => fetchCoinbaseData(symbol, exchangeSymbol)); 
+            break;
+          case "kraken": 
+            data = await fetchWithRetry(() => fetchKrakenData(symbol, exchangeSymbol)); 
+            break;
+          case "coingecko": 
+            data = await fetchWithRetry(() => fetchCoinGeckoData(symbol, exchangeSymbol)); 
+            break;
         }
 
         if (data && data.length > 0 && mountedRef.current) {
