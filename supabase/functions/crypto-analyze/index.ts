@@ -27,6 +27,54 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
   };
 }
 
+// Enhanced input validation functions
+function validateCryptoSymbol(value: unknown): { valid: boolean; sanitized: string; error?: string } {
+  if (!value || typeof value !== "string") {
+    return { valid: false, sanitized: "", error: "Cryptocurrency symbol is required" };
+  }
+  
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return { valid: false, sanitized: "", error: "Cryptocurrency symbol cannot be empty" };
+  }
+  
+  if (trimmed.length > 20) {
+    return { valid: false, sanitized: "", error: "Cryptocurrency symbol too long" };
+  }
+  
+  // Sanitize: only alphanumeric, uppercase, max 10 chars
+  const sanitized = trimmed.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 10);
+  
+  if (sanitized.length === 0) {
+    return { valid: false, sanitized: "", error: "Invalid cryptocurrency symbol format" };
+  }
+  
+  return { valid: true, sanitized };
+}
+
+function validateNumber(value: unknown, fieldName: string, min: number, max: number, required = true): { valid: boolean; value: number; error?: string } {
+  if (value === undefined || value === null) {
+    if (required) {
+      return { valid: false, value: 0, error: `${fieldName} is required` };
+    }
+    return { valid: true, value: 0 };
+  }
+  
+  if (typeof value !== "number" || isNaN(value)) {
+    return { valid: false, value: 0, error: `${fieldName} must be a number` };
+  }
+  
+  if (!isFinite(value)) {
+    return { valid: false, value: 0, error: `${fieldName} must be a finite number` };
+  }
+  
+  if (value < min || value > max) {
+    return { valid: false, value: 0, error: `${fieldName} must be between ${min} and ${max}` };
+  }
+  
+  return { valid: true, value };
+}
+
 serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
@@ -35,45 +83,87 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Only allow POST method
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
+
   try {
-    const body = await req.json();
+    // Parse JSON body with error handling
+    let body: { crypto?: unknown; price?: unknown; change?: unknown; high24h?: unknown; low24h?: unknown; volume?: unknown; marketCap?: unknown };
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Validate request body is an object
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return new Response(JSON.stringify({ error: "Request body must be an object" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
     const { crypto, price, change, high24h, low24h, volume, marketCap } = body;
     
-    // Input validation
-    if (!crypto || typeof crypto !== 'string' || crypto.length > 20) {
-      return new Response(JSON.stringify({ error: 'Invalid cryptocurrency symbol' }), {
+    // Validate cryptocurrency symbol
+    const cryptoValidation = validateCryptoSymbol(crypto);
+    if (!cryptoValidation.valid) {
+      return new Response(JSON.stringify({ error: cryptoValidation.error }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
     
-    if (typeof price !== 'number' || price < 0 || price > 1e15) {
-      return new Response(JSON.stringify({ error: 'Invalid price value' }), {
+    // Validate price (0 to 1 quadrillion)
+    const priceValidation = validateNumber(price, "price", 0, 1e15);
+    if (!priceValidation.valid) {
+      return new Response(JSON.stringify({ error: priceValidation.error }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
     
-    if (typeof change !== 'number' || change < -100 || change > 10000) {
-      return new Response(JSON.stringify({ error: 'Invalid change value' }), {
+    // Validate change (-100% to 10000%)
+    const changeValidation = validateNumber(change, "change", -100, 10000);
+    if (!changeValidation.valid) {
+      return new Response(JSON.stringify({ error: changeValidation.error }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
     
-    // Sanitize crypto symbol
-    const sanitizedCrypto = crypto.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10);
+    // Validate optional fields
+    const high24hValidation = validateNumber(high24h, "high24h", 0, 1e15, false);
+    const low24hValidation = validateNumber(low24h, "low24h", 0, 1e15, false);
+    const volumeValidation = validateNumber(volume, "volume", 0, 1e18, false);
+    const marketCapValidation = validateNumber(marketCap, "marketCap", 0, 1e18, false);
+    
+    const sanitizedCrypto = cryptoValidation.sanitized;
+    const validatedPrice = priceValidation.value;
+    const validatedChange = changeValidation.value;
+    const validatedHigh24h = high24hValidation.value || validatedPrice * 1.025;
+    const validatedLow24h = low24hValidation.value || validatedPrice * 0.975;
+    const validatedVolume = volumeValidation.value;
+    const validatedMarketCap = marketCapValidation.value;
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       console.error("LOVABLE_API_KEY is not configured");
-      return new Response(JSON.stringify({ error: 'Analysis service unavailable' }), {
+      return new Response(JSON.stringify({ error: "Analysis service unavailable" }), {
         status: 503,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    console.log(`Analyzing ${sanitizedCrypto} at $${price} with ${change}% change`);
+    console.log(`Analyzing ${sanitizedCrypto} at $${validatedPrice} with ${validatedChange}% change`);
 
     // Generate ETF flow data based on market sentiment from price change
     // Note: CoinGlass API requires authentication, so we derive sentiment from market data
@@ -121,35 +211,35 @@ serve(async (req) => {
       };
     };
 
-    const etfFlowData = deriveMarketSentiment(change, sanitizedCrypto);
+    const etfFlowData = deriveMarketSentiment(validatedChange, sanitizedCrypto);
     console.log('Derived ETF Flow Data:', JSON.stringify(etfFlowData));
 
     // Calculate key metrics for analysis
-    const volatility = high24h && low24h ? ((high24h - low24h) / low24h * 100).toFixed(2) : 'N/A';
-    const rangePosition = high24h && low24h ? ((price - low24h) / (high24h - low24h) * 100).toFixed(1) : 'N/A';
-    const volumeToMcap = volume && marketCap ? ((volume / marketCap) * 100).toFixed(3) : 'N/A';
+    const volatility = validatedHigh24h && validatedLow24h ? ((validatedHigh24h - validatedLow24h) / validatedLow24h * 100).toFixed(2) : 'N/A';
+    const rangePosition = validatedHigh24h && validatedLow24h ? ((validatedPrice - validatedLow24h) / (validatedHigh24h - validatedLow24h) * 100).toFixed(1) : 'N/A';
+    const volumeToMcap = validatedVolume && validatedMarketCap ? ((validatedVolume / validatedMarketCap) * 100).toFixed(3) : 'N/A';
 
     // Pre-calculate institutional levels
-    const priceNum = Number(price);
-    const highNum = Number(high24h) || priceNum * 1.025;
-    const lowNum = Number(low24h) || priceNum * 0.975;
+    const priceNum = validatedPrice;
+    const highNum = validatedHigh24h;
+    const lowNum = validatedLow24h;
     const range = highNum - lowNum;
     const midPoint = (highNum + lowNum) / 2;
     const quarterUp = lowNum + (range * 0.75);
     const quarterDown = lowNum + (range * 0.25);
     const fibRetrace618 = highNum - (range * 0.618);
     const fibRetrace382 = highNum - (range * 0.382);
-    const isBullish = change >= 0;
-    const isStrongMove = Math.abs(change) > 3;
+    const isBullish = validatedChange >= 0;
+    const isStrongMove = Math.abs(validatedChange) > 3;
     const rangePercent = Number(rangePosition);
     
     // Determine market phase based on data
     let marketPhase = "Consolidation";
     let bias = "NEUTRAL";
-    if (change > 5) { marketPhase = "Markup"; bias = "LONG"; }
-    else if (change < -5) { marketPhase = "Markdown"; bias = "SHORT"; }
-    else if (change > 2 && rangePercent > 60) { marketPhase = "Markup"; bias = "LONG"; }
-    else if (change < -2 && rangePercent < 40) { marketPhase = "Markdown"; bias = "SHORT"; }
+    if (validatedChange > 5) { marketPhase = "Markup"; bias = "LONG"; }
+    else if (validatedChange < -5) { marketPhase = "Markdown"; bias = "SHORT"; }
+    else if (validatedChange > 2 && rangePercent > 60) { marketPhase = "Markup"; bias = "LONG"; }
+    else if (validatedChange < -2 && rangePercent < 40) { marketPhase = "Markdown"; bias = "SHORT"; }
     else if (rangePercent > 70) { marketPhase = "Distribution"; bias = "SHORT"; }
     else if (rangePercent < 30) { marketPhase = "Accumulation"; bias = "LONG"; }
 
@@ -165,12 +255,12 @@ serve(async (req) => {
     const valueAreaLow = lowNum + (range * 0.32);
     
     // Divergence detection
-    const priceVsVolume = change > 0 && volumeStrength === 'LOW' ? 'BEARISH_DIVERGENCE' : 
-                          change < 0 && volumeStrength === 'HIGH' ? 'BULLISH_DIVERGENCE' : 'CONVERGENT';
+    const priceVsVolume = validatedChange > 0 && volumeStrength === 'LOW' ? 'BEARISH_DIVERGENCE' : 
+                          validatedChange < 0 && volumeStrength === 'HIGH' ? 'BULLISH_DIVERGENCE' : 'CONVERGENT';
     
     // RSI divergence signal
-    const rsiDivergence = rsiEstimate > 70 && change < 0 ? 'BEARISH_DIVERGENCE' :
-                          rsiEstimate < 30 && change > 0 ? 'BULLISH_DIVERGENCE' : 'NONE';
+    const rsiDivergence = rsiEstimate > 70 && validatedChange < 0 ? 'BEARISH_DIVERGENCE' :
+                          rsiEstimate < 30 && validatedChange > 0 ? 'BULLISH_DIVERGENCE' : 'NONE';
     
     // Calculate refined order block zones using volume clusters
     const obBullishLow = lowNum;
@@ -202,11 +292,11 @@ serve(async (req) => {
     const baseConfidence = 65;
     const volatilityBonus = Number(volatility) > 5 ? 5 : Number(volatility) > 3 ? 3 : 0;
     const volumeBonus = volumeStrength === 'HIGH' ? 8 : volumeStrength === 'MODERATE' ? 4 : 0;
-    const trendBonus = Math.abs(change) > 5 ? 7 : Math.abs(change) > 2 ? 4 : 0;
-    const confluenceBonus = (rangePercent < 35 && change > 0) || (rangePercent > 65 && change < 0) ? 6 : 0;
+    const trendBonus = Math.abs(validatedChange) > 5 ? 7 : Math.abs(validatedChange) > 2 ? 4 : 0;
+    const confluenceBonus = (rangePercent < 35 && validatedChange > 0) || (rangePercent > 65 && validatedChange < 0) ? 6 : 0;
     const divergencePenalty = priceVsVolume !== 'CONVERGENT' ? -5 : 0;
-    const etfBonus = etfFlowData.sentiment.includes('BULLISH') && change > 0 ? 5 : 
-                     etfFlowData.sentiment.includes('BEARISH') && change < 0 ? 5 : 
+    const etfBonus = etfFlowData.sentiment.includes('BULLISH') && validatedChange > 0 ? 5 : 
+                     etfFlowData.sentiment.includes('BEARISH') && validatedChange < 0 ? 5 : 
                      etfFlowData.sentiment === 'NEUTRAL' ? 0 : -3;
     const calculatedConfidence = Math.min(95, Math.max(55, baseConfidence + volatilityBonus + volumeBonus + trendBonus + confluenceBonus + divergencePenalty + etfBonus));
 
@@ -284,7 +374,7 @@ CRITICAL RULES FOR CONSISTENCY:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Symbol:            ${sanitizedCrypto}
 Current Price:     $${priceNum.toLocaleString()}
-24h Change:        ${change >= 0 ? '🟢 +' : '🔴 '}${change.toFixed(2)}%
+24h Change:        ${validatedChange >= 0 ? '🟢 +' : '🔴 '}${validatedChange.toFixed(2)}%
 24h High:          $${highNum.toLocaleString()}
 24h Low:           $${lowNum.toLocaleString()}
 24h Range:         $${range.toFixed(2)} (${volatility}% volatility)
@@ -325,8 +415,8 @@ Fib 0.382:         $${fibRetrace382.toFixed(2)}
 Equilibrium:       $${midPoint.toFixed(2)}
 
 💰 MARKET DATA
-Volume 24h:        $${volume?.toLocaleString() || 'N/A'}
-Market Cap:        $${marketCap?.toLocaleString() || 'N/A'}
+Volume 24h:        $${validatedVolume?.toLocaleString() || 'N/A'}
+Market Cap:        $${validatedMarketCap?.toLocaleString() || 'N/A'}
 
 📡 REAL-TIME ETF FLOW DATA
 BTC ETF Net Flow:  ${etfFlowData.btcNetFlow}
@@ -342,7 +432,7 @@ CALCULATED CONFIDENCE: ${calculatedConfidence}% (Vol: +${volumeBonus}, Trend: +$
 DELIVER ANALYSIS IN THIS EXACT FORMAT:
 
 🔮 ZIKALYZE AI ANALYSIS
-Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${change >= 0 ? '▲' : '▼'} ${Math.abs(change).toFixed(2)}%
+Asset: ${sanitizedCrypto} | Price: $${priceNum.toLocaleString()} | ${validatedChange >= 0 ? '▲' : '▼'} ${Math.abs(validatedChange).toFixed(2)}%
 
 📡 ETF INSTITUTIONAL FLOW
 BTC ETF: ${etfFlowData.btcNetFlow} | Trend: ${etfFlowData.flowTrend} | Sentiment: ${etfFlowData.sentiment}
