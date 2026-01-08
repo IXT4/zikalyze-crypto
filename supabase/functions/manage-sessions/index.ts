@@ -162,8 +162,16 @@ serve(async (req: Request) => {
           throw error;
         }
         
+        // Mask IP addresses for privacy (e.g., 192.168.1.100 -> 192.168.1.***)
+        const safeSessions = sessions?.map(session => ({
+          ...session,
+          ip_address: session.ip_address 
+            ? session.ip_address.replace(/\.\d+$/, '.***')
+            : null
+        }));
+        
         return new Response(
-          JSON.stringify({ sessions }),
+          JSON.stringify({ sessions: safeSessions }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
