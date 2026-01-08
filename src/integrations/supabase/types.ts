@@ -214,7 +214,90 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      push_subscriptions_safe: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          is_subscribed: boolean | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          is_subscribed?: never
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          is_subscribed?: never
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      user_2fa_safe: {
+        Row: {
+          backup_codes_remaining: number | null
+          created_at: string | null
+          id: string | null
+          is_enabled: boolean | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          backup_codes_remaining?: never
+          created_at?: string | null
+          id?: string | null
+          is_enabled?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          backup_codes_remaining?: never
+          created_at?: string | null
+          id?: string | null
+          is_enabled?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      user_sessions_safe: {
+        Row: {
+          created_at: string | null
+          device_info: string | null
+          id: string | null
+          ip_address_masked: string | null
+          is_current: boolean | null
+          last_active_at: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          device_info?: string | null
+          id?: string | null
+          ip_address_masked?: never
+          is_current?: boolean | null
+          last_active_at?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          device_info?: string | null
+          id?: string | null
+          ip_address_masked?: never
+          is_current?: boolean | null
+          last_active_at?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       check_rate_limit: {
