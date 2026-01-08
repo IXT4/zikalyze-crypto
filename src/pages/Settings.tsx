@@ -88,6 +88,8 @@ const Settings = () => {
     // Change language in i18n
     const langCode = languageCodes[selectedLanguage] || "en";
     i18n.changeLanguage(langCode);
+    // Dispatch event for currency context to update
+    window.dispatchEvent(new Event("settingsChanged"));
     toast({
       title: t("settings.settingsSaved"),
       description: t("settings.settingsSavedDesc"),
@@ -401,10 +403,11 @@ const Settings = () => {
                           onChange={(e) => setSelectedCurrency(e.target.value)}
                           className="bg-background border border-border rounded-lg px-3 py-2 text-foreground"
                         >
-                          <option value="USD">USD</option>
-                          <option value="EUR">EUR</option>
-                          <option value="GBP">GBP</option>
-                          <option value="JPY">JPY</option>
+                          <option value="USD">USD ($)</option>
+                          <option value="EUR">EUR (€)</option>
+                          <option value="GBP">GBP (£)</option>
+                          <option value="CNY">CNY (¥)</option>
+                          <option value="JPY">JPY (¥)</option>
                         </select>
                       </div>
                     </div>
