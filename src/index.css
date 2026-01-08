@@ -65,6 +65,8 @@ All colors MUST be HSL.
     /* Ensure smooth rendering across browsers */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Prevent tap highlight on mobile */
+    -webkit-tap-highlight-color: transparent;
   }
 
   html {
@@ -72,13 +74,28 @@ All colors MUST be HSL.
     color-scheme: dark;
     /* Smooth scrolling */
     scroll-behavior: smooth;
+    /* Consistent height across all devices */
+    height: 100%;
+    height: -webkit-fill-available;
   }
 
   body {
     @apply bg-background text-foreground;
-    /* Ensure consistent rendering */
+    /* Ensure consistent rendering across all devices */
     min-height: 100vh;
     min-height: 100dvh; /* Dynamic viewport height for mobile */
+    min-height: -webkit-fill-available; /* Safari fallback */
+    /* Prevent overscroll bounce on iOS */
+    overscroll-behavior: none;
+    /* Enable smooth momentum scrolling */
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Ensure root element fills viewport */
+  #root {
+    min-height: 100vh;
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
   }
 }
 
@@ -296,8 +313,8 @@ All colors MUST be HSL.
 
   /* Safe area insets for mobile devices - iOS notch, Android cutouts */
   .safe-area-inset-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    padding-bottom: constant(safe-area-inset-bottom, 0px); /* iOS 11.0-11.2 */
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+    padding-bottom: max(constant(safe-area-inset-bottom, 0px), 16px); /* iOS 11.0-11.2 */
   }
 
   .safe-area-inset-top {
@@ -313,6 +330,18 @@ All colors MUST be HSL.
   .safe-area-inset-right {
     padding-right: env(safe-area-inset-right, 0px);
     padding-right: constant(safe-area-inset-right, 0px);
+  }
+
+  /* Bottom safe padding utility - ensures content above navigation bars */
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 20px);
+    padding-bottom: max(constant(safe-area-inset-bottom, 0px), 20px);
+  }
+
+  /* Margin-based safe area for absolute/fixed positioning */
+  .mb-safe {
+    margin-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+    margin-bottom: max(constant(safe-area-inset-bottom, 0px), 16px);
   }
 
   /* Scrollbar styling - Cross-browser */

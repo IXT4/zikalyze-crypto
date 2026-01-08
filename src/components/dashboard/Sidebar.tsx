@@ -54,7 +54,7 @@ const Sidebar = () => {
   }
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen h-[100dvh] w-16 flex-col items-center border-r border-border bg-card py-4 lg:w-64 lg:py-6 safe-area-inset-top">
+    <aside className="fixed left-0 top-0 z-40 flex h-[100dvh] w-16 flex-col items-center border-r border-border bg-card pt-4 pb-6 lg:w-64 lg:pt-6 lg:pb-8 safe-area-inset-top">
       {/* Logo */}
       <Link to="/dashboard" className="mb-6 flex items-center gap-3 lg:mb-8">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary glow-purple lg:h-10 lg:w-10">
@@ -88,7 +88,7 @@ const Sidebar = () => {
       </nav>
 
       {/* Bottom Actions */}
-      <div className="flex flex-col gap-1.5 px-2 mt-2 mb-4 lg:gap-2 lg:px-3 pb-safe">
+      <div className="flex flex-col gap-1.5 px-2 mt-auto pt-2 lg:gap-2 lg:px-3">
         <button className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-muted-foreground transition-all hover:bg-secondary hover:text-foreground active:scale-95 lg:rounded-xl lg:px-3 lg:py-3">
           <Search className="h-4 w-4 lg:h-5 lg:w-5" />
           <span className="hidden lg:block text-sm">{t("sidebar.search")}</span>
