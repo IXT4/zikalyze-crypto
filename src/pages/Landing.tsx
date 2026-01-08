@@ -85,9 +85,15 @@ const Landing = () => {
           </Link>
         </div>
 
-        {/* Dashboard Preview */}
-        <div className="mt-20 w-full max-w-6xl animate-float">
-          <div className="relative rounded-2xl border border-border bg-card/50 backdrop-blur-xl p-6 shadow-2xl">
+        {/* Dashboard Preview - Clickable */}
+        <div 
+          className="mt-20 w-full max-w-6xl animate-float cursor-pointer group/preview"
+          onClick={() => navigate("/auth")}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
+        >
+          <div className="relative rounded-2xl border border-border bg-card/50 backdrop-blur-xl p-6 shadow-2xl transition-all duration-300 group-hover/preview:border-primary/50 group-hover/preview:shadow-primary/20 group-hover/preview:shadow-3xl">
             {/* Mini Dashboard Header */}
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
               <div className="flex items-center gap-3">
@@ -207,9 +213,15 @@ const Landing = () => {
           </div>
         </div>
 
-        {/* Features */}
+        {/* Features - Clickable */}
         <div className="mt-24 grid gap-8 md:grid-cols-3 w-full max-w-5xl">
-          <div className="group rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-8 transition-all hover:border-primary/50 hover:bg-card">
+          <div 
+            className="group rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-8 transition-all hover:border-primary/50 hover:bg-card cursor-pointer"
+            onClick={() => navigate("/auth")}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
+          >
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/20 group-hover:glow-cyan transition-all">
               <Brain className="h-7 w-7 text-primary" />
             </div>
@@ -219,7 +231,13 @@ const Landing = () => {
             </p>
           </div>
 
-          <div className="group rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-8 transition-all hover:border-accent/50 hover:bg-card">
+          <div 
+            className="group rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-8 transition-all hover:border-accent/50 hover:bg-card cursor-pointer"
+            onClick={() => navigate("/auth")}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
+          >
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-accent/20 group-hover:glow-purple transition-all">
               <BarChart3 className="h-7 w-7 text-accent" />
             </div>
@@ -229,7 +247,13 @@ const Landing = () => {
             </p>
           </div>
 
-          <div className="group rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-8 transition-all hover:border-primary/50 hover:bg-card">
+          <div 
+            className="group rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-8 transition-all hover:border-primary/50 hover:bg-card cursor-pointer"
+            onClick={() => navigate("/auth")}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === "Enter" && navigate("/auth")}
+          >
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/20 group-hover:glow-cyan transition-all">
               <Shield className="h-7 w-7 text-primary" />
             </div>
