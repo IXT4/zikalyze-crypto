@@ -35,8 +35,8 @@ const Login = () => {
           // Invalid session, continue to login
         }
       }
-      // Show splash for at least 1.5 seconds for branding
-      setTimeout(() => setInitialLoading(false), 1500);
+      // Quick splash for branding
+      setTimeout(() => setInitialLoading(false), 600);
     };
     checkSession();
   }, [navigate]);

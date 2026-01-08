@@ -38,8 +38,8 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
           return;
         }
 
-        // Show splash briefly for smooth transition
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Quick transition
+        await new Promise(resolve => setTimeout(resolve, 400));
         setIsAuthenticated(true);
       } catch {
         localStorage.removeItem("wallet_session");
