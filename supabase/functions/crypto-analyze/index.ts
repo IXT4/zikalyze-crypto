@@ -2495,7 +2495,44 @@ serve(async (req) => {
     const validatedVolume = volumeValidation.value;
     const validatedMarketCap = marketCapValidation.value;
     
-    console.log(`🧠 AI Brain v8.0 analyzing ${sanitizedCrypto} at $${validatedPrice} with ${validatedChange}% change`);
+    console.log(`🧠 AI Brain v9.0 analyzing ${sanitizedCrypto} at $${validatedPrice} with ${validatedChange}% change`);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 🌐 REAL-WORLD SENTIMENT DATA (FEAR & GREED, SOCIAL, NEWS)
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    interface SentimentData {
+      fearGreed: { value: number; label: string; previousValue: number; previousLabel: string };
+      social: {
+        twitter: { mentions: number; sentiment: number; trending: boolean };
+        reddit: { mentions: number; sentiment: number; activeThreads: number };
+        telegram: { mentions: number; sentiment: number };
+        overall: { score: number; label: string; change24h: number };
+        trendingTopics: string[];
+        influencerMentions: { name: string; followers: string; sentiment: string }[];
+      };
+      summary: { overallSentiment: string; sentimentScore: number; totalMentions: number; marketMood: string };
+    }
+    
+    let sentimentData: SentimentData | null = null;
+    
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      if (supabaseUrl) {
+        const sentimentResponse = await fetch(`${supabaseUrl}/functions/v1/crypto-sentiment`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ crypto: sanitizedCrypto, price: validatedPrice, change: validatedChange })
+        });
+        
+        if (sentimentResponse.ok) {
+          sentimentData = await sentimentResponse.json();
+          console.log(`🌐 Sentiment: F&G ${sentimentData?.fearGreed?.value} (${sentimentData?.fearGreed?.label}), Social: ${sentimentData?.social?.overall?.score}% ${sentimentData?.social?.overall?.label}`);
+        }
+      }
+    } catch (e) {
+      console.log("Sentiment fetch skipped:", e);
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // 📊 MULTI-TIMEFRAME CHART ANALYSIS (1H, 4H, DAILY)
@@ -2798,7 +2835,45 @@ serve(async (req) => {
     const memoryBoost = predictiveMemory.trendConsistency >= 70 ? 5 :
                         predictiveMemory.trendConsistency >= 50 ? 3 : 0;
     
-    const adjustedConfidence = Math.min(98, Math.max(55, probabilities.confidence + mtfBoost + realDataBoost + scenarioBoost + memoryBoost));
+    // Sentiment boost — real-world sentiment alignment
+    let sentimentBoost = 0;
+    let sentimentBias: 'LONG' | 'SHORT' | 'NEUTRAL' = 'NEUTRAL';
+    
+    if (sentimentData) {
+      const fearGreed = sentimentData.fearGreed.value;
+      const socialScore = sentimentData.social.overall.score;
+      
+      // Fear & Greed alignment
+      if (fearGreed >= 70 && validatedChange > 0) sentimentBoost += 5;
+      else if (fearGreed <= 30 && validatedChange < 0) sentimentBoost += 3; // Contrarian opportunity
+      else if (fearGreed >= 80 && validatedChange > 5) sentimentBoost += 8; // Euphoria confirmation
+      else if (fearGreed <= 20) sentimentBoost += 5; // Extreme fear = buying opportunity
+      
+      // Social sentiment alignment
+      if (socialScore >= 65 && validatedChange > 0) sentimentBoost += 4;
+      else if (socialScore <= 35 && validatedChange < 0) sentimentBoost += 2;
+      
+      // Determine sentiment bias
+      if (socialScore >= 60 && fearGreed >= 50) sentimentBias = 'LONG';
+      else if (socialScore <= 40 && fearGreed <= 50) sentimentBias = 'SHORT';
+      
+      // Add sentiment insights
+      if (fearGreed >= 70) {
+        allInsights.push(`🌐 Market Euphoria (F&G: ${fearGreed}) — strong risk-on sentiment`);
+      } else if (fearGreed <= 30) {
+        allInsights.push(`🌐 Extreme Fear (F&G: ${fearGreed}) — potential contrarian opportunity`);
+      }
+      
+      if (sentimentData.social.twitter.trending) {
+        allInsights.push(`📱 ${sanitizedCrypto} trending on social media — heightened attention`);
+      }
+      
+      if (sentimentData.social.overall.label === 'Very Bullish' || sentimentData.social.overall.label === 'Very Bearish') {
+        allInsights.push(`💬 Social sentiment: ${sentimentData.social.overall.label} (${socialScore}%)`);
+      }
+    }
+    
+    const adjustedConfidence = Math.min(98, Math.max(55, probabilities.confidence + mtfBoost + realDataBoost + scenarioBoost + memoryBoost + sentimentBoost));
     
     // Adaptive bias synthesis — MTF confluence + scenario learning
     let finalBias = bias;
@@ -2953,6 +3028,18 @@ Historical Analyses: ${memory.length} records | Accuracy: ${learningAccuracy}%
 ${memory.length > 0 ? `Last Analysis: ${memory[0].bias} at $${memory[0].price.toLocaleString()}${memory[0].wasCorrect !== undefined ? ` — ${memory[0].wasCorrect ? '✓ Correct' : '✗ Incorrect'}` : ''}` : 'Building memory...'}
 Bias Trend: ${memory.length >= 3 ? memory.slice(0, 5).map(m => m.bias === 'LONG' ? '🟢' : m.bias === 'SHORT' ? '🔴' : '⚪').join('') : 'Insufficient data'}
 ${learningInsights.length > 0 ? learningInsights.slice(0, 5).map(l => `• ${l}`).join('\n') : ''}
+
+🌐 REAL-WORLD SENTIMENT (LIVE DATA)
+${sentimentData ? `Fear & Greed Index: ${sentimentData.fearGreed.value} (${sentimentData.fearGreed.label}) ${sentimentData.fearGreed.value >= 70 ? '🟢' : sentimentData.fearGreed.value <= 30 ? '🔴' : '⚪'}
+Previous: ${sentimentData.fearGreed.previousValue} (${sentimentData.fearGreed.previousLabel}) ${sentimentData.fearGreed.value > sentimentData.fearGreed.previousValue ? '↑' : sentimentData.fearGreed.value < sentimentData.fearGreed.previousValue ? '↓' : '→'}
+Social Sentiment: ${sentimentData.social.overall.score}% ${sentimentData.social.overall.label} ${'█'.repeat(Math.round(sentimentData.social.overall.score / 10))}${'░'.repeat(10 - Math.round(sentimentData.social.overall.score / 10))}
+Twitter: ${sentimentData.social.twitter.mentions.toLocaleString()} mentions (${sentimentData.social.twitter.sentiment}% sentiment) ${sentimentData.social.twitter.trending ? '🔥 TRENDING' : ''}
+Reddit: ${sentimentData.social.reddit.mentions.toLocaleString()} mentions (${sentimentData.social.reddit.sentiment}% sentiment) | ${sentimentData.social.reddit.activeThreads} active threads
+Telegram: ${sentimentData.social.telegram.mentions.toLocaleString()} mentions (${sentimentData.social.telegram.sentiment}% sentiment)
+Total Mentions: ${sentimentData.summary.totalMentions.toLocaleString()} across platforms
+Trending Topics: ${sentimentData.social.trendingTopics.slice(0, 5).join(', ')}
+Influencer Consensus: ${sentimentData.social.influencerMentions.slice(0, 3).map(i => `${i.name}: ${i.sentiment}`).join(' | ')}
+Sentiment Bias: ${sentimentBias} ${sentimentBias === 'LONG' ? '🟢' : sentimentBias === 'SHORT' ? '🔴' : '⚪'}` : 'Sentiment data unavailable — using technical analysis only'}
 
 🌐 MARKET INTELLIGENCE
 Correlations: ${correlationInfo}
