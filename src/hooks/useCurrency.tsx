@@ -135,15 +135,15 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    // Defer the API call to avoid blocking initial render
-    // Use longer timeout to ensure it's out of the critical path
+    // Heavily defer the API call to keep it completely out of LCP critical path
+    // Wait for page to be fully interactive before fetching
     const timeoutId = setTimeout(() => {
       if ('requestIdleCallback' in window) {
-        (window as any).requestIdleCallback(() => fetchRates(), { timeout: 5000 });
+        (window as any).requestIdleCallback(() => fetchRates(), { timeout: 10000 });
       } else {
         fetchRates();
       }
-    }, 1000);
+    }, 3000); // 3 second delay to ensure LCP completes first
     
     // Refresh rates every hour
     const interval = setInterval(fetchRates, RATES_CACHE_DURATION);
