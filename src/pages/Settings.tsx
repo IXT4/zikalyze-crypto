@@ -14,6 +14,7 @@ import { alertSound } from "@/lib/alertSound";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
+import TwoFactorAuth from "@/components/settings/TwoFactorAuth";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -475,16 +476,8 @@ const Settings = () => {
                   <h3 className="text-lg font-semibold text-foreground mb-4">Security Settings</h3>
                   
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
-                      <div>
-                        <div className="font-medium text-foreground">Two-Factor Authentication</div>
-                        <div className="text-sm text-muted-foreground">Add an extra layer of security</div>
-                      </div>
-                      <Switch 
-                        checked={settings.twoFactorAuth}
-                        onCheckedChange={(checked) => saveSettings({ twoFactorAuth: checked })}
-                      />
-                    </div>
+                    {/* Two-Factor Authentication Component */}
+                    <TwoFactorAuth />
 
                     <div className="p-4 rounded-xl bg-secondary/50">
                       <div className="font-medium text-foreground mb-2">Change Password</div>
