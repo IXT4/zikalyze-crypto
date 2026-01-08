@@ -50,34 +50,86 @@ interface SentimentAnalysisProps {
   change: number;
 }
 
+// Hidden historical storage for AI learning (stores last 10 snapshots per crypto)
+const sentimentHistory: Record<string, SentimentData[]> = {};
+
 const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) => {
   const { t } = useTranslation();
   const [data, setData] = useState<SentimentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [countdown, setCountdown] = useState(60);
 
-  const fetchSentiment = async () => {
-    setLoading(true);
+  const storeForLearning = (newData: SentimentData) => {
+    if (!sentimentHistory[crypto]) {
+      sentimentHistory[crypto] = [];
+    }
+    // Keep last 10 snapshots for learning patterns
+    sentimentHistory[crypto].unshift({
+      ...newData,
+      timestamp: new Date().toISOString()
+    });
+    if (sentimentHistory[crypto].length > 10) {
+      sentimentHistory[crypto].pop();
+    }
+    // Log for AI learning (hidden from UI)
+    console.log(`[AI Learning] Stored sentiment snapshot for ${crypto}. History: ${sentimentHistory[crypto].length} records`);
+  };
+
+  const fetchSentiment = async (isAutoRefresh = false) => {
+    if (!isAutoRefresh) setLoading(true);
     setError(null);
 
     try {
       const { data: response, error: fnError } = await supabase.functions.invoke('crypto-sentiment', {
-        body: { crypto, price, change }
+        body: { 
+          crypto, 
+          price, 
+          change,
+          // Pass historical data for AI context
+          historicalSnapshots: sentimentHistory[crypto]?.slice(0, 5) || []
+        }
       });
 
       if (fnError) throw fnError;
+      
+      // Store previous data for learning before updating
+      storeForLearning(response);
+      
       setData(response);
+      setLastUpdate(new Date());
+      setCountdown(60);
     } catch (err) {
       console.error('Failed to fetch sentiment:', err);
-      setError('Failed to load sentiment data');
+      if (!isAutoRefresh) setError('Failed to load sentiment data');
     } finally {
       setLoading(false);
     }
   };
 
+  // Initial fetch and when crypto changes
   useEffect(() => {
     fetchSentiment();
-  }, [crypto, price]);
+  }, [crypto]);
+
+  // Auto-refresh every 60 seconds
+  useEffect(() => {
+    const refreshInterval = setInterval(() => {
+      fetchSentiment(true);
+    }, 60000);
+
+    return () => clearInterval(refreshInterval);
+  }, [crypto, price, change]);
+
+  // Countdown timer
+  useEffect(() => {
+    const countdownInterval = setInterval(() => {
+      setCountdown(prev => (prev > 0 ? prev - 1 : 60));
+    }, 1000);
+
+    return () => clearInterval(countdownInterval);
+  }, []);
 
   const getSentimentColor = (score: number) => {
     if (score >= 70) return 'text-success';
@@ -132,7 +184,7 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">{error || 'No data available'}</p>
-          <Button onClick={fetchSentiment} variant="outline" className="mt-4">
+          <Button onClick={() => fetchSentiment()} variant="outline" className="mt-4">
             <RefreshCw className="h-4 w-4 mr-2" /> Retry
           </Button>
         </CardContent>
@@ -147,9 +199,14 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
           <MessageCircle className="h-5 w-5 text-primary" />
           Sentiment Analysis — {crypto}
         </CardTitle>
-        <Button onClick={fetchSentiment} variant="ghost" size="sm">
-          <RefreshCw className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            Auto-refresh in {countdown}s
+          </span>
+          <Button onClick={() => fetchSentiment()} variant="ghost" size="sm" disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Overview Cards */}
