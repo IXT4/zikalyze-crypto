@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { TrendingUp, Mail, Lock, ArrowRight, Loader2, CheckCircle2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useRateLimit } from "@/hooks/useRateLimit";
-import { Turnstile } from "@/components/Turnstile";
-import { getTurnstileSiteKey, verifyCaptcha } from "@/lib/captcha";
 import ZikalyzeSplash from "@/components/ZikalyzeSplash";
 import { z } from "zod";
 
@@ -30,32 +28,6 @@ const Auth = () => {
   const [showEmailConfirmation, setShowEmailConfirmation] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [rateLimitError, setRateLimitError] = useState<string | null>(null);
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-  const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
-  const [captchaError, setCaptchaError] = useState<string | null>(null);
-  const [captchaDisabled, setCaptchaDisabled] = useState(false);
-
-  // Load Turnstile site key
-  useEffect(() => {
-    getTurnstileSiteKey().then(setTurnstileSiteKey);
-  }, []);
-
-  const handleCaptchaVerify = useCallback((token: string) => {
-    setCaptchaToken(token);
-    setCaptchaError(null);
-  }, []);
-
-  const handleCaptchaError = useCallback(() => {
-    // Disable CAPTCHA on error (e.g., invalid domain) - proceed with rate limiting only
-    setCaptchaToken(null);
-    setCaptchaDisabled(true);
-    setCaptchaError(null);
-    console.warn('CAPTCHA disabled due to configuration error - proceeding with rate limiting only');
-  }, []);
-
-  const handleCaptchaExpire = useCallback(() => {
-    setCaptchaToken(null);
-  }, []);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -85,36 +57,8 @@ const Auth = () => {
     e.preventDefault();
     if (!validateForm()) return;
     
-    // Verify CAPTCHA if available and not disabled
-    if (turnstileSiteKey && !captchaDisabled && !captchaToken) {
-      setCaptchaError("Please complete the CAPTCHA verification.");
-      toast({
-        title: "CAPTCHA required",
-        description: "Please complete the CAPTCHA verification.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     setRateLimitError(null);
-    setCaptchaError(null);
     setIsLoading(true);
-    
-    // Verify CAPTCHA token with server (skip if disabled)
-    if (turnstileSiteKey && !captchaDisabled && captchaToken) {
-      const captchaResult = await verifyCaptcha(captchaToken);
-      if (!captchaResult.success) {
-        setIsLoading(false);
-        setCaptchaError("CAPTCHA verification failed. Please try again.");
-        setCaptchaToken(null);
-        toast({
-          title: "CAPTCHA failed",
-          description: "Please complete the CAPTCHA verification again.",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
     
     // Check rate limit before attempting sign in
     const rateLimitResult = await checkRateLimit(email);
@@ -336,21 +280,6 @@ const Auth = () => {
                   </button>
                 </div>
 
-                {/* CAPTCHA Widget - only show if not disabled due to config error */}
-                {turnstileSiteKey && !captchaDisabled && (
-                  <div className="space-y-2">
-                    <Turnstile
-                      siteKey={turnstileSiteKey}
-                      onVerify={handleCaptchaVerify}
-                      onError={handleCaptchaError}
-                      onExpire={handleCaptchaExpire}
-                      theme="dark"
-                    />
-                    {captchaError && (
-                      <p className="text-sm text-destructive text-center">{captchaError}</p>
-                    )}
-                  </div>
-                )}
 
                 <Button
                   type="submit"
