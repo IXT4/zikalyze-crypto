@@ -206,12 +206,16 @@ const Settings = () => {
         throw new Error(response.error.message);
       }
 
+      // Sign out first to clear local session
+      await supabase.auth.signOut();
+      
       toast({
         title: "Account deleted",
         description: "Your account and all data have been permanently deleted.",
       });
       
-      navigate("/");
+      // Redirect to landing page
+      navigate("/", { replace: true });
     } catch (error: any) {
       toast({
         title: "Deletion failed",

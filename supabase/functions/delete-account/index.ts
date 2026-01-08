@@ -65,30 +65,53 @@ serve(async (req) => {
     // Create admin client to delete user data and auth account
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Delete user's data from all tables
+    // Delete user's data from ALL tables permanently
     const userId = user.id;
+    console.log(`Starting permanent deletion for user: ${userId}`);
 
     // Delete price_alerts
     const { error: alertsError } = await adminClient
       .from("price_alerts")
       .delete()
       .eq("user_id", userId);
-
-    if (alertsError) {
-      console.error("Error deleting price_alerts:", alertsError);
-    }
+    if (alertsError) console.error("Error deleting price_alerts:", alertsError);
+    else console.log("Deleted price_alerts");
 
     // Delete analysis_history
     const { error: historyError } = await adminClient
       .from("analysis_history")
       .delete()
       .eq("user_id", userId);
+    if (historyError) console.error("Error deleting analysis_history:", historyError);
+    else console.log("Deleted analysis_history");
 
-    if (historyError) {
-      console.error("Error deleting analysis_history:", historyError);
-    }
+    // Delete push_subscriptions
+    const { error: pushError } = await adminClient
+      .from("push_subscriptions")
+      .delete()
+      .eq("user_id", userId);
+    if (pushError) console.error("Error deleting push_subscriptions:", pushError);
+    else console.log("Deleted push_subscriptions");
 
-    // Delete the user's auth account
+    // Delete user_2fa settings
+    const { error: twoFaError } = await adminClient
+      .from("user_2fa")
+      .delete()
+      .eq("user_id", userId);
+    if (twoFaError) console.error("Error deleting user_2fa:", twoFaError);
+    else console.log("Deleted user_2fa");
+
+    // Delete user_sessions
+    const { error: sessionsError } = await adminClient
+      .from("user_sessions")
+      .delete()
+      .eq("user_id", userId);
+    if (sessionsError) console.error("Error deleting user_sessions:", sessionsError);
+    else console.log("Deleted user_sessions");
+
+    console.log(`All user data deleted for: ${userId}`);
+
+    // Delete the user's auth account permanently
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
 
     if (deleteError) {
