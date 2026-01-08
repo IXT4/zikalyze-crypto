@@ -70,7 +70,7 @@ const Dashboard = () => {
 
         <div className="p-6 space-y-6">
           {/* Crypto Ticker */}
-          <CryptoTicker selected={selectedCrypto} onSelect={setSelectedCrypto} />
+          <CryptoTicker selected={selectedCrypto} onSelect={setSelectedCrypto} getPriceBySymbol={getPriceBySymbol} loading={loading} />
 
           {/* Time Filter */}
           <div className="flex gap-2">

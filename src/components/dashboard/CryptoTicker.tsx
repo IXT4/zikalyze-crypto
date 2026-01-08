@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { useCryptoPrices } from "@/hooks/useCryptoPrices";
+import { CryptoPrice } from "@/hooks/useCryptoPrices";
 
 const cryptoMeta = [
   { symbol: "BTC", name: "Bitcoin", color: "text-warning" },
@@ -12,10 +12,11 @@ const cryptoMeta = [
 interface CryptoTickerProps {
   selected: string;
   onSelect: (symbol: string) => void;
+  getPriceBySymbol: (symbol: string) => CryptoPrice | undefined;
+  loading: boolean;
 }
 
-const CryptoTicker = ({ selected, onSelect }: CryptoTickerProps) => {
-  const { getPriceBySymbol, loading } = useCryptoPrices();
+const CryptoTicker = ({ selected, onSelect, getPriceBySymbol, loading }: CryptoTickerProps) => {
   return (
     <div className="flex flex-wrap gap-3">
       {cryptoMeta.map((crypto) => {
