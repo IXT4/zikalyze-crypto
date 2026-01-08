@@ -59,6 +59,16 @@ const Settings = () => {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; confirmPassword?: string }>({});
 
+  // General settings local state (saved on button click)
+  const [selectedLanguage, setSelectedLanguage] = useState(settings.language);
+  const [selectedCurrency, setSelectedCurrency] = useState(settings.currency);
+
+  // Sync local state when settings are loaded
+  useEffect(() => {
+    setSelectedLanguage(settings.language);
+    setSelectedCurrency(settings.currency);
+  }, [settings.language, settings.currency]);
+
   const tabs = [
     { id: "profile", label: "Profile", icon: User },
     { id: "general", label: "General", icon: Globe },
@@ -68,6 +78,10 @@ const Settings = () => {
   ];
 
   const handleSave = () => {
+    saveSettings({ 
+      language: selectedLanguage, 
+      currency: selectedCurrency 
+    });
     toast({
       title: "Settings Saved",
       description: "Your preferences have been updated successfully.",
@@ -359,14 +373,14 @@ const Settings = () => {
                           <div className="text-sm text-muted-foreground">Select your preferred language</div>
                         </div>
                         <select 
-                          value={settings.language}
-                          onChange={(e) => saveSettings({ language: e.target.value })}
+                          value={selectedLanguage}
+                          onChange={(e) => setSelectedLanguage(e.target.value)}
                           className="bg-background border border-border rounded-lg px-3 py-2 text-foreground"
                         >
-                          <option>English</option>
-                          <option>Spanish</option>
-                          <option>French</option>
-                          <option>German</option>
+                          <option value="English">English</option>
+                          <option value="Spanish">Spanish</option>
+                          <option value="French">French</option>
+                          <option value="German">German</option>
                         </select>
                       </div>
 
@@ -376,14 +390,14 @@ const Settings = () => {
                           <div className="text-sm text-muted-foreground">Default display currency</div>
                         </div>
                         <select 
-                          value={settings.currency}
-                          onChange={(e) => saveSettings({ currency: e.target.value })}
+                          value={selectedCurrency}
+                          onChange={(e) => setSelectedCurrency(e.target.value)}
                           className="bg-background border border-border rounded-lg px-3 py-2 text-foreground"
                         >
-                          <option>USD</option>
-                          <option>EUR</option>
-                          <option>GBP</option>
-                          <option>JPY</option>
+                          <option value="USD">USD</option>
+                          <option value="EUR">EUR</option>
+                          <option value="GBP">GBP</option>
+                          <option value="JPY">JPY</option>
                         </select>
                       </div>
                     </div>
