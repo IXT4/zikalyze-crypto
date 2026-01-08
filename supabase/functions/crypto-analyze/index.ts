@@ -2875,42 +2875,85 @@ serve(async (req) => {
     
     const adjustedConfidence = Math.min(98, Math.max(55, probabilities.confidence + mtfBoost + realDataBoost + scenarioBoost + memoryBoost + sentimentBoost));
     
-    // Adaptive bias synthesis — MTF confluence + scenario learning
+    // Adaptive bias synthesis — MTF confluence + scenario learning + probability alignment
+    // Priority: Probability Matrix > MTF Confluence > Scenario Learning > Chart Reinforcement
     let finalBias = bias;
+    let biasSource = 'price_action';
     
-    // MTF confluence override (strongest signal)
+    // 1. Start with probability-based bias (foundation)
+    if (probabilities.bullProb > probabilities.bearProb + 15) {
+      finalBias = 'LONG';
+      biasSource = 'probability_matrix';
+    } else if (probabilities.bearProb > probabilities.bullProb + 15) {
+      finalBias = 'SHORT';
+      biasSource = 'probability_matrix';
+    }
+    
+    // 2. MTF confluence override (only if strong alignment AND agrees with probability direction)
     if (mtfAnalysis.confluence.alignment >= 80) {
       if (mtfAnalysis.confluence.overallBias === 'BULLISH') {
-        finalBias = 'LONG';
-        allInsights.push(`🎯 ${mtfAnalysis.confluence.alignment}% multi-timeframe bullish alignment`);
+        // Only override to LONG if probabilities don't strongly disagree
+        if (probabilities.bearProb <= probabilities.bullProb + 10) {
+          finalBias = 'LONG';
+          biasSource = 'mtf_confluence';
+          allInsights.push(`🎯 ${mtfAnalysis.confluence.alignment}% multi-timeframe bullish alignment`);
+        } else {
+          allInsights.push(`⚠️ MTF bullish but probability matrix bearish — conflicting signals`);
+        }
       } else if (mtfAnalysis.confluence.overallBias === 'BEARISH') {
-        finalBias = 'SHORT';
-        allInsights.push(`🎯 ${mtfAnalysis.confluence.alignment}% multi-timeframe bearish alignment`);
+        // Only override to SHORT if probabilities don't strongly disagree
+        if (probabilities.bullProb <= probabilities.bearProb + 10) {
+          finalBias = 'SHORT';
+          biasSource = 'mtf_confluence';
+          allInsights.push(`🎯 ${mtfAnalysis.confluence.alignment}% multi-timeframe bearish alignment`);
+        } else {
+          allInsights.push(`⚠️ MTF bearish but probability matrix bullish — conflicting signals`);
+        }
       }
     }
     
-    // Scenario-based bias (secondary)
+    // 3. Scenario-based bias (only reinforces, doesn't contradict established bias)
     if (adaptiveLearning.currentScenario && adaptiveLearning.scenarioConfidence >= 70) {
-      if (adaptiveLearning.currentScenario.expectedOutcome !== 'NEUTRAL') {
-        finalBias = adaptiveLearning.currentScenario.expectedOutcome;
-        allInsights.push(`🎯 Matched scenario: ${adaptiveLearning.currentScenario.name}`);
+      const scenarioOutcome = adaptiveLearning.currentScenario.expectedOutcome;
+      if (scenarioOutcome !== 'NEUTRAL') {
+        // Check if scenario aligns with current bias
+        if ((scenarioOutcome === 'LONG' && finalBias === 'LONG') || 
+            (scenarioOutcome === 'SHORT' && finalBias === 'SHORT')) {
+          allInsights.push(`🎯 Scenario confirms bias: ${adaptiveLearning.currentScenario.name}`);
+        } else if (finalBias === 'NEUTRAL') {
+          // Only override NEUTRAL bias
+          finalBias = scenarioOutcome;
+          biasSource = 'scenario_learning';
+          allInsights.push(`🎯 Matched scenario: ${adaptiveLearning.currentScenario.name}`);
+        } else {
+          // Conflict between scenario and established bias
+          allInsights.push(`⚠️ Scenario suggests ${scenarioOutcome} but ${biasSource} indicates ${finalBias}`);
+        }
       }
     }
     
-    // Real chart data reinforcement
+    // 4. Real chart data reinforcement (validates, doesn't override unless strong confirmation)
     if (realChartData) {
       const trendStrength = realChartData.trendAnalysis.strength;
       const volumeConfirms = realChartData.volumeProfile.currentVsAvg > 100;
       
       if (realChartData.trendAnalysis.direction === 'BULLISH' && trendStrength >= 65) {
-        if (finalBias !== 'SHORT') finalBias = 'LONG';
-        if (volumeConfirms && trendStrength >= 80) {
-          allInsights.push('High-conviction bullish setup — trend + volume aligned');
+        if (finalBias === 'LONG' && volumeConfirms && trendStrength >= 80) {
+          allInsights.push('High-conviction bullish setup — all signals aligned');
+        } else if (finalBias === 'SHORT') {
+          allInsights.push(`⚠️ Chart trend bullish (${trendStrength}%) conflicts with ${finalBias} bias`);
+        } else if (finalBias === 'NEUTRAL') {
+          finalBias = 'LONG';
+          biasSource = 'chart_trend';
         }
       } else if (realChartData.trendAnalysis.direction === 'BEARISH' && trendStrength >= 65) {
-        if (finalBias !== 'LONG') finalBias = 'SHORT';
-        if (volumeConfirms && trendStrength >= 80) {
-          allInsights.push('High-conviction bearish setup — trend + volume aligned');
+        if (finalBias === 'SHORT' && volumeConfirms && trendStrength >= 80) {
+          allInsights.push('High-conviction bearish setup — all signals aligned');
+        } else if (finalBias === 'LONG') {
+          allInsights.push(`⚠️ Chart trend bearish (${trendStrength}%) conflicts with ${finalBias} bias`);
+        } else if (finalBias === 'NEUTRAL') {
+          finalBias = 'SHORT';
+          biasSource = 'chart_trend';
         }
       }
       
@@ -3061,8 +3104,8 @@ Fair Value Gap: ${finalBias === 'LONG' ? fvgBullishZone : fvgBearishZone}
 OTE Zone (61.8-78.6%): ${finalBias === 'LONG' ? oteZoneBullish : oteZoneBearish}
 Equilibrium: $${equilibrium.toFixed(2)}
 
-🟢 BULL CASE ${finalBias === 'LONG' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
-Probability: ${probabilities.bullProb}% | Confidence: ${adjustedConfidence}%
+🟢 BULL CASE ${finalBias === 'LONG' || probabilities.bullProb > probabilities.bearProb + 10 ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
+Probability: ${probabilities.bullProb}% | Confidence: ${finalBias === 'LONG' ? adjustedConfidence : Math.max(45, 100 - adjustedConfidence)}%
 Entry Zone: $${bullEntry} — OTE/Order Block confluence
 Stop Loss: $${bullStop} — Below structure low
 TP1: $${bullTP1} (+${((Number(bullTP1) - priceNum) / priceNum * 100).toFixed(1)}%) — First resistance
@@ -3071,8 +3114,8 @@ TP3: $${bullTP3} (+${((Number(bullTP3) - priceNum) / priceNum * 100).toFixed(1)}
 TP4: $${bullTP4} (+${((Number(bullTP4) - priceNum) / priceNum * 100).toFixed(1)}%) — 1.618 extension
 R:R = 1:${bullRR} ${Number(bullRR) >= 3 ? '✓ Excellent' : Number(bullRR) >= 2 ? '◐ Good' : '⚠️ Consider'}
 
-🔴 BEAR CASE ${finalBias === 'SHORT' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
-Probability: ${probabilities.bearProb}% | Confidence: ${100 - adjustedConfidence}%
+🔴 BEAR CASE ${finalBias === 'SHORT' || probabilities.bearProb > probabilities.bullProb + 10 ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
+Probability: ${probabilities.bearProb}% | Confidence: ${finalBias === 'SHORT' ? adjustedConfidence : Math.max(45, 100 - adjustedConfidence)}%
 Entry Zone: $${bearEntry} — Premium zone rejection
 Stop Loss: $${bearStop} — Above structure high
 TP1: $${bearTarget1.toFixed(2)} | TP2: $${bearTarget2.toFixed(2)} | TP3: $${bearTarget3.toFixed(2)} | TP4: $${bearTarget4.toFixed(2)}
