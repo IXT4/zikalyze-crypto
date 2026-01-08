@@ -48,7 +48,7 @@ const Sidebar = () => {
           <img 
             src={zikalyzeLogo} 
             alt="Loading" 
-            className="h-16 w-16"
+            className="h-16 w-16 animate-pulse"
           />
           <p className="text-sm text-muted-foreground">{t("sidebar.signingOut")}</p>
         </div>

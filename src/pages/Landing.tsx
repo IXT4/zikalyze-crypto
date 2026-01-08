@@ -48,7 +48,7 @@ const Landing = () => {
         <img 
           src={zikalyzeLogo} 
           alt="Loading" 
-          className="h-16 w-16"
+          className="h-16 w-16 animate-pulse"
         />
       </div>
     );
