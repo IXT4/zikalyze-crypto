@@ -4,6 +4,7 @@ import en from "./locales/en.json";
 import es from "./locales/es.json";
 import fr from "./locales/fr.json";
 import de from "./locales/de.json";
+import zh from "./locales/zh.json";
 
 const STORAGE_KEY = "zikalyze_settings";
 
@@ -19,6 +20,7 @@ const getSavedLanguage = (): string => {
         Spanish: "es",
         French: "fr",
         German: "de",
+        Chinese: "zh",
       };
       return langMap[parsed.language] || "en";
     }
@@ -34,6 +36,7 @@ i18n.use(initReactI18next).init({
     es: { translation: es },
     fr: { translation: fr },
     de: { translation: de },
+    zh: { translation: zh },
   },
   lng: getSavedLanguage(),
   fallbackLng: "en",
@@ -50,6 +53,7 @@ export const languageNames: Record<string, string> = {
   es: "Spanish",
   fr: "French",
   de: "German",
+  zh: "Chinese",
 };
 
 // Name to code mapping
@@ -58,4 +62,5 @@ export const languageCodes: Record<string, string> = {
   Spanish: "es",
   French: "fr",
   German: "de",
+  Chinese: "zh",
 };
