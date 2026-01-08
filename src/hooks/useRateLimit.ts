@@ -10,10 +10,9 @@ interface RateLimitResult {
 export const useRateLimit = () => {
   const checkRateLimit = async (email: string): Promise<RateLimitResult> => {
     try {
-      const { data, error } = await supabase.rpc('check_rate_limit', {
-        p_email: email.toLowerCase(),
-        p_max_attempts: 5,
-        p_window_minutes: 15
+      // Use edge function for server-side rate limiting with IP detection
+      const { data, error } = await supabase.functions.invoke('check-rate-limit', {
+        body: { email: email.toLowerCase(), action: 'check' }
       });
 
       if (error) {
@@ -22,7 +21,7 @@ export const useRateLimit = () => {
         return { allowed: true, attempts: 0, max_attempts: 5, retry_after: 0 };
       }
 
-      return data as unknown as RateLimitResult;
+      return data as RateLimitResult;
     } catch (err) {
       console.error('Rate limit check error:', err);
       return { allowed: true, attempts: 0, max_attempts: 5, retry_after: 0 };
@@ -31,9 +30,9 @@ export const useRateLimit = () => {
 
   const recordLoginAttempt = async (email: string, success: boolean): Promise<void> => {
     try {
-      await supabase.rpc('record_login_attempt', {
-        p_email: email.toLowerCase(),
-        p_success: success
+      // Use edge function to record attempt with IP
+      await supabase.functions.invoke('check-rate-limit', {
+        body: { email: email.toLowerCase(), action: 'record', success }
       });
     } catch (err) {
       console.error('Failed to record login attempt:', err);
