@@ -10,7 +10,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { PWAInstallBanner } from "./components/PWAInstallBanner";
 import { ZikalyzeWatermark } from "./components/ZikalyzeWatermark";
 import { useSessionTracking } from "./hooks/useSessionTracking";
-import zikalyzeLogo from "@/assets/zikalyze-logo.png";
+
 
 // Session tracking wrapper component - non-critical feature
 function SessionTracker({ children }: { children: React.ReactNode }) {
@@ -32,11 +32,9 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
-// Loading fallback with Zikalyze logo
+// Minimal loading fallback - just background to prevent flash
 const PageLoader = () => (
-  <div className="min-h-screen bg-background flex items-center justify-center">
-    <img src={zikalyzeLogo} alt="Loading" className="h-16 w-16 animate-pulse" />
-  </div>
+  <div className="min-h-screen bg-background" />
 );
 
 const App = () => (
