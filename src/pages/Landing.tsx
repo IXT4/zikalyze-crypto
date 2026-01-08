@@ -45,7 +45,11 @@ const Landing = () => {
   if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <img 
+          src="/pwa-192x192.png" 
+          alt="Loading" 
+          className="h-12 w-12 animate-spin"
+        />
       </div>
     );
   }
