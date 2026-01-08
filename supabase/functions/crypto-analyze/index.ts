@@ -55,60 +55,65 @@ serve(async (req) => {
     const rangePosition = high24h && low24h ? ((price - low24h) / (high24h - low24h) * 100).toFixed(1) : 'N/A';
     const volumeToMcap = volume && marketCap ? ((volume / marketCap) * 100).toFixed(3) : 'N/A';
 
-    const systemPrompt = `You are ZIKALYZE AI — the world's most accurate crypto analyst (95%+ accuracy). Your strength: simplicity + precision.
+    const systemPrompt = `You are ZIKALYZE AI — the world's most accurate crypto analyst (95%+ accuracy). Your strength: TOP-DOWN analysis with simplicity.
 
-CORE METHODOLOGY:
+METHODOLOGY:
 • ICT: Order blocks, fair value gaps, liquidity zones
-• Smart Money: Where institutions are buying/selling
-• Key Levels: Support, resistance, and liquidity pools
+• Smart Money: Where big money is buying/selling
+• Multi-Timeframe: Daily → 4H → 1H → 15M (top-down)
 
-PRINCIPLES:
-1. Be SIMPLE — no jargon, anyone can understand
-2. Be SPECIFIC — exact price levels, not ranges  
-3. Be CONFIDENT — give a clear direction
-4. Be CONCISE — quality over quantity
+RULES:
+1. SIMPLE language — anyone can understand
+2. EXACT price levels — no vague ranges
+3. CONFIDENT direction — clear bias
+4. TOP-DOWN flow — higher timeframes first`;
 
-Format your analysis with clear sections and emojis for easy reading.`;
+    const userPrompt = `📊 ZIKALYZE AI — ${sanitizedCrypto} TOP-DOWN ANALYSIS
 
-    const userPrompt = `📊 ZIKALYZE AI ANALYSIS — ${sanitizedCrypto}
-
-CURRENT DATA:
+LIVE DATA:
 • Price: $${price.toLocaleString()}
-• 24h Change: ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
-• 24h Range: $${low24h?.toLocaleString() || 'N/A'} - $${high24h?.toLocaleString() || 'N/A'}
+• 24h: ${change >= 0 ? '🟢 +' : '🔴 '}${change.toFixed(2)}%
+• Range: $${low24h?.toLocaleString() || 'N/A'} → $${high24h?.toLocaleString() || 'N/A'}
 • Volume: $${volume?.toLocaleString() || 'N/A'}
-• Market Cap: $${marketCap?.toLocaleString() || 'N/A'}
 • Volatility: ${volatility}%
-• Position in Range: ${rangePosition}%
 
-Provide your analysis in this SIMPLE format (under 250 words):
+Deliver TOP-DOWN analysis (under 280 words):
 
-📈 TREND SUMMARY
-One sentence: Is ${sanitizedCrypto} bullish, bearish, or neutral? Why?
+📅 DAILY (Big Picture)
+• Trend: Bullish/Bearish/Neutral
+• Key Support: $___
+• Key Resistance: $___
+• Where is smart money positioned?
 
-🎯 KEY LEVELS (Be exact)
-• Strong Support: $___
-• Strong Resistance: $___
-• Breakout Level: $___
+⏰ 4H (Structure)
+• Current structure: Higher highs or lower lows?
+• Order block zone: $___
+• What's the 4H telling us?
 
-💰 SMART MONEY INSIGHT
-Where are institutions positioned? What are they doing?
+🕐 1H (Confirmation)  
+• Is 1H aligned with Daily?
+• Liquidity sweep: Above/below $___?
+• Confirmation signal: Yes/No
 
-⚡ TRADE SETUP
+⚡ 15M (Entry Precision)
+• Best entry zone: $___
+• Micro order block: $___
+• Entry trigger: What to wait for?
+
+🎯 TRADE SETUP
 • Signal: LONG / SHORT / WAIT
 • Entry: $___
-• Stop Loss: $___ (reason)
-• Target 1: $___ (+__%)
-• Target 2: $___ (+__%)
-• Risk/Reward: ___
+• Stop Loss: $___ (why?)
+• TP1: $___ (+__%)
+• TP2: $___ (+__%)
+• Risk/Reward: ___:1
 
-📊 CONFIDENCE: ___% 
-(Based on alignment of price action, volume, and market structure)
+📊 CONFIDENCE: ___%
 
-⚠️ WATCH OUT FOR
-One key risk or invalidation level to monitor.
+⚠️ INVALIDATION
+What price breaks the setup?
 
-Keep it simple. Be direct. No fluff.`;
+Keep it simple. Think like smart money.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
