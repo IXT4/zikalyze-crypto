@@ -325,6 +325,7 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
       setPriceChange(cached.priceChange);
       setDataSource(cached.exchange);
       setIsLoading(false);
+      // Use first price point as reference for change calculation
       lastPriceRef.current = cached.data[0]?.price || null;
     } else {
       setChartData([]);
