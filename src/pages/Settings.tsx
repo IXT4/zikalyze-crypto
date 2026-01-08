@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "@/components/dashboard/Sidebar";
-import { Search, User, Bell, Shield, Palette, Globe, Moon, Sun, Save, Volume2, VolumeX, Mail, Lock, Loader2 } from "lucide-react";
+import { Search, User, Bell, Shield, Palette, Globe, Moon, Sun, Save, Volume2, VolumeX, Mail, Lock, Loader2, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -11,12 +12,14 @@ import { useTheme } from "next-themes";
 import { useSettings } from "@/hooks/useSettings";
 import { alertSound } from "@/lib/alertSound";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 const Settings = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { settings, saveSettings, toggleSetting } = useSettings();
@@ -50,6 +53,9 @@ const Settings = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; confirmPassword?: string }>({});
 
   const tabs = [
@@ -132,6 +138,53 @@ const Settings = () => {
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== "DELETE") return;
+    
+    setIsDeletingAccount(true);
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        toast({
+          title: "Not authenticated",
+          description: "Please log in again to delete your account.",
+          variant: "destructive",
+        });
+        setIsDeletingAccount(false);
+        return;
+      }
+
+      const response = await supabase.functions.invoke("delete-account", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      toast({
+        title: "Account deleted",
+        description: "Your account and all data have been permanently deleted.",
+      });
+      
+      navigate("/");
+    } catch (error: any) {
+      toast({
+        title: "Deletion failed",
+        description: error.message || "Failed to delete account. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingAccount(false);
+      setShowDeleteConfirm(false);
+      setDeleteConfirmText("");
+    }
   };
 
   return (
@@ -436,13 +489,77 @@ const Settings = () => {
                     <div className="p-4 rounded-xl bg-secondary/50">
                       <div className="font-medium text-foreground mb-2">Change Password</div>
                       <div className="text-sm text-muted-foreground mb-3">Update your account password</div>
-                      <Button variant="outline">Change Password</Button>
+                      <Button variant="outline" onClick={() => setActiveTab("profile")}>
+                        Go to Profile Settings
+                      </Button>
                     </div>
 
                     <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20">
                       <div className="font-medium text-destructive mb-2">Danger Zone</div>
-                      <div className="text-sm text-muted-foreground mb-3">Permanently delete your account</div>
-                      <Button variant="destructive">Delete Account</Button>
+                      <div className="text-sm text-muted-foreground mb-3">
+                        Permanently delete your account and all associated data. This action cannot be undone.
+                      </div>
+                      <Button variant="destructive" onClick={() => setShowDeleteConfirm(true)}>
+                        Delete Account
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Delete Account Confirmation Modal */}
+              {showDeleteConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+                  <div className="rounded-2xl border border-destructive/30 bg-card p-6 shadow-2xl w-full max-w-md mx-4">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="h-10 w-10 rounded-full bg-destructive/20 flex items-center justify-center">
+                        <AlertTriangle className="h-5 w-5 text-destructive" />
+                      </div>
+                      <h3 className="text-xl font-bold text-destructive">Delete Account</h3>
+                    </div>
+                    
+                    <p className="text-muted-foreground mb-4">
+                      This will permanently delete your account and all your data including:
+                    </p>
+                    <ul className="text-sm text-muted-foreground mb-4 list-disc list-inside space-y-1">
+                      <li>All price alerts</li>
+                      <li>All analysis history</li>
+                      <li>Your account credentials</li>
+                    </ul>
+                    <p className="text-sm text-foreground font-medium mb-4">
+                      Type <span className="text-destructive font-bold">DELETE</span> to confirm:
+                    </p>
+                    
+                    <Input
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      placeholder="Type DELETE to confirm"
+                      className="mb-4"
+                    />
+                    
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setShowDeleteConfirm(false);
+                          setDeleteConfirmText("");
+                        }}
+                        disabled={isDeletingAccount}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="flex-1"
+                        onClick={handleDeleteAccount}
+                        disabled={deleteConfirmText !== "DELETE" || isDeletingAccount}
+                      >
+                        {isDeletingAccount ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : null}
+                        Delete Forever
+                      </Button>
                     </div>
                   </div>
                 </div>
