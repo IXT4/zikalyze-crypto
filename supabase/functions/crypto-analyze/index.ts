@@ -500,6 +500,7 @@ Resistance: $${highNum.toFixed(2)} → $${valueAreaHigh.toFixed(2)} → $${(high
 Bull Invalid: [Price + structure that invalidates bull case]
 Bear Invalid: [Price + structure that invalidates bear case]`;
 
+    // Use cost-efficient model to avoid quota issues
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -507,7 +508,7 @@ Bear Invalid: [Price + structure that invalidates bear case]`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
+        model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
