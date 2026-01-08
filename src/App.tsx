@@ -10,7 +10,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { PWAInstallBanner } from "./components/PWAInstallBanner";
 import { useSessionTracking } from "./hooks/useSessionTracking";
 
-// Session tracking wrapper component
+// Session tracking wrapper component - non-critical feature
 function SessionTracker({ children }: { children: React.ReactNode }) {
   useSessionTracking();
   return <>{children}</>;
