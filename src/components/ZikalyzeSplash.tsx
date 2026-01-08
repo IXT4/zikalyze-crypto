@@ -1,3 +1,5 @@
+import zikalyzeLogo from "@/assets/zikalyze-logo.png";
+
 interface ZikalyzeSplashProps {
   message?: string;
 }
@@ -16,14 +18,14 @@ const ZikalyzeSplash = ({ message = "Loading..." }: ZikalyzeSplashProps) => {
         {/* Animated Logo */}
         <div className="relative">
           {/* Outer glow ring */}
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary to-accent opacity-50 blur-xl animate-pulse" />
+          <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-cyan-400 to-cyan-300 opacity-50 blur-xl animate-pulse" />
           
           {/* Logo Image */}
-          <div className="relative flex h-16 w-16 items-center justify-center rounded-xl shadow-2xl animate-logo-bounce overflow-hidden">
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl shadow-2xl animate-logo-bounce overflow-hidden">
             <img 
-              src="/pwa-192x192.png" 
+              src={zikalyzeLogo} 
               alt="Zikalyze" 
-              className="h-full w-full object-contain"
+              className="h-full w-full object-cover"
             />
           </div>
           
