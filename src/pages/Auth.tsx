@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useRateLimit } from "@/hooks/useRateLimit";
-import ZikalyzeSplash from "@/components/ZikalyzeSplash";
+
 import { z } from "zod";
 
 const Auth = () => {
@@ -193,7 +193,11 @@ const Auth = () => {
   };
 
   if (authLoading) {
-    return <ZikalyzeSplash message={t("common.loading")} />;
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return (

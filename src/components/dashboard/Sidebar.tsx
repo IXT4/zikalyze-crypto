@@ -13,7 +13,7 @@ import {
   BellRing,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import ZikalyzeSplash from "@/components/ZikalyzeSplash";
+
 import { useAuth } from "@/hooks/useAuth";
 
 const Sidebar = () => {
@@ -42,7 +42,14 @@ const Sidebar = () => {
   };
 
   if (isLoggingOut) {
-    return <ZikalyzeSplash message={t("sidebar.signingOut")} />;
+    return (
+      <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">{t("sidebar.signingOut")}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
