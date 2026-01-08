@@ -34,14 +34,19 @@ interface CoinGeckoCoin {
 
 // Stablecoins to exclude
 const STABLECOINS = [
-  // USD stablecoins
+  // USD stablecoins (all variations)
   "usdt", "usdc", "busd", "dai", "tusd", "usdp", "usdd", "gusd", 
   "frax", "lusd", "susd", "eurs", "usdj", "fdusd", "pyusd", "eurc",
   "ustc", "usde", "susde", "cusd", "usdx", "husd", "nusd", "musd",
   "dola", "usdk", "tribe", "fei", "mim", "spell", "ust", "usdn",
+  "usd1", "rusd", "zusd", "dusd", "ousd", "vusd", "ausd", "eusd",
   // Wrapped/pegged assets
   "wbtc", "weth", "steth", "reth", "cbeth", "wsteth", "frxeth", "sfrxeth",
   "hbtc", "renbtc", "tbtc", "sbtc", "pbtc", "obtc",
+  // Restaking assets
+  "ezeth", "rseth", "weeth", "eeth", "pufeth", "kelp", "renzo", "eigenlayer",
+  "ether-fi", "puffer-finance", "kelp-dao", "restaked-eth", "restaked-ether",
+  "eigenpie", "bedrock", "mantle-staked-ether", "meth", "sweth", "ankr-staked-eth",
   // Gold/commodity backed
   "xaut", "paxg", "gold", "dgld", "pmgt",
   // Other stable/wrapped
@@ -51,6 +56,14 @@ const STABLECOINS = [
   "paypal-usd", "first-digital-usd", "gemini-dollar", "pax-gold", "tether-gold",
   "true-usd", "ethena-usde", "ethena", "sdai", "savingsdai"
 ];
+
+// Check if symbol starts with USD variations
+const isUsdPrefixed = (symbol: string): boolean => {
+  const lower = symbol.toLowerCase();
+  return lower.startsWith("usd") || lower.startsWith("rusd") || 
+         lower.startsWith("zusd") || lower.startsWith("eusd") ||
+         lower.startsWith("ausd") || lower.startsWith("cusd");
+};
 
 // Priority tokens to always include if available
 const PRIORITY_TOKENS = [
@@ -218,9 +231,11 @@ export const useCryptoPrices = () => {
       
       const data: CoinGeckoCoin[] = await response.json();
       
-      // Filter out stablecoins and take top 100
+      // Filter out stablecoins, restake assets, and USD-prefixed tokens, then take top 100
       const filteredData = data
-        .filter(coin => !STABLECOINS.includes(coin.symbol.toLowerCase()))
+        .filter(coin => !STABLECOINS.includes(coin.symbol.toLowerCase()) && 
+                        !STABLECOINS.includes(coin.id.toLowerCase()) &&
+                        !isUsdPrefixed(coin.symbol))
         .slice(0, 100);
       
       // Store the crypto list for WebSocket connections
