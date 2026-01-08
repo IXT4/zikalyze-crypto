@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 const Dashboard = () => {
   const [selectedCrypto, setSelectedCrypto] = useState("BTC");
   const [userName, setUserName] = useState<string | null>(null);
-  const { prices, loading, connectedExchanges, getPriceBySymbol } = useCryptoPrices();
+  const { prices, loading, getPriceBySymbol } = useCryptoPrices();
 
   useEffect(() => {
     const session = localStorage.getItem("wallet_session");
@@ -103,23 +103,9 @@ const Dashboard = () => {
                   <span className="text-sm text-muted-foreground">{selectedCrypto}/USD</span>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full ${loading ? "bg-warning" : "bg-success"} animate-pulse`} />
-                  <span className="text-sm text-muted-foreground">{loading ? "LOADING..." : "LIVE"}</span>
-                </div>
-                {connectedExchanges.length > 0 && (
-                  <div className="flex items-center gap-1">
-                    {connectedExchanges.map((exchange) => (
-                      <span 
-                        key={exchange}
-                        className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-medium"
-                      >
-                        {exchange}
-                      </span>
-                    ))}
-                  </div>
-                )}
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${loading ? "bg-warning" : "bg-success"} animate-pulse`} />
+                <span className="text-sm text-muted-foreground">{loading ? "LOADING..." : "LIVE"}</span>
               </div>
             </div>
 
