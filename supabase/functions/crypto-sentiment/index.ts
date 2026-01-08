@@ -110,7 +110,12 @@ const geckoIdMap: Record<string, string> = {
   WIF: 'dogwifcoin',
   BONK: 'bonk',
   FET: 'fetch-ai',
-  RENDER: 'render-token'
+  RENDER: 'render-token',
+  KAS: 'kaspa',
+  HBAR: 'hedera-hashgraph',
+  ICP: 'internet-computer',
+  TAO: 'bittensor',
+  TIA: 'celestia'
 };
 
 // Real-world social media follower data (updated periodically)
@@ -141,7 +146,12 @@ const realSocialData: Record<string, { twitter: number; reddit: number; telegram
   WIF: { twitter: 280000, reddit: 18000, telegram: 95000 },
   BONK: { twitter: 350000, reddit: 22000, telegram: 75000 },
   FET: { twitter: 480000, reddit: 35000, telegram: 55000 },
-  RENDER: { twitter: 380000, reddit: 28000, telegram: 42000 }
+  RENDER: { twitter: 380000, reddit: 28000, telegram: 42000 },
+  KAS: { twitter: 185000, reddit: 28000, telegram: 95000 },
+  HBAR: { twitter: 520000, reddit: 45000, telegram: 38000 },
+  ICP: { twitter: 780000, reddit: 55000, telegram: 65000 },
+  TAO: { twitter: 120000, reddit: 18000, telegram: 45000 },
+  TIA: { twitter: 280000, reddit: 22000, telegram: 55000 }
 };
 
 // Fetch real-time crypto data AND community data from CoinGecko
@@ -633,6 +643,18 @@ function generateInfluencerMentions(
     
     // Polkadot
     { name: 'Gavin Wood', followers: '320K', handle: 'gavofyork', coins: ['DOT'], topics: ['Polkadot', 'Web3', 'Parachains'] },
+    
+    // Kaspa influencers
+    { name: 'Kaspa Official', followers: '95K', handle: 'KaspaCurrency', coins: ['KAS'], topics: ['Kaspa', 'PoW', 'BlockDAG', 'GHOSTDAG'] },
+    { name: 'Hashdag', followers: '28K', handle: 'Hashdag_', coins: ['KAS'], topics: ['Kaspa', 'Mining', 'BlockDAG'] },
+    { name: 'Kaspa King', followers: '35K', handle: 'KaspaKing_', coins: ['KAS'], topics: ['Kaspa', 'Community', 'KAS'] },
+    { name: 'Bubblegum Lightning', followers: '45K', handle: 'BGLightning', coins: ['KAS'], topics: ['Kaspa', 'PoW', 'Analysis'] },
+    { name: 'DaGhetto Tymoff', followers: '22K', handle: 'DaGhettoTymoff', coins: ['KAS'], topics: ['Kaspa', 'Mining', 'Hardware'] },
+    { name: 'Kaspa Community', followers: '18K', handle: 'KaspaCommunity', coins: ['KAS'], topics: ['Kaspa', 'Updates', 'Development'] },
+    
+    // AI & Infrastructure
+    { name: 'Fetch.ai', followers: '480K', handle: 'Fetch_ai', coins: ['FET'], topics: ['AI', 'Agents', 'Machine Learning'] },
+    { name: 'Render Network', followers: '380K', handle: 'RenderToken', coins: ['RENDER'], topics: ['GPU', 'Rendering', 'AI'] },
   ];
 
   // Score influencers by relevance
@@ -737,7 +759,17 @@ serve(async (req) => {
       ETH: ['#Ethereum', '#ETH', 'Layer 2', 'DeFi', 'NFTs', 'Staking', 'Gas Fees'],
       SOL: ['#Solana', '#SOL', 'Speed', 'Low Fees', 'DeFi'],
       XRP: ['#XRP', '#Ripple', 'SEC', 'Cross-border'],
-      DOGE: ['#Dogecoin', '#DOGE', 'Elon Musk', 'Community']
+      DOGE: ['#Dogecoin', '#DOGE', 'Elon Musk', 'Community'],
+      KAS: ['#Kaspa', '#KAS', 'BlockDAG', 'GHOSTDAG', 'PoW', 'Fastest PoW', 'Mining', 'Decentralization'],
+      ADA: ['#Cardano', '#ADA', 'Smart Contracts', 'Staking'],
+      AVAX: ['#Avalanche', '#AVAX', 'Subnets', 'DeFi'],
+      LINK: ['#Chainlink', '#LINK', 'Oracles', 'CCIP'],
+      FET: ['#FetchAI', '#FET', 'AI Agents', 'Machine Learning'],
+      RENDER: ['#Render', '#RNDR', 'GPU', 'AI', 'Decentralized Rendering'],
+      TAO: ['#Bittensor', '#TAO', 'Decentralized AI', 'Machine Learning'],
+      TIA: ['#Celestia', '#TIA', 'Modular', 'Data Availability'],
+      HBAR: ['#Hedera', '#HBAR', 'Enterprise', 'Hashgraph'],
+      ICP: ['#InternetComputer', '#ICP', 'Web3', 'Decentralized Cloud']
     };
 
     const combinedTopics = [
