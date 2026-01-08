@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2 } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -45,7 +45,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const lastFrameTimeRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
-  const { history, loading: historyLoading, saveAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
+  const { history, loading: historyLoading, saveAnalysis, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
 
   const processingSteps = [
     "Connecting to AI...",
@@ -323,39 +323,59 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
             ) : (
               <div className="space-y-1">
                 {history.map((record) => (
-                  <button
+                  <div
                     key={record.id}
-                    onClick={() => handleSelectHistory(record)}
                     className={cn(
-                      "w-full text-left p-2 rounded-lg transition-colors hover:bg-background/50",
+                      "group relative w-full text-left p-2 rounded-lg transition-colors hover:bg-background/50",
                       selectedHistory?.id === record.id && "bg-primary/10 border border-primary/30"
                     )}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-xs text-foreground">
-                          {format(new Date(record.created_at), "MMM d, h:mm a")}
-                        </span>
+                    <button
+                      onClick={() => handleSelectHistory(record)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-center justify-between pr-6">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-xs text-foreground">
+                            {format(new Date(record.created_at), "MMM d, h:mm a")}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "text-xs px-1.5 py-0.5 rounded",
+                            record.change_24h >= 0 ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
+                          )}>
+                            {record.change_24h >= 0 ? "+" : ""}{record.change_24h.toFixed(2)}%
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            ${Number(record.price).toLocaleString()}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className={cn(
-                          "text-xs px-1.5 py-0.5 rounded",
-                          record.change_24h >= 0 ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
-                        )}>
-                          {record.change_24h >= 0 ? "+" : ""}{record.change_24h.toFixed(2)}%
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          ${Number(record.price).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                    {record.confidence && (
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        Confidence: {record.confidence}% {record.bias && `• ${record.bias}`}
-                      </div>
-                    )}
-                  </button>
+                      {record.confidence && (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Confidence: {record.confidence}% {record.bias && `• ${record.bias}`}
+                        </div>
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteAnalysis(record.id);
+                        if (selectedHistory?.id === record.id) {
+                          setSelectedHistory(null);
+                          setDisplayedText("");
+                          setFullAnalysis("");
+                        }
+                        toast.success("Analysis deleted");
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+                      title="Delete this analysis"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
