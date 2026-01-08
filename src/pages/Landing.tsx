@@ -36,9 +36,9 @@ const Landing = () => {
       return;
     }
     
-    // Quick splash for branding
+    // Reduced splash for faster LCP - only show briefly for branding
     if (!authLoading) {
-      setTimeout(() => setLoading(false), 800);
+      setTimeout(() => setLoading(false), 400);
     }
   }, [navigate, user, authLoading]);
 
