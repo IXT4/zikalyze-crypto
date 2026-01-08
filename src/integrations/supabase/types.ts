@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      analysis_history: {
+        Row: {
+          analysis_text: string
+          bias: string | null
+          change_24h: number
+          confidence: number | null
+          created_at: string
+          id: string
+          price: number
+          symbol: string
+        }
+        Insert: {
+          analysis_text: string
+          bias?: string | null
+          change_24h: number
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          price: number
+          symbol: string
+        }
+        Update: {
+          analysis_text?: string
+          bias?: string | null
+          change_24h?: number
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          price?: number
+          symbol?: string
+        }
+        Relationships: []
+      }
       price_alerts: {
         Row: {
           condition: string

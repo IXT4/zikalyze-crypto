@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useAnalysisHistory, AnalysisRecord } from "@/hooks/useAnalysisHistory";
+import { format } from "date-fns";
 
 interface AIAnalyzerProps {
   crypto: string;
@@ -25,10 +27,14 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [selectedHistory, setSelectedHistory] = useState<AnalysisRecord | null>(null);
   const charIndexRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  const { history, loading: historyLoading, saveAnalysis } = useAnalysisHistory(crypto);
 
   const processingSteps = [
     "Connecting to AI...",
@@ -153,6 +159,19 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       }
 
       setHasAnalyzed(true);
+      
+      // Save to history after successful analysis
+      if (fullText.length > 100) {
+        // Extract confidence from analysis text
+        const confidenceMatch = fullText.match(/Confidence:\s*(\d+)%/);
+        const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : undefined;
+        
+        // Extract bias from analysis
+        const biasMatch = fullText.match(/Bias[:\s]+(\w+)/i) || fullText.match(/Signal:\s*(LONG|SHORT)/i);
+        const bias = biasMatch ? biasMatch[1].toUpperCase() : undefined;
+        
+        saveAnalysis(fullText, price, change, confidence, bias);
+      }
     } catch (error) {
       console.error("Analysis error:", error);
       toast.error("Failed to generate analysis. Please try again.");
@@ -160,7 +179,21 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       clearInterval(stepInterval);
       setIsAnalyzing(false);
     }
-  }, [crypto, price, change, high24h, low24h, volume, marketCap]);
+  }, [crypto, price, change, high24h, low24h, volume, marketCap, saveAnalysis]);
+
+  const handleSelectHistory = (record: AnalysisRecord) => {
+    setSelectedHistory(record);
+    setDisplayedText(record.analysis_text);
+    setFullAnalysis(record.analysis_text);
+    charIndexRef.current = record.analysis_text.length;
+    setHasAnalyzed(true);
+    setShowHistory(false);
+    toast.success(`Loaded analysis from ${format(new Date(record.created_at), "MMM d, h:mm a")}`);
+  };
+
+  const handleClearHistory = () => {
+    setSelectedHistory(null);
+  };
 
   const sentiment = change >= 0 ? "bullish" : "bearish";
 
@@ -203,16 +236,93 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               <span className="text-xs text-muted-foreground">95% Accuracy • ICT Signals</span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Zap className={cn(
-              "h-4 w-4",
-              isAnalyzing ? "text-warning animate-pulse" : hasAnalyzed ? "text-success" : "text-muted-foreground"
-            )} />
-            <span className="text-xs text-muted-foreground">
-              {isAnalyzing ? "Analyzing..." : hasAnalyzed ? "Done" : "Ready"}
-            </span>
+          <div className="flex items-center gap-3">
+            {/* History Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowHistory(!showHistory)}
+              className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+              disabled={history.length === 0 && !historyLoading}
+            >
+              <History className="h-4 w-4" />
+              <span className="text-xs hidden sm:inline">History</span>
+              {history.length > 0 && (
+                <span className="text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded-full">
+                  {history.length}
+                </span>
+              )}
+              <ChevronDown className={cn("h-3 w-3 transition-transform", showHistory && "rotate-180")} />
+            </Button>
+            
+            <div className="flex items-center gap-2">
+              <Zap className={cn(
+                "h-4 w-4",
+                isAnalyzing ? "text-warning animate-pulse" : hasAnalyzed ? "text-success" : "text-muted-foreground"
+              )} />
+              <span className="text-xs text-muted-foreground">
+                {isAnalyzing ? "Analyzing..." : hasAnalyzed ? "Done" : "Ready"}
+              </span>
+            </div>
           </div>
         </div>
+
+        {/* History Dropdown */}
+        {showHistory && (
+          <div className="mb-4 p-3 rounded-xl bg-secondary/50 border border-border/50 max-h-48 overflow-y-auto animate-fade-in">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-muted-foreground">Previous Analyses</span>
+              {selectedHistory && (
+                <Button variant="ghost" size="sm" onClick={handleClearHistory} className="h-6 text-xs">
+                  Clear Selection
+                </Button>
+              )}
+            </div>
+            {historyLoading ? (
+              <div className="text-center py-2 text-muted-foreground text-sm">Loading...</div>
+            ) : history.length === 0 ? (
+              <div className="text-center py-2 text-muted-foreground text-sm">No previous analyses</div>
+            ) : (
+              <div className="space-y-1">
+                {history.map((record) => (
+                  <button
+                    key={record.id}
+                    onClick={() => handleSelectHistory(record)}
+                    className={cn(
+                      "w-full text-left p-2 rounded-lg transition-colors hover:bg-background/50",
+                      selectedHistory?.id === record.id && "bg-primary/10 border border-primary/30"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-xs text-foreground">
+                          {format(new Date(record.created_at), "MMM d, h:mm a")}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          "text-xs px-1.5 py-0.5 rounded",
+                          record.change_24h >= 0 ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
+                        )}>
+                          {record.change_24h >= 0 ? "+" : ""}{record.change_24h.toFixed(2)}%
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          ${Number(record.price).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    {record.confidence && (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Confidence: {record.confidence}% {record.bias && `• ${record.bias}`}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Analyze Button */}
         <Button
@@ -245,10 +355,24 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
             </Button>
           )}
         <div ref={scrollContainerRef} className="min-h-[180px] max-h-[350px] overflow-y-auto p-4 rounded-xl bg-background/50 border border-border/50 scroll-smooth">
+          {/* Selected History Indicator */}
+          {selectedHistory && (
+            <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground bg-secondary/50 px-2 py-1 rounded-lg">
+              <Clock className="h-3 w-3" />
+              <span>Viewing analysis from {format(new Date(selectedHistory.created_at), "MMM d, h:mm a")}</span>
+              <span className="text-foreground">@ ${Number(selectedHistory.price).toLocaleString()}</span>
+            </div>
+          )}
+          
           {!hasAnalyzed && !isAnalyzing && !displayedText ? (
             <div className="flex flex-col items-center justify-center h-full text-center py-6">
               <Brain className="h-10 w-10 text-primary/40 mb-3" />
               <p className="text-muted-foreground text-sm">Click to run AI analysis</p>
+              {history.length > 0 && (
+                <p className="text-muted-foreground text-xs mt-1">
+                  or view {history.length} previous {history.length === 1 ? "analysis" : "analyses"}
+                </p>
+              )}
             </div>
           ) : isAnalyzing && !displayedText ? (
             <div className="space-y-2">
