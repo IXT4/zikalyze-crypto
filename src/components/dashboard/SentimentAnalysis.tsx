@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   TrendingUp, TrendingDown, MessageCircle, Users, 
-  Newspaper, RefreshCw, Twitter, AlertCircle, Flame
+  Newspaper, RefreshCw, Twitter, AlertCircle, Flame, ExternalLink
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -28,7 +28,7 @@ interface SentimentData {
     telegram: { mentions: number; sentiment: number; channelUsers?: number };
     overall: { score: number; label: string; change24h: number };
     trendingTopics: string[];
-    influencerMentions: Array<{ name: string; followers: string; sentiment: string }>;
+    influencerMentions: Array<{ name: string; followers: string; sentiment: string; handle?: string }>;
   };
   fearGreed: {
     value: number;
@@ -424,32 +424,54 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
           <TabsContent value="influencers" className="mt-4">
             <div className="space-y-3">
               {data.social.influencerMentions.map((influencer, i) => (
-                <div key={i} className="rounded-lg border border-border p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center">
-                      <span className="text-primary-foreground font-bold text-sm">
-                        {influencer.name.charAt(0)}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="font-medium text-sm">{influencer.name}</div>
-                      <div className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Users className="h-3 w-3" />
-                        {influencer.followers} followers
+                <a 
+                  key={i} 
+                  href={influencer.handle ? `https://x.com/${influencer.handle}` : undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`block rounded-lg border border-border p-3 transition-all ${
+                    influencer.handle 
+                      ? 'hover:bg-primary/10 hover:border-primary/50 cursor-pointer group' 
+                      : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center group-hover:from-[#1DA1F2] group-hover:to-[#1DA1F2]/50 transition-colors">
+                        <span className="text-primary-foreground font-bold text-sm">
+                          {influencer.name.charAt(0)}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="font-medium text-sm flex items-center gap-2">
+                          {influencer.name}
+                          {influencer.handle && (
+                            <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-2">
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            {influencer.followers} followers
+                          </span>
+                          {influencer.handle && (
+                            <span className="text-[#1DA1F2] group-hover:underline">@{influencer.handle}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    <Badge 
+                      variant="outline"
+                      className={`${
+                        influencer.sentiment.toLowerCase().includes('bullish') ? 'border-success text-success' :
+                        influencer.sentiment.toLowerCase().includes('bearish') || influencer.sentiment.toLowerCase().includes('cautious') ? 'border-destructive text-destructive' :
+                        'border-muted-foreground text-muted-foreground'
+                      }`}
+                    >
+                      {influencer.sentiment}
+                    </Badge>
                   </div>
-                  <Badge 
-                    variant="outline"
-                    className={`${
-                      influencer.sentiment.toLowerCase().includes('bullish') ? 'border-success text-success' :
-                      influencer.sentiment.toLowerCase().includes('bearish') || influencer.sentiment.toLowerCase().includes('cautious') ? 'border-destructive text-destructive' :
-                      'border-muted-foreground text-muted-foreground'
-                    }`}
-                  >
-                    {influencer.sentiment}
-                  </Badge>
-                </div>
+                </a>
               ))}
             </div>
           </TabsContent>

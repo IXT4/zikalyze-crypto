@@ -579,21 +579,26 @@ function generateRealNewsHeadlines(
   return headlines.slice(0, 8);
 }
 
-// Generate influencer mentions
+// Generate influencer mentions with real Twitter handles
 function generateInfluencerMentions(crypto: string, sentimentScore: number): Array<{
   name: string;
   followers: string;
   sentiment: string;
+  handle: string;
 }> {
   const influencers = [
-    { name: 'PlanB', followers: '1.9M' },
-    { name: 'Willy Woo', followers: '1.1M' },
-    { name: 'CryptoWhale', followers: '1.4M' },
-    { name: 'AltcoinDaily', followers: '1.2M' },
-    { name: 'The Moon', followers: '850K' },
-    { name: 'Coin Bureau', followers: '2.4M' },
-    { name: 'Lark Davis', followers: '520K' },
-    { name: 'BitBoy', followers: '1.5M' }
+    { name: 'PlanB', followers: '1.9M', handle: '100trillionUSD' },
+    { name: 'Willy Woo', followers: '1.1M', handle: 'woonomic' },
+    { name: 'CryptoWhale', followers: '1.4M', handle: 'CryptoWhale' },
+    { name: 'AltcoinDaily', followers: '1.2M', handle: 'AltcoinDailyio' },
+    { name: 'The Moon', followers: '850K', handle: 'TheMoonCarl' },
+    { name: 'Coin Bureau', followers: '2.4M', handle: 'coinaboreau' },
+    { name: 'Lark Davis', followers: '520K', handle: 'TheCryptoLark' },
+    { name: 'BitBoy', followers: '1.5M', handle: 'Bitboy_Crypto' },
+    { name: 'Raoul Pal', followers: '1.1M', handle: 'RaoulGMI' },
+    { name: 'Michael Saylor', followers: '3.5M', handle: 'saylor' },
+    { name: 'CryptoCred', followers: '280K', handle: 'CryptoCred' },
+    { name: 'Hsaka', followers: '450K', handle: 'HsakaTrades' }
   ];
 
   // Select 4-5 random influencers
@@ -604,6 +609,7 @@ function generateInfluencerMentions(crypto: string, sentimentScore: number): Arr
   return selected.map(inf => ({
     name: inf.name,
     followers: inf.followers,
+    handle: inf.handle,
     sentiment: sentimentScore >= 60 ? 'Bullish' : 
                sentimentScore >= 45 ? 'Neutral' : 
                sentimentScore >= 30 ? 'Cautious' : 'Bearish'
