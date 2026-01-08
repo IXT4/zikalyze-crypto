@@ -48,7 +48,7 @@ const Landing = () => {
         <img 
           src={zikalyzeLogo} 
           alt="Loading" 
-          className="h-12 w-12 animate-spin"
+          className="h-16 w-16"
         />
       </div>
     );
