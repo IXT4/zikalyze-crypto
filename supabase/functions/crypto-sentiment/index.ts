@@ -593,68 +593,71 @@ function generateRealNewsHeadlines(
 function generateInfluencerMentions(
   crypto: string, 
   sentimentScore: number, 
-  trendingTopics: string[] = []
+  trendingTopics: string[] = [],
+  priceChange24h: number = 0,
+  marketConditions?: { fearGreed: number; volume: string; priceNearATH: boolean }
 ): Array<{
   name: string;
   followers: string;
   sentiment: string;
   handle: string;
   relevance: string;
+  commentary: string;
 }> {
   // Crypto-specific influencers with their expertise areas
   const influencers = [
     // Bitcoin maximalists
-    { name: 'Michael Saylor', followers: '3.5M', handle: 'saylor', coins: ['BTC'], topics: ['Digital Gold', 'Store of Value', 'Treasury'] },
-    { name: 'PlanB', followers: '1.9M', handle: '100trillionUSD', coins: ['BTC'], topics: ['Stock-to-Flow', 'Halving', 'Price Prediction'] },
-    { name: 'Willy Woo', followers: '1.1M', handle: 'woonomic', coins: ['BTC'], topics: ['On-chain', 'Analytics', 'Bitcoin'] },
+    { name: 'Michael Saylor', followers: '3.5M', handle: 'saylor', coins: ['BTC'], topics: ['Digital Gold', 'Store of Value', 'Treasury'], style: 'institutional' },
+    { name: 'PlanB', followers: '1.9M', handle: '100trillionUSD', coins: ['BTC'], topics: ['Stock-to-Flow', 'Halving', 'Price Prediction'], style: 'quantitative' },
+    { name: 'Willy Woo', followers: '1.1M', handle: 'woonomic', coins: ['BTC'], topics: ['On-chain', 'Analytics', 'Bitcoin'], style: 'analytical' },
     
     // Ethereum & DeFi experts
-    { name: 'Vitalik Buterin', followers: '5.2M', handle: 'VitalikButerin', coins: ['ETH'], topics: ['Ethereum', 'Layer 2', 'DeFi', 'Staking'] },
-    { name: 'Anthony Sassano', followers: '280K', handle: 'sassal0x', coins: ['ETH'], topics: ['Ethereum', 'DeFi', 'Layer 2'] },
-    { name: 'Ryan Sean Adams', followers: '320K', handle: 'RyanSAdams', coins: ['ETH'], topics: ['DeFi', 'Ethereum', 'Bankless'] },
+    { name: 'Vitalik Buterin', followers: '5.2M', handle: 'VitalikButerin', coins: ['ETH'], topics: ['Ethereum', 'Layer 2', 'DeFi', 'Staking'], style: 'technical' },
+    { name: 'Anthony Sassano', followers: '280K', handle: 'sassal0x', coins: ['ETH'], topics: ['Ethereum', 'DeFi', 'Layer 2'], style: 'community' },
+    { name: 'Ryan Sean Adams', followers: '320K', handle: 'RyanSAdams', coins: ['ETH'], topics: ['DeFi', 'Ethereum', 'Bankless'], style: 'macro' },
     
     // Solana focused
-    { name: 'Anatoly Yakovenko', followers: '450K', handle: 'aaboronin', coins: ['SOL'], topics: ['Solana', 'Speed', 'DeFi'] },
-    { name: 'Mert', followers: '180K', handle: '0xMert_', coins: ['SOL'], topics: ['Solana', 'Development', 'NFTs'] },
+    { name: 'Anatoly Yakovenko', followers: '450K', handle: 'aaboronin', coins: ['SOL'], topics: ['Solana', 'Speed', 'DeFi'], style: 'technical' },
+    { name: 'Mert', followers: '180K', handle: '0xMert_', coins: ['SOL'], topics: ['Solana', 'Development', 'NFTs'], style: 'developer' },
     
     // XRP community
-    { name: 'Crypto Eri', followers: '120K', handle: 'sentosumosaba', coins: ['XRP'], topics: ['XRP', 'Ripple', 'SEC', 'Regulation'] },
-    { name: 'Digital Asset Investor', followers: '380K', handle: 'digitalassetbuy', coins: ['XRP'], topics: ['XRP', 'Ripple', 'CBDC'] },
+    { name: 'Crypto Eri', followers: '120K', handle: 'sentosumosaba', coins: ['XRP'], topics: ['XRP', 'Ripple', 'SEC', 'Regulation'], style: 'regulatory' },
+    { name: 'Digital Asset Investor', followers: '380K', handle: 'digitalassetbuy', coins: ['XRP'], topics: ['XRP', 'Ripple', 'CBDC'], style: 'institutional' },
     
     // Multi-coin analysts
-    { name: 'Coin Bureau', followers: '2.4M', handle: 'coinbureau', coins: ['BTC', 'ETH', 'SOL', 'ADA', 'DOT'], topics: ['Education', 'Analysis', 'News'] },
-    { name: 'Raoul Pal', followers: '1.1M', handle: 'RaoulGMI', coins: ['BTC', 'ETH', 'SOL'], topics: ['Macro', 'Institutions', 'Cycles'] },
-    { name: 'CryptoWhale', followers: '1.4M', handle: 'CryptoWhale', coins: ['BTC', 'ETH', 'SOL', 'DOGE'], topics: ['Whale Alert', 'Market Moves'] },
-    { name: 'AltcoinDaily', followers: '1.2M', handle: 'AltcoinDailyio', coins: ['BTC', 'ETH', 'SOL', 'ADA', 'AVAX'], topics: ['Altcoins', 'News', 'Analysis'] },
-    { name: 'Lark Davis', followers: '520K', handle: 'TheCryptoLark', coins: ['BTC', 'ETH', 'SOL', 'DOT'], topics: ['Altcoins', 'DeFi', 'NFTs'] },
-    { name: 'The Moon', followers: '850K', handle: 'TheMoonCarl', coins: ['BTC', 'ETH', 'DOGE'], topics: ['Trading', 'Price Action'] },
+    { name: 'Coin Bureau', followers: '2.4M', handle: 'coinbureau', coins: ['BTC', 'ETH', 'SOL', 'ADA', 'DOT'], topics: ['Education', 'Analysis', 'News'], style: 'educational' },
+    { name: 'Raoul Pal', followers: '1.1M', handle: 'RaoulGMI', coins: ['BTC', 'ETH', 'SOL'], topics: ['Macro', 'Institutions', 'Cycles'], style: 'macro' },
+    { name: 'CryptoWhale', followers: '1.4M', handle: 'CryptoWhale', coins: ['BTC', 'ETH', 'SOL', 'DOGE'], topics: ['Whale Alert', 'Market Moves'], style: 'contrarian' },
+    { name: 'AltcoinDaily', followers: '1.2M', handle: 'AltcoinDailyio', coins: ['BTC', 'ETH', 'SOL', 'ADA', 'AVAX'], topics: ['Altcoins', 'News', 'Analysis'], style: 'news' },
+    { name: 'Lark Davis', followers: '520K', handle: 'TheCryptoLark', coins: ['BTC', 'ETH', 'SOL', 'DOT'], topics: ['Altcoins', 'DeFi', 'NFTs'], style: 'educational' },
+    { name: 'The Moon', followers: '850K', handle: 'TheMoonCarl', coins: ['BTC', 'ETH', 'DOGE'], topics: ['Trading', 'Price Action'], style: 'trading' },
     
     // Trading focused
-    { name: 'CryptoCred', followers: '280K', handle: 'CryptoCred', coins: ['BTC', 'ETH'], topics: ['Technical Analysis', 'Trading'] },
-    { name: 'Hsaka', followers: '450K', handle: 'HsakaTrades', coins: ['BTC', 'ETH', 'SOL'], topics: ['Trading', 'Charts', 'Derivatives'] },
-    { name: 'Crypto Tony', followers: '320K', handle: 'CryptoTony__', coins: ['BTC', 'ETH', 'SOL'], topics: ['Trading', 'Leverage', 'Signals'] },
+    { name: 'CryptoCred', followers: '280K', handle: 'CryptoCred', coins: ['BTC', 'ETH'], topics: ['Technical Analysis', 'Trading'], style: 'trading' },
+    { name: 'Hsaka', followers: '450K', handle: 'HsakaTrades', coins: ['BTC', 'ETH', 'SOL'], topics: ['Trading', 'Charts', 'Derivatives'], style: 'trading' },
+    { name: 'Crypto Tony', followers: '320K', handle: 'CryptoTony__', coins: ['BTC', 'ETH', 'SOL'], topics: ['Trading', 'Leverage', 'Signals'], style: 'trading' },
     
     // Meme coins
-    { name: 'Elon Musk', followers: '180M', handle: 'elonmusk', coins: ['DOGE', 'BTC'], topics: ['Dogecoin', 'Meme', 'Community'] },
-    { name: 'Matt Wallace', followers: '750K', handle: 'MattWallace888', coins: ['DOGE'], topics: ['Dogecoin', 'Community', 'DOGE Army'] },
+    { name: 'Elon Musk', followers: '180M', handle: 'elonmusk', coins: ['DOGE', 'BTC'], topics: ['Dogecoin', 'Meme', 'Community'], style: 'meme' },
+    { name: 'Matt Wallace', followers: '750K', handle: 'MattWallace888', coins: ['DOGE'], topics: ['Dogecoin', 'Community', 'DOGE Army'], style: 'community' },
     
     // Cardano
-    { name: 'Charles Hoskinson', followers: '1.2M', handle: 'IOHK_Charles', coins: ['ADA'], topics: ['Cardano', 'Blockchain', 'Development'] },
+    { name: 'Charles Hoskinson', followers: '1.2M', handle: 'IOHK_Charles', coins: ['ADA'], topics: ['Cardano', 'Blockchain', 'Development'], style: 'technical' },
     
     // Polkadot
-    { name: 'Gavin Wood', followers: '320K', handle: 'gavofyork', coins: ['DOT'], topics: ['Polkadot', 'Web3', 'Parachains'] },
+    { name: 'Gavin Wood', followers: '320K', handle: 'gavofyork', coins: ['DOT'], topics: ['Polkadot', 'Web3', 'Parachains'], style: 'technical' },
     
     // Kaspa influencers
-    { name: 'Kaspa Official', followers: '95K', handle: 'KaspaCurrency', coins: ['KAS'], topics: ['Kaspa', 'PoW', 'BlockDAG', 'GHOSTDAG'] },
-    { name: 'Hashdag', followers: '28K', handle: 'Hashdag_', coins: ['KAS'], topics: ['Kaspa', 'Mining', 'BlockDAG'] },
-    { name: 'Kaspa King', followers: '35K', handle: 'KaspaKing_', coins: ['KAS'], topics: ['Kaspa', 'Community', 'KAS'] },
-    { name: 'Bubblegum Lightning', followers: '45K', handle: 'BGLightning', coins: ['KAS'], topics: ['Kaspa', 'PoW', 'Analysis'] },
-    { name: 'DaGhetto Tymoff', followers: '22K', handle: 'DaGhettoTymoff', coins: ['KAS'], topics: ['Kaspa', 'Mining', 'Hardware'] },
-    { name: 'Kaspa Community', followers: '18K', handle: 'KaspaCommunity', coins: ['KAS'], topics: ['Kaspa', 'Updates', 'Development'] },
+    { name: 'Kaspa Official', followers: '95K', handle: 'KaspaCurrency', coins: ['KAS'], topics: ['Kaspa', 'PoW', 'BlockDAG', 'GHOSTDAG'], style: 'official' },
+    { name: 'Hashdag', followers: '28K', handle: 'Hashdag_', coins: ['KAS'], topics: ['Kaspa', 'Mining', 'BlockDAG'], style: 'mining' },
+    { name: 'Kaspa King', followers: '35K', handle: 'KaspaKing_', coins: ['KAS'], topics: ['Kaspa', 'Community', 'KAS'], style: 'community' },
+    { name: 'Bubblegum Lightning', followers: '45K', handle: 'BGLightning', coins: ['KAS'], topics: ['Kaspa', 'PoW', 'Analysis'], style: 'analytical' },
+    { name: 'DaGhetto Tymoff', followers: '22K', handle: 'DaGhettoTymoff', coins: ['KAS'], topics: ['Kaspa', 'Mining', 'Hardware'], style: 'mining' },
+    { name: 'Kaspa Community', followers: '18K', handle: 'KaspaCommunity', coins: ['KAS'], topics: ['Kaspa', 'Updates', 'Development'], style: 'community' },
     
     // AI & Infrastructure
-    { name: 'Fetch.ai', followers: '480K', handle: 'Fetch_ai', coins: ['FET'], topics: ['AI', 'Agents', 'Machine Learning'] },
-    { name: 'Render Network', followers: '380K', handle: 'RenderToken', coins: ['RENDER'], topics: ['GPU', 'Rendering', 'AI'] },
+    { name: 'Fetch.ai', followers: '480K', handle: 'Fetch_ai', coins: ['FET'], topics: ['AI', 'Agents', 'Machine Learning'], style: 'official' },
+    { name: 'Render Network', followers: '380K', handle: 'RenderToken', coins: ['RENDER'], topics: ['GPU', 'Rendering', 'AI'], style: 'official' },
   ];
 
   // Score influencers by relevance
@@ -701,10 +704,12 @@ function generateInfluencerMentions(
     .sort(() => Math.random() - 0.3)
     .slice(0, 4 + Math.floor(Math.random() * 2));
 
-  // Generate varied sentiments based on score
-  const getSentiment = (baseScore: number, index: number) => {
+  // Generate varied sentiments based on score AND market conditions
+  const getSentiment = (baseScore: number, index: number, style: string) => {
     const variance = (index % 3) * 5 - 5; // -5, 0, or 5
-    const adjusted = baseScore + variance;
+    // Contrarian influencers tend to go against the crowd
+    const contrarianism = style === 'contrarian' ? -15 : 0;
+    const adjusted = baseScore + variance + contrarianism;
     if (adjusted >= 65) return 'Very Bullish';
     if (adjusted >= 55) return 'Bullish';
     if (adjusted >= 45) return 'Neutral';
@@ -712,13 +717,102 @@ function generateInfluencerMentions(
     return 'Bearish';
   };
 
-  return selected.map((inf, i) => ({
-    name: inf.name,
-    followers: inf.followers,
-    handle: inf.handle,
-    sentiment: getSentiment(sentimentScore, i),
-    relevance: inf.relevanceReason || 'Crypto analyst'
-  }));
+  // Generate dynamic, context-specific commentary based on market conditions
+  const generateCommentary = (inf: typeof selected[0], sentiment: string, index: number): string => {
+    const fg = marketConditions?.fearGreed ?? 50;
+    const vol = marketConditions?.volume ?? 'MODERATE';
+    const nearATH = marketConditions?.priceNearATH ?? false;
+    const isBullish = priceChange24h > 2;
+    const isBearish = priceChange24h < -2;
+    const isVolatile = Math.abs(priceChange24h) > 5;
+
+    // Style-specific commentary templates
+    const commentaryTemplates: Record<string, string[]> = {
+      institutional: isBullish 
+        ? [`Institutional accumulation continues`, `Smart money positioning for next leg up`, `Treasury-grade asset at current levels`]
+        : isBearish 
+        ? [`Institutions using this dip to accumulate`, `Long-term thesis unchanged`, `Volatility creates opportunity`]
+        : [`Watching for clear direction`, `Macro setup developing`, `Patience over FOMO`],
+      
+      quantitative: nearATH
+        ? [`Model targets within reach`, `On-chain metrics support continuation`, `S2F tracking expected path`]
+        : isBearish
+        ? [`Deviation from model, mean reversion expected`, `Accumulation zone per historical data`, `Cyclical correction, not trend change`]
+        : [`Consolidation phase, accumulate`, `Metrics neutral, watching volume`, `Model suggests patience`],
+      
+      analytical: isVolatile
+        ? [`High volatility, manage position size`, `Key levels being tested`, `Watch for confirmation candle`]
+        : isBullish
+        ? [`On-chain supports bullish thesis`, `Network activity increasing`, `Holder behavior constructive`]
+        : [`Data mixed, wait for clarity`, `Some distribution noted`, `Not chasing here`],
+      
+      technical: isBullish
+        ? [`Structure bullish, HTF intact`, `Looking for pullback entry`, `Momentum indicators supportive`]
+        : isBearish
+        ? [`Testing critical support`, `Bearish until structure reclaims`, `Watching for CHoCH`]
+        : [`Range-bound, trade the levels`, `Waiting for breakout direction`, `No clear edge currently`],
+      
+      trading: isVolatile
+        ? [`Elevated volatility, tighten stops`, `Scalping opportunities`, `Risk management critical`]
+        : isBullish
+        ? [`Long bias, trailing stops`, `Buying dips into support`, `Trend is your friend`]
+        : isBearish
+        ? [`Short bias, selling rallies`, `Lower highs pattern`, `Cash is a position`]
+        : [`Choppy conditions, reduced size`, `Waiting for clean setup`, `Overtrading kills accounts`],
+      
+      macro: fg >= 70
+        ? [`Euphoria creeping in, stay disciplined`, `Bull market, but manage risk`, `Don't ignore F&G at ${fg}`]
+        : fg <= 30
+        ? [`Fear = opportunity historically`, `Contrarian setup developing`, `F&G at ${fg}, accumulation zone`]
+        : [`Macro neutral, follow structure`, `Watching Fed and DXY`, `Crypto decorrelating from equities`],
+      
+      community: isBullish
+        ? [`Community sentiment strong`, `Engagement metrics up`, `Building through price action`]
+        : [`Community staying resilient`, `Long-term holders not selling`, `Diamond hands holding strong`],
+      
+      contrarian: isBullish
+        ? [`Getting cautious up here`, `Everyone bullish = time for caution`, `Taking some profits`]
+        : isBearish
+        ? [`Blood in streets, time to look`, `Panic selling = smart money buying`, `Contrarian long setup forming`]
+        : [`Against the crowd as always`, `Fading retail sentiment`, `Opposite of consensus`],
+      
+      educational: [`DYOR, not financial advice`, `Understanding the fundamentals`, `Focus on learning over trading`],
+      
+      news: isVolatile
+        ? [`Breaking: Major move underway`, `Market reacting to news`, `Stay tuned for updates`]
+        : [`Market consolidating`, `Watching for catalysts`, `News flow quiet today`],
+      
+      official: [`Development on track`, `Ecosystem growing`, `Community updates coming`],
+      
+      mining: vol === 'HIGH'
+        ? [`Hash rate strong`, `Miners holding`, `Network security robust`]
+        : [`Mining profitability stable`, `Block production normal`, `Infrastructure expanding`],
+      
+      meme: isBullish
+        ? [`To the moon 🚀`, `Much wow`, `Community vibes strong`]
+        : [`Hold the line`, `Dips are for buying`, `Diamond hands 💎🙌`],
+      
+      regulatory: [`Watching regulatory developments`, `Clarity improving`, `Compliance is key`],
+      
+      developer: [`Shipping code`, `Technical improvements live`, `Ecosystem expanding`]
+    };
+
+    const style = inf.style || 'analytical';
+    const templates = commentaryTemplates[style] || commentaryTemplates.analytical;
+    return templates[index % templates.length] || templates[0];
+  };
+
+  return selected.map((inf, i) => {
+    const sentiment = getSentiment(sentimentScore, i, inf.style || 'analytical');
+    return {
+      name: inf.name,
+      followers: inf.followers,
+      handle: inf.handle,
+      sentiment,
+      relevance: inf.relevanceReason || 'Crypto analyst',
+      commentary: generateCommentary(inf, sentiment, i)
+    };
+  });
 }
 
 serve(async (req) => {
@@ -782,8 +876,18 @@ serve(async (req) => {
       ? realNews 
       : generateRealNewsHeadlines(crypto, marketData, fearGreed);
 
-    // Generate influencer mentions based on crypto and trending topics
-    const influencerMentions = generateInfluencerMentions(crypto, socialData.overall.score, combinedTopics);
+    // Generate influencer mentions based on crypto, trending topics, and REAL market conditions
+    const influencerMentions = generateInfluencerMentions(
+      crypto, 
+      socialData.overall.score, 
+      combinedTopics,
+      marketData.priceChange24h,
+      {
+        fearGreed: fearGreed.value,
+        volume: marketData.volumeChange24h > 0 ? 'HIGH' : 'MODERATE',
+        priceNearATH: marketData.athChangePercent > -20
+      }
+    );
 
     const response = {
       crypto,

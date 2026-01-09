@@ -2545,7 +2545,7 @@ serve(async (req) => {
         telegram: { mentions: number; sentiment: number };
         overall: { score: number; label: string; change24h: number };
         trendingTopics: string[];
-        influencerMentions: { name: string; followers: string; sentiment: string }[];
+        influencerMentions: { name: string; followers: string; sentiment: string; commentary?: string }[];
       };
       summary: { overallSentiment: string; sentimentScore: number; totalMentions: number; marketMood: string };
     }
@@ -3299,7 +3299,23 @@ ${thoughts.map(t => `[Step ${t.step}] ${t.thought}
 
 🔍 DETECTED PATTERNS (${allPatterns.length}) — ${patternBias === 'BULLISH' ? '🟢 Bullish Bias' : patternBias === 'BEARISH' ? '🔴 Bearish Bias' : '⚪ Mixed'}
 ${allPatterns.slice(0, 10).map((p, i) => `${i + 1}. ${p}`).join('\n')}
-Pattern Confluence: ${allPatterns.length >= 8 ? 'EXCELLENT' : allPatterns.length >= 5 ? 'STRONG' : allPatterns.length >= 3 ? 'GOOD' : allPatterns.length >= 2 ? 'MODERATE' : 'DEVELOPING'} (${patternAlignment}% directional alignment) ${patternBias === finalBias || patternBias === 'NEUTRAL' || (patternBias === 'BULLISH' && finalBias === 'LONG') || (patternBias === 'BEARISH' && finalBias === 'SHORT') ? '✓ Aligned' : '⚠️ Divergent'}
+Pattern Confluence: ${allPatterns.length >= 8 ? 'EXCELLENT' : allPatterns.length >= 5 ? 'STRONG' : allPatterns.length >= 3 ? 'GOOD' : allPatterns.length >= 2 ? 'MODERATE' : 'DEVELOPING'} (${patternAlignment}% directional alignment)
+${(() => {
+  const patternsAligned = patternBias === 'NEUTRAL' || (patternBias === 'BULLISH' && finalBias === 'LONG') || (patternBias === 'BEARISH' && finalBias === 'SHORT');
+  if (patternsAligned) {
+    return `✓ ALIGNED — ${patternBias === 'NEUTRAL' ? 'Patterns balanced, final bias driven by probability matrix' : `${bullishPatternCount > bearishPatternCount ? bullishPatternCount : bearishPatternCount} ${patternBias.toLowerCase()} patterns vs ${bullishPatternCount > bearishPatternCount ? bearishPatternCount : bullishPatternCount} opposing confirm ${finalBias} bias`}`;
+  } else {
+    // Divergent - explain resolution
+    const dominantCount = Math.max(bullishPatternCount, bearishPatternCount);
+    const minorityCount = Math.min(bullishPatternCount, bearishPatternCount);
+    const dominantSide = bullishPatternCount > bearishPatternCount ? 'Bullish' : 'Bearish';
+    const minoritySide = bullishPatternCount > bearishPatternCount ? 'Bearish' : 'Bullish';
+    const biasOverrideReason = biasSource === 'probability_matrix' ? 'probability matrix weighting' : 
+                               biasSource === 'mtf_confluence' ? 'higher-timeframe trend dominance' :
+                               biasSource === 'scenario_learning' ? 'historical scenario matching' : 'chart trend priority';
+    return `⚠️ DIVERGENT — ${dominantCount} ${dominantSide} vs ${minorityCount} ${minoritySide} patterns, but ${finalBias} bias maintained via ${biasOverrideReason}. ${minoritySide} patterns (${minorityCount}) create headwinds; monitor for reversal signals.`;
+  }
+})()}
 
 📊 PROBABILITY MATRIX
 Bull Probability: ${probabilities.bullProb}% ${'█'.repeat(Math.round(probabilities.bullProb / 5))}${'░'.repeat(20 - Math.round(probabilities.bullProb / 5))}
@@ -3351,7 +3367,7 @@ Reddit: ${sentimentData.social.reddit.mentions.toLocaleString()} mentions (${sen
 Telegram: ${sentimentData.social.telegram.mentions.toLocaleString()} mentions (${sentimentData.social.telegram.sentiment}% sentiment)
 Total Mentions: ${sentimentData.summary.totalMentions.toLocaleString()} across platforms
 Trending Topics: ${sentimentData.social.trendingTopics.slice(0, 5).join(', ')}
-Influencer Consensus: ${sentimentData.social.influencerMentions.slice(0, 3).map(i => `${i.name}: ${i.sentiment}`).join(' | ')}
+Influencer Consensus: ${sentimentData.social.influencerMentions.slice(0, 3).map(i => `${i.name}: ${i.sentiment}${i.commentary ? ` — "${i.commentary}"` : ''}`).join(' | ')}
 Sentiment Bias: ${sentimentBias} ${sentimentBias === 'LONG' ? '🟢' : sentimentBias === 'SHORT' ? '🔴' : '⚪'}` : 'Sentiment data unavailable — using technical analysis only'}
 
 🌐 MARKET INTELLIGENCE
