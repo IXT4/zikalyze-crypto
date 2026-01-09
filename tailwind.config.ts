@@ -116,12 +116,21 @@ export default {
             transform: "scale(1)",
           },
         },
+        "spin-slow": {
+          from: {
+            transform: "rotate(0deg)",
+          },
+          to: {
+            transform: "rotate(360deg)",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "price-flash-up": "price-flash-up 0.6s ease-out",
         "price-flash-down": "price-flash-down 0.6s ease-out",
+        "spin-slow": "spin-slow 2.5s linear infinite",
       },
     },
   },
