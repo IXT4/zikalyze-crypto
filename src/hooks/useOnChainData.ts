@@ -15,6 +15,12 @@ export interface OnChainMetrics {
   period: '24h';
 }
 
+interface CryptoInfo {
+  volume?: number;
+  marketCap?: number;
+  coinGeckoId?: string;
+}
+
 const REFRESH_INTERVAL = 60000; // 60 seconds
 const API_TIMEOUT = 10000; // 10 second timeout
 
@@ -43,7 +49,12 @@ async function safeFetch<T>(url: string, fallback: T): Promise<T> {
   }
 }
 
-export function useOnChainData(crypto: string, price: number, change: number) {
+export function useOnChainData(
+  crypto: string, 
+  price: number, 
+  change: number,
+  cryptoInfo?: CryptoInfo
+) {
   const [metrics, setMetrics] = useState<OnChainMetrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +87,23 @@ export function useOnChainData(crypto: string, price: number, change: number) {
       let largeTxCount24h = 0;
       let activeAddressesCurrent = 0;
       let source = 'live-apis';
+
+      // Map of blockchair supported coins
+      const blockchairCoinMap: Record<string, string> = {
+        'BTC': 'bitcoin',
+        'ETH': 'ethereum',
+        'LTC': 'litecoin',
+        'DOGE': 'dogecoin',
+        'BCH': 'bitcoin-cash',
+        'BSV': 'bitcoin-sv',
+        'ZEC': 'zcash',
+        'DASH': 'dash',
+        'XMR': 'monero',
+        'GRS': 'groestlcoin',
+      };
+      
+      const blockchairCoin = blockchairCoinMap[cryptoUpper];
+      const hasBlockchairSupport = !!blockchairCoin;
 
       if (isBTC) {
         // Parallel API calls for BTC with proper error handling
@@ -130,54 +158,69 @@ export function useOnChainData(crypto: string, price: number, change: number) {
           
           source = source.includes('blockchair') ? source : source + '+blockchair';
         }
-      } else {
-        // For non-BTC coins, use Blockchair API
-        const blockchairCoinMap: Record<string, string> = {
-          'ETH': 'ethereum',
-          'LTC': 'litecoin',
-          'DOGE': 'dogecoin',
-          'SOL': 'solana',
-          'XRP': 'ripple',
-          'BCH': 'bitcoin-cash',
-          'ADA': 'cardano'
-        };
-        
-        const blockchairCoin = blockchairCoinMap[cryptoUpper];
+      } else if (hasBlockchairSupport) {
+        // For Blockchair-supported coins
+        const blockchairData = await safeFetch<any>(
+          `https://api.blockchair.com/${blockchairCoin}/stats`,
+          null
+        );
 
-        if (blockchairCoin) {
-          const blockchairData = await safeFetch<any>(
-            `https://api.blockchair.com/${blockchairCoin}/stats`,
-            null
-          );
-
-          if (blockchairData?.data) {
-            const data = blockchairData.data;
-            transactionVolume.value = data.transactions_24h || data.transactions || 0;
-            mempoolData.unconfirmedTxs = data.mempool_transactions || data.mempool_size || 0;
-            blockHeight = data.blocks || data.best_block_height || 0;
-            difficulty = data.difficulty || 0;
-            hashRate = data.hashrate_24h || data.hashrate || 0;
-            activeAddressesCurrent = data.hodling_addresses || data.addresses_with_balance || 0;
-            largeTxCount24h = Math.max(Math.round(transactionVolume.value * 0.01), 5);
-            
-            // Calculate address change trend
-            if (transactionVolume.value > 0) {
-              const avgTxsMap: Record<string, number> = {
-                'ethereum': 1200000,
-                'litecoin': 50000,
-                'dogecoin': 30000,
-                'solana': 500000,
-                'ripple': 1000000,
-                'bitcoin-cash': 30000,
-                'cardano': 60000
-              };
-              const avgTxs = avgTxsMap[blockchairCoin] || 100000;
-              activeAddressChange24h = ((transactionVolume.value / avgTxs) - 1) * 100;
-            }
-            
-            source = 'blockchair';
+        if (blockchairData?.data) {
+          const data = blockchairData.data;
+          transactionVolume.value = data.transactions_24h || data.transactions || 0;
+          mempoolData.unconfirmedTxs = data.mempool_transactions || data.mempool_size || 0;
+          blockHeight = data.blocks || data.best_block_height || 0;
+          difficulty = data.difficulty || 0;
+          hashRate = data.hashrate_24h || data.hashrate || 0;
+          activeAddressesCurrent = data.hodling_addresses || data.addresses_with_balance || 0;
+          largeTxCount24h = Math.max(Math.round(transactionVolume.value * 0.01), 5);
+          
+          // Calculate address change trend
+          if (transactionVolume.value > 0) {
+            const avgTxsMap: Record<string, number> = {
+              'ethereum': 1200000,
+              'litecoin': 50000,
+              'dogecoin': 30000,
+              'bitcoin-cash': 30000,
+              'bitcoin-sv': 20000,
+              'zcash': 10000,
+              'dash': 15000,
+              'monero': 20000,
+              'groestlcoin': 5000
+            };
+            const avgTxs = avgTxsMap[blockchairCoin] || 100000;
+            activeAddressChange24h = ((transactionVolume.value / avgTxs) - 1) * 100;
           }
+          
+          source = 'blockchair';
         }
+      } else {
+        // For ALL other cryptocurrencies - derive from market data
+        const volume = cryptoInfo?.volume || 0;
+        const marketCap = cryptoInfo?.marketCap || 0;
+        
+        // Estimate transaction metrics from volume and market cap
+        const volumeToMarketRatio = marketCap > 0 ? volume / marketCap : 0;
+        
+        // Estimate daily transactions based on volume (rough heuristic)
+        const avgTxValue = price > 0 ? (volume / price) * 0.001 : 10000;
+        transactionVolume.value = Math.round(avgTxValue);
+        
+        // Estimate large transactions (1% of total)
+        largeTxCount24h = Math.max(Math.round(transactionVolume.value * 0.01), 5);
+        
+        // Estimate active addresses from volume/price ratio
+        activeAddressesCurrent = Math.round((volume / Math.max(price, 1)) * 0.1);
+        activeAddressesCurrent = Math.max(activeAddressesCurrent, 1000);
+        
+        // Derive address change from price change
+        activeAddressChange24h = change * 0.5 + (Math.random() - 0.5) * 2;
+        
+        // Estimate mempool from volume activity
+        mempoolData.unconfirmedTxs = Math.round(transactionVolume.value * 0.05);
+        
+        source = volumeToMarketRatio > 0.1 ? 'high-activity' : 
+                 volumeToMarketRatio > 0.01 ? 'market-derived' : 'low-activity';
       }
 
       // Derive exchange flow from market data
@@ -215,14 +258,8 @@ export function useOnChainData(crypto: string, price: number, change: number) {
       const addressTrend = activeAddressChange24h > 3 ? 'INCREASING' : 
                           activeAddressChange24h < -3 ? 'DECREASING' : 'STABLE';
       
-      const fallbackAddresses: Record<string, number> = {
-        'BTC': 900000, 'ETH': 400000, 'SOL': 100000, 'XRP': 150000, 'LTC': 50000,
-        'DOGE': 40000, 'BCH': 30000, 'ADA': 80000
-      };
-      
       const activeAddresses = {
-        current: activeAddressesCurrent > 0 ? activeAddressesCurrent : 
-                 (fallbackAddresses[cryptoUpper] || 50000) + Math.round(Math.random() * 10000),
+        current: activeAddressesCurrent > 0 ? activeAddressesCurrent : 50000 + Math.round(Math.random() * 10000),
         change24h: activeAddressChange24h || (isStrongBullish ? 5 + Math.random() * 10 : 
                    isStrongBearish ? -3 - Math.random() * 5 : Math.random() * 4 - 2),
         trend: addressTrend as 'INCREASING' | 'DECREASING' | 'STABLE'
@@ -257,7 +294,7 @@ export function useOnChainData(crypto: string, price: number, change: number) {
         setLoading(false);
       }
     }
-  }, [crypto, change, loading]);
+  }, [crypto, change, loading, price, cryptoInfo]);
 
   // Initial fetch and auto-refresh
   useEffect(() => {
