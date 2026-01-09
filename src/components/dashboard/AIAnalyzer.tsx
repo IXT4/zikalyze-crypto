@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BellOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAnalysisHistory, AnalysisRecord } from "@/hooks/useAnalysisHistory";
 import { useLiveMarketData } from "@/hooks/useLiveMarketData";
 import { useAnalysisCache } from "@/hooks/useAnalysisCache";
+import { useOnChainData } from "@/hooks/useOnChainData";
 import { runClientSideAnalysis } from "@/lib/zikalyze-brain";
 import { format } from "date-fns";
 import { Progress } from "@/components/ui/progress";
@@ -53,6 +54,16 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   
   // Comprehensive live market data (prices, on-chain, sentiment)
   const liveData = useLiveMarketData(crypto, price, change, high24h, low24h, volume);
+  
+  // State to hide notifications during analysis
+  const [notificationsHidden, setNotificationsHidden] = useState(false);
+  
+  // Real-time on-chain data with whale tracking (alerts disabled when analyzing)
+  const { metrics: onChainMetrics, streamStatus } = useOnChainData(crypto, price, change, {
+    volume,
+    marketCap,
+    coinGeckoId: undefined
+  }, { disableAlerts: notificationsHidden });
   
   // Use live data when available
   const currentPrice = liveData.price;
@@ -132,6 +143,9 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     setFullAnalysis("");
     setProcessingStep(0);
     charIndexRef.current = 0;
+    
+    // Hide notifications during analysis
+    setNotificationsHidden(true);
 
     const stepInterval = setInterval(() => {
       setProcessingStep(prev => prev < processingSteps.length - 1 ? prev + 1 : prev);
@@ -145,8 +159,38 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       const analysisLow = currentLow;
       const analysisVolume = currentVolume;
 
-      // Adapt on-chain data format for client-side analysis
-      const adaptedOnChainData = liveData.onChain ? {
+      // Use real-time on-chain data from useOnChainData hook (more comprehensive)
+      const adaptedOnChainData = onChainMetrics ? {
+        exchangeNetFlow: onChainMetrics.exchangeNetFlow,
+        whaleActivity: {
+          buying: onChainMetrics.whaleActivity.buying,
+          selling: onChainMetrics.whaleActivity.selling,
+          netFlow: onChainMetrics.whaleActivity.netFlow,
+          largeTxCount24h: onChainMetrics.whaleActivity.largeTxCount24h,
+          recentLargeTx: onChainMetrics.whaleActivity.recentLargeTx
+        },
+        longTermHolders: { 
+          accumulating: onChainMetrics.activeAddresses.trend === 'INCREASING', 
+          change7d: onChainMetrics.activeAddresses.change24h * 7, 
+          sentiment: onChainMetrics.activeAddresses.trend === 'INCREASING' ? 'BULLISH' : 'NEUTRAL' 
+        },
+        shortTermHolders: { 
+          behavior: onChainMetrics.whaleActivity.netFlow.includes('BUYING') ? 'ACCUMULATING' : 
+                    onChainMetrics.whaleActivity.netFlow.includes('SELLING') ? 'DISTRIBUTING' : 'NEUTRAL', 
+          profitLoss: analysisChange * 0.5 
+        },
+        activeAddresses: onChainMetrics.activeAddresses,
+        transactionVolume: onChainMetrics.transactionVolume,
+        mempoolData: { 
+          unconfirmedTxs: onChainMetrics.mempoolData.unconfirmedTxs, 
+          mempoolSize: onChainMetrics.mempoolData.unconfirmedTxs * 250,
+          avgFeeRate: onChainMetrics.mempoolData.avgFeeRate 
+        },
+        hashRate: onChainMetrics.hashRate,
+        blockHeight: onChainMetrics.blockHeight,
+        difficulty: onChainMetrics.difficulty,
+        source: onChainMetrics.source
+      } : liveData.onChain ? {
         exchangeNetFlow: liveData.onChain.exchangeNetFlow,
         whaleActivity: liveData.onChain.whaleActivity,
         longTermHolders: { 
@@ -162,7 +206,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         transactionVolume: liveData.onChain.transactionVolume,
         mempoolData: { 
           unconfirmedTxs: liveData.onChain.mempoolData.unconfirmedTxs, 
-          mempoolSize: liveData.onChain.mempoolData.unconfirmedTxs * 250, // estimate size
+          mempoolSize: liveData.onChain.mempoolData.unconfirmedTxs * 250,
           avgFeeRate: liveData.onChain.mempoolData.avgFeeRate 
         },
         source: 'live-market-data'
@@ -225,8 +269,10 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     } finally {
       clearInterval(stepInterval);
       setIsAnalyzing(false);
+      // Re-enable notifications after analysis completes
+      setTimeout(() => setNotificationsHidden(false), 2000);
     }
-  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, liveData.onChain, liveData.sentiment, useCachedAnalysis, getCacheAge, cacheAnalysis, markFreshData]);
+  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, liveData.onChain, liveData.sentiment, useCachedAnalysis, getCacheAge, cacheAnalysis, markFreshData, onChainMetrics]);
 
   const handleSelectHistory = (record: AnalysisRecord) => {
     setSelectedHistory(record);
@@ -338,6 +384,19 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                 {hasCache && !isUsingCache && !isOffline && (
                   <div className="flex items-center gap-1 text-[9px] px-1 py-0.5 rounded bg-muted/50 text-muted-foreground" title={`Cached: ${getCacheAge()}`}>
                     <Database className="h-2.5 w-2.5" />
+                  </div>
+                )}
+                {/* On-Chain Data Status */}
+                {onChainMetrics && streamStatus === 'connected' && (
+                  <div className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-chart-cyan/20 text-chart-cyan font-medium" title="Live on-chain data connected">
+                    <Activity className="h-2.5 w-2.5" />
+                    <span>ON-CHAIN</span>
+                  </div>
+                )}
+                {/* Notifications Hidden Indicator */}
+                {notificationsHidden && (
+                  <div className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground animate-pulse" title="Notifications paused during analysis">
+                    <BellOff className="h-2.5 w-2.5" />
                   </div>
                 )}
               </div>
