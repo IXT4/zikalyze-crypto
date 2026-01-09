@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/dashboard/Sidebar";
-import { Search, User, Bell, BellRing, Trash2, Clock, CheckCircle, AlertCircle, Volume2, BellOff, Music } from "lucide-react";
+import { Search, User, Bell, BellRing, Trash2, Clock, CheckCircle, AlertCircle, Volume2, VolumeX, BellOff, Music } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -38,11 +38,15 @@ const Alerts = () => {
   const { t } = useTranslation();
 
   const handleVolumeChange = (value: number[]) => {
-    saveSettings({ soundVolume: value[0] });
+    saveSettings({ soundVolume: value[0], soundEnabled: value[0] > 0 });
   };
 
   const handleSoundTypeChange = (value: SoundType) => {
     saveSettings({ soundType: value });
+  };
+
+  const handleToggleMute = () => {
+    saveSettings({ soundEnabled: !settings.soundEnabled });
   };
 
   // Fetch triggered alerts history
@@ -103,6 +107,10 @@ const Alerts = () => {
   };
 
   const handleTestSound = () => {
+    if (!settings.soundEnabled) {
+      toast.warning(t("alerts.soundMuted") || "Sound is muted");
+      return;
+    }
     alertSound.playTestSound(settings.soundType);
     toast.info(t("alerts.testSound") + "...");
   };
@@ -229,20 +237,36 @@ const Alerts = () => {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Volume Slider */}
+              {/* Volume Slider with Mute Toggle */}
               <div className="flex items-center gap-2 bg-secondary/50 rounded-lg px-3 py-1.5">
-                <Volume2 className="h-4 w-4 text-muted-foreground" />
+                <button
+                  onClick={handleToggleMute}
+                  className="hover:text-foreground transition-colors"
+                  title={settings.soundEnabled ? "Mute" : "Unmute"}
+                >
+                  {settings.soundEnabled ? (
+                    <Volume2 className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <VolumeX className="h-4 w-4 text-destructive" />
+                  )}
+                </button>
                 <Slider
-                  value={[settings.soundVolume]}
+                  value={[settings.soundEnabled ? settings.soundVolume : 0]}
                   onValueChange={handleVolumeChange}
                   min={0}
                   max={1}
                   step={0.1}
                   className="w-24"
+                  disabled={!settings.soundEnabled}
                 />
-                <span className="text-xs text-muted-foreground w-8">{Math.round(settings.soundVolume * 100)}%</span>
+                <span className={cn(
+                  "text-xs w-8",
+                  settings.soundEnabled ? "text-muted-foreground" : "text-destructive"
+                )}>
+                  {settings.soundEnabled ? `${Math.round(settings.soundVolume * 100)}%` : "Off"}
+                </span>
               </div>
-              <Button variant="outline" size="sm" onClick={handleTestSound} className="gap-2">
+              <Button variant="outline" size="sm" onClick={handleTestSound} className="gap-2" disabled={!settings.soundEnabled}>
                 <Volume2 className="h-4 w-4" />
                 {t("alerts.testSound")}
               </Button>
