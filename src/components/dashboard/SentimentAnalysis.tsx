@@ -66,9 +66,6 @@ interface SentimentAnalysisProps {
   change: number;
 }
 
-// Hidden historical storage for AI learning (stores last 10 snapshots per crypto)
-const sentimentHistory: Record<string, SentimentData[]> = {};
-
 const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) => {
   const { t } = useTranslation();
   const [data, setData] = useState<SentimentData | null>(null);
@@ -77,41 +74,21 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [countdown, setCountdown] = useState(60);
 
-  const storeForLearning = (newData: SentimentData) => {
-    if (!sentimentHistory[crypto]) {
-      sentimentHistory[crypto] = [];
-    }
-    // Keep last 10 snapshots for learning patterns
-    sentimentHistory[crypto].unshift({
-      ...newData,
-      timestamp: new Date().toISOString()
-    });
-    if (sentimentHistory[crypto].length > 10) {
-      sentimentHistory[crypto].pop();
-    }
-    // Log for AI learning (hidden from UI)
-    console.log(`[AI Learning] Stored sentiment snapshot for ${crypto}. History: ${sentimentHistory[crypto].length} records`);
-  };
-
   const fetchSentiment = async (isAutoRefresh = false) => {
     if (!isAutoRefresh) setLoading(true);
     setError(null);
 
     try {
+      // Fetch only real-time 24h data - no snapshots
       const { data: response, error: fnError } = await supabase.functions.invoke('crypto-sentiment', {
         body: { 
           crypto, 
           price, 
-          change,
-          // Pass historical data for AI context
-          historicalSnapshots: sentimentHistory[crypto]?.slice(0, 5) || []
+          change
         }
       });
 
       if (fnError) throw fnError;
-      
-      // Store previous data for learning before updating
-      storeForLearning(response);
       
       setData(response);
       setLastUpdate(new Date());
