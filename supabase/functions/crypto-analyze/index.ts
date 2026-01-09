@@ -2347,23 +2347,59 @@ function calculateProbabilities(data: {
   else if (data.wyckoffPhase.phase === 'MARKUP') bullScore += 6;
   else if (data.wyckoffPhase.phase === 'MARKDOWN') bearScore += 6;
   
-  // ─── Learning Adjustment (weighted: 5%) ───
-  if (data.memory && data.memory.length >= 3) {
+  // ─── Learning Adjustment (weighted: 8% — increased for adaptive learning) ───
+  if (data.memory && data.memory.length >= 2) {
     const feedbackMemories = data.memory.filter(m => m.wasCorrect !== undefined);
-    if (feedbackMemories.length >= 3) {
-      const longFeedback = feedbackMemories.filter(m => m.bias === 'LONG');
-      const shortFeedback = feedbackMemories.filter(m => m.bias === 'SHORT');
+    if (feedbackMemories.length >= 2) {
+      // Time-weighted analysis of recent feedback
+      const recentFeedback = feedbackMemories.slice(0, 8); // Focus on most recent
       
-      const longAccuracy = longFeedback.length > 0 ? 
-        (longFeedback.filter(m => m.wasCorrect).length / longFeedback.length) : 0.5;
-      const shortAccuracy = shortFeedback.length > 0 ? 
-        (shortFeedback.filter(m => m.wasCorrect).length / shortFeedback.length) : 0.5;
+      const longFeedback = recentFeedback.filter(m => m.bias === 'LONG');
+      const shortFeedback = recentFeedback.filter(m => m.bias === 'SHORT');
       
-      // Boost probabilities based on historical accuracy
-      if (longAccuracy > 0.7) bullScore += 5;
-      if (shortAccuracy > 0.7) bearScore += 5;
-      if (longAccuracy < 0.3) bullScore -= 5;
-      if (shortAccuracy < 0.3) bearScore -= 5;
+      // Calculate weighted accuracy (recent feedback counts more)
+      const calcWeightedAccuracy = (records: typeof feedbackMemories) => {
+        if (records.length === 0) return 0.5;
+        let weightedCorrect = 0;
+        let totalWeight = 0;
+        records.forEach((m, i) => {
+          const weight = Math.exp(-i * 0.2); // Recent feedback weighted higher
+          totalWeight += weight;
+          if (m.wasCorrect) weightedCorrect += weight;
+        });
+        return totalWeight > 0 ? weightedCorrect / totalWeight : 0.5;
+      };
+      
+      const longAccuracy = calcWeightedAccuracy(longFeedback);
+      const shortAccuracy = calcWeightedAccuracy(shortFeedback);
+      
+      // Stronger adjustments based on weighted historical accuracy
+      if (longAccuracy > 0.75) bullScore += 8;
+      else if (longAccuracy > 0.6) bullScore += 4;
+      else if (longAccuracy < 0.25) bullScore -= 10;
+      else if (longAccuracy < 0.4) bullScore -= 5;
+      
+      if (shortAccuracy > 0.75) bearScore += 8;
+      else if (shortAccuracy > 0.6) bearScore += 4;
+      else if (shortAccuracy < 0.25) bearScore -= 10;
+      else if (shortAccuracy < 0.4) bearScore -= 5;
+      
+      // Check for recent streak (3+ consecutive correct/incorrect)
+      const recentStreak = recentFeedback.slice(0, 4);
+      const allCorrect = recentStreak.every(m => m.wasCorrect);
+      const allIncorrect = recentStreak.every(m => !m.wasCorrect);
+      
+      if (allCorrect && recentStreak.length >= 3) {
+        // Boost confidence in current direction
+        const streakBias = recentStreak[0].bias;
+        if (streakBias === 'LONG') bullScore += 6;
+        else if (streakBias === 'SHORT') bearScore += 6;
+      } else if (allIncorrect && recentStreak.length >= 3) {
+        // Counter-trade the losing streak
+        const streakBias = recentStreak[0].bias;
+        if (streakBias === 'LONG') { bullScore -= 8; bearScore += 4; }
+        else if (streakBias === 'SHORT') { bearScore -= 8; bullScore += 4; }
+      }
     }
   }
   
@@ -2611,16 +2647,115 @@ serve(async (req) => {
           
           const feedbackRecords = historyData.filter(h => h.was_correct !== null);
           totalFeedback = feedbackRecords.length;
-          correctPredictions = feedbackRecords.filter(h => h.was_correct === true).length;
           
-          if (totalFeedback >= 3) {
-            learningAccuracy = Math.round((correctPredictions / totalFeedback) * 100);
-            console.log(`📊 Learning Stats: ${correctPredictions}/${totalFeedback} correct (${learningAccuracy}%)`);
+          // Calculate time-weighted accuracy (recent feedback weighted more heavily)
+          if (totalFeedback >= 1) {
+            let weightedCorrect = 0;
+            let totalWeight = 0;
+            const now = Date.now();
+            
+            feedbackRecords.forEach((record, index) => {
+              const recordTime = new Date(record.feedback_at || record.created_at).getTime();
+              const hoursAgo = (now - recordTime) / (1000 * 60 * 60);
+              // Exponential decay: recent feedback has more weight
+              // Within 24h: weight 1.0, 48h: 0.7, 72h: 0.5, 1 week: 0.25
+              const timeWeight = Math.exp(-hoursAgo / 72);
+              // Also weight by recency in list (index 0 = most recent)
+              const recencyWeight = Math.exp(-index * 0.15);
+              const weight = timeWeight * recencyWeight;
+              
+              totalWeight += weight;
+              if (record.was_correct === true) {
+                weightedCorrect += weight;
+              }
+            });
+            
+            correctPredictions = feedbackRecords.filter(h => h.was_correct === true).length;
+            
+            // Weighted accuracy (favors recent results)
+            if (totalWeight > 0) {
+              learningAccuracy = Math.round((weightedCorrect / totalWeight) * 100);
+            } else {
+              learningAccuracy = Math.round((correctPredictions / totalFeedback) * 100);
+            }
+            
+            console.log(`📊 Learning Stats: ${correctPredictions}/${totalFeedback} correct (${learningAccuracy}% weighted)`);
           }
         }
       }
     } catch (e) {
       console.log("Memory fetch skipped:", e);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 🧠 LEARN FROM BAD FEEDBACK — ADAPTIVE CORRECTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    interface LearningCorrection {
+      adjustBullScore: number;
+      adjustBearScore: number;
+      insights: string[];
+      avoidPatterns: string[];
+    }
+    
+    const learningCorrections: LearningCorrection = {
+      adjustBullScore: 0,
+      adjustBearScore: 0,
+      insights: [],
+      avoidPatterns: []
+    };
+    
+    // Analyze recent incorrect predictions to learn what to avoid
+    const recentFeedback = memory.slice(0, 10).filter(m => m.wasCorrect !== undefined);
+    const recentIncorrect = recentFeedback.filter(m => m.wasCorrect === false);
+    const recentCorrect = recentFeedback.filter(m => m.wasCorrect === true);
+    
+    if (recentIncorrect.length > 0) {
+      // Count bias mistakes in recent history
+      const incorrectLongs = recentIncorrect.filter(m => m.bias === 'LONG').length;
+      const incorrectShorts = recentIncorrect.filter(m => m.bias === 'SHORT').length;
+      
+      // Apply corrections based on what we got wrong
+      if (incorrectLongs > incorrectShorts && incorrectLongs >= 2) {
+        learningCorrections.adjustBullScore = -8 * incorrectLongs;
+        learningCorrections.insights.push(`📉 Recent LONG calls underperformed — reducing bullish bias by ${Math.abs(learningCorrections.adjustBullScore)} points`);
+      }
+      if (incorrectShorts > incorrectLongs && incorrectShorts >= 2) {
+        learningCorrections.adjustBearScore = -8 * incorrectShorts;
+        learningCorrections.insights.push(`📈 Recent SHORT calls underperformed — reducing bearish bias by ${Math.abs(learningCorrections.adjustBearScore)} points`);
+      }
+      
+      // Check if we're wrong in specific market conditions
+      const incorrectAtPremium = recentIncorrect.filter(m => {
+        const rangePos = m.change > 0 ? 60 : 40;
+        return rangePos > 60;
+      }).length;
+      
+      const incorrectAtDiscount = recentIncorrect.filter(m => {
+        const rangePos = m.change > 0 ? 60 : 40;
+        return rangePos < 40;
+      }).length;
+      
+      if (incorrectAtPremium >= 2) {
+        learningCorrections.insights.push('⚠️ Struggled at premium zones — adding caution at highs');
+      }
+      if (incorrectAtDiscount >= 2) {
+        learningCorrections.insights.push('⚠️ Struggled at discount zones — reconsidering lows');
+      }
+    }
+    
+    // Boost confidence when recent predictions are correct
+    if (recentCorrect.length >= 3 && recentIncorrect.length <= 1) {
+      const correctLongs = recentCorrect.filter(m => m.bias === 'LONG').length;
+      const correctShorts = recentCorrect.filter(m => m.bias === 'SHORT').length;
+      
+      if (correctLongs > correctShorts) {
+        learningCorrections.adjustBullScore = 5;
+        learningCorrections.insights.push('✓ LONG calls performing well — maintaining bullish edge');
+      } else if (correctShorts > correctLongs) {
+        learningCorrections.adjustBearScore = 5;
+        learningCorrections.insights.push('✓ SHORT calls performing well — maintaining bearish edge');
+      }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -2678,8 +2813,8 @@ serve(async (req) => {
       memory
     });
     
-    // Probability Calculation
-    const probabilities = calculateProbabilities({
+    // Probability Calculation (with learning corrections applied)
+    const baseProbabilities = calculateProbabilities({
       change: validatedChange,
       rangePercent,
       rsi: rsiEstimate,
@@ -2690,6 +2825,18 @@ serve(async (req) => {
       wyckoffPhase,
       memory
     });
+    
+    // Apply learning corrections from bad feedback analysis
+    const correctedBullProb = Math.max(10, Math.min(90, baseProbabilities.bullProb + learningCorrections.adjustBullScore));
+    const correctedBearProb = Math.max(10, Math.min(90, baseProbabilities.bearProb + learningCorrections.adjustBearScore));
+    const correctedTotal = correctedBullProb + correctedBearProb;
+    
+    const probabilities = {
+      bullProb: Math.round((correctedBullProb / correctedTotal) * 100),
+      bearProb: Math.round((correctedBearProb / correctedTotal) * 100),
+      neutralProb: baseProbabilities.neutralProb,
+      confidence: baseProbabilities.confidence
+    };
     
     // ═══════════════════════════════════════════════════════════════════════════
     // 🧬 ADAPTIVE LEARNING ENGINE + PREDICTIVE MEMORY
@@ -2737,6 +2884,9 @@ serve(async (req) => {
     // Add adaptive adjustments and chart lessons
     learningInsights.push(...adaptiveLearning.adaptiveAdjustments.slice(0, 2));
     learningInsights.push(...chartLessons.slice(0, 2));
+    
+    // Add learning corrections from bad feedback analysis
+    learningInsights.push(...learningCorrections.insights);
     
     // ═══════════════════════════════════════════════════════════════════════════
     // 📐 SMART MONEY LEVELS CALCULATION
