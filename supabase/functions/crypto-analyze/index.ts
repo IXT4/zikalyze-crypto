@@ -572,6 +572,97 @@ function getUpcomingMacroCatalysts(): MacroCatalyst[] {
   }).slice(0, 3);
 }
 
+// Volume spike detection interface
+interface VolumeSpikeAlert {
+  isSpike: boolean;
+  magnitude: 'EXTREME' | 'HIGH' | 'MODERATE' | 'NORMAL';
+  percentageAboveAvg: number;
+  signal: 'BULLISH_BREAKOUT' | 'BEARISH_BREAKDOWN' | 'ACCUMULATION' | 'DISTRIBUTION' | 'NEUTRAL';
+  description: string;
+}
+
+// Detect volume spikes for entry signals
+function detectVolumeSpike(volumeData: {
+  currentVolume: number;
+  avgVolume24h: number;
+  priceChange: number;
+  price: number;
+  high24h: number;
+  low24h: number;
+}): VolumeSpikeAlert {
+  const { currentVolume, avgVolume24h, priceChange, price, high24h, low24h } = volumeData;
+  
+  // Calculate volume ratio
+  const volumeRatio = avgVolume24h > 0 ? (currentVolume / avgVolume24h) * 100 : 100;
+  const percentageAboveAvg = volumeRatio - 100;
+  
+  // Determine magnitude
+  let magnitude: VolumeSpikeAlert['magnitude'] = 'NORMAL';
+  let isSpike = false;
+  
+  if (percentageAboveAvg >= 200) {
+    magnitude = 'EXTREME';
+    isSpike = true;
+  } else if (percentageAboveAvg >= 100) {
+    magnitude = 'HIGH';
+    isSpike = true;
+  } else if (percentageAboveAvg >= 50) {
+    magnitude = 'MODERATE';
+    isSpike = true;
+  }
+  
+  // Determine signal context based on price action + volume
+  let signal: VolumeSpikeAlert['signal'] = 'NEUTRAL';
+  let description = '';
+  
+  const range = high24h - low24h;
+  const pricePosition = range > 0 ? ((price - low24h) / range) * 100 : 50;
+  
+  if (isSpike) {
+    if (priceChange > 3 && pricePosition > 70) {
+      // Price surging with volume = breakout
+      signal = 'BULLISH_BREAKOUT';
+      description = `🚀 VOLUME SURGE +${percentageAboveAvg.toFixed(0)}% — Bullish breakout momentum with price near highs`;
+    } else if (priceChange < -3 && pricePosition < 30) {
+      // Price dropping with volume = breakdown
+      signal = 'BEARISH_BREAKDOWN';
+      description = `📉 VOLUME SURGE +${percentageAboveAvg.toFixed(0)}% — Bearish breakdown with price near lows`;
+    } else if (priceChange > 0 && pricePosition < 50) {
+      // Rising from lows with volume = accumulation
+      signal = 'ACCUMULATION';
+      description = `💎 VOLUME SPIKE +${percentageAboveAvg.toFixed(0)}% — Accumulation detected at lower levels`;
+    } else if (priceChange < 0 && pricePosition > 50) {
+      // Dropping from highs with volume = distribution
+      signal = 'DISTRIBUTION';
+      description = `⚠️ VOLUME SPIKE +${percentageAboveAvg.toFixed(0)}% — Distribution detected at higher levels`;
+    } else {
+      description = `📊 VOLUME SPIKE +${percentageAboveAvg.toFixed(0)}% — Unusual activity, watch for directional move`;
+    }
+  } else {
+    description = 'Normal volume conditions';
+  }
+  
+  return {
+    isSpike,
+    magnitude,
+    percentageAboveAvg: Math.max(0, percentageAboveAvg),
+    signal,
+    description
+  };
+}
+
+// Get volume spike macro flag for entries
+function getVolumeSpikeFlag(volumeSpike: VolumeSpikeAlert): string {
+  if (!volumeSpike.isSpike) return '';
+  
+  const emoji = volumeSpike.signal === 'BULLISH_BREAKOUT' ? '🟢' : 
+                volumeSpike.signal === 'BEARISH_BREAKDOWN' ? '🔴' :
+                volumeSpike.signal === 'ACCUMULATION' ? '💎' :
+                volumeSpike.signal === 'DISTRIBUTION' ? '⚠️' : '📊';
+  
+  return `${emoji} VOLUME ALERT: ${volumeSpike.description}`;
+}
+
 // Get quick macro flag for output with accurate day counting
 function getQuickMacroFlag(): string {
   const catalysts = getUpcomingMacroCatalysts();
@@ -4979,11 +5070,43 @@ serve(async (req) => {
     // Get macro flag for output
     const macroFlag = getQuickMacroFlag();
     
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 📊 REAL-TIME VOLUME SPIKE DETECTION FOR ENTRIES
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    // Get average volume from 15M timeframe analysis or estimate
+    const currentVol = validatedVolume || 0;
+    const avgVolume = mtfAnalysis.tf15M?.volumeProfile?.averageVolume || (currentVol * 0.85);
+    const currentVolVsAvg = mtfAnalysis.tf15M?.volumeProfile?.currentVsAvg || 100;
+    
+    // Detect volume spike using current conditions
+    const volumeSpike = detectVolumeSpike({
+      currentVolume: currentVol,
+      avgVolume24h: avgVolume,
+      priceChange: validatedChange,
+      price: priceNum,
+      high24h: highNum,
+      low24h: lowNum
+    });
+    
+    // Get volume spike flag
+    const volumeSpikeFlag = getVolumeSpikeFlag(volumeSpike);
+    
+    // Add volume spike to insights if significant
+    if (volumeSpike.isSpike) {
+      allInsights.unshift(`📊 ${volumeSpike.description}`);
+      console.log(`📊 Volume Spike Detected: ${volumeSpike.magnitude} (+${volumeSpike.percentageAboveAvg.toFixed(0)}%) — ${volumeSpike.signal}`);
+    }
+    
+    // Build combined alerts section
+    const alertsSection = [macroFlag, volumeSpikeFlag].filter(Boolean).join('\n');
+    
     const analysis = `📊 ${sanitizedCrypto} ${t.quickAnalysis}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 💰 ${t.price}: $${priceNum.toLocaleString()} ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
 📈 ${t.range24h}: $${lowNum.toLocaleString()} - $${highNum.toLocaleString()}
+${volumeSpike.isSpike ? `📊 Volume: ${volumeSpike.magnitude} SPIKE (+${volumeSpike.percentageAboveAvg.toFixed(0)}% vs avg)` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -5000,8 +5123,8 @@ serve(async (req) => {
 📊 MTF Alignment: ${mtfAnalysis.confluence.alignment}% ${mtfAnalysis.confluence.alignment >= 80 ? '✓ STRONG' : mtfAnalysis.confluence.alignment >= 60 ? '◐ MODERATE' : '⚠️ WEAK'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${macroFlag ? `
-${macroFlag}
+${alertsSection ? `
+${alertsSection}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ` : ''}
