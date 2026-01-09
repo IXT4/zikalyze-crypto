@@ -400,6 +400,9 @@ const Settings = () => {
                           <option value="Chinese">Chinese</option>
                           <option value="Japanese">Japanese (日本語)</option>
                           <option value="Pidgin">Pidgin</option>
+                          <option value="Arabic">العربية (Arabic)</option>
+                          <option value="Hindi">हिन्दी (Hindi)</option>
+                          <option value="Russian">Русский (Russian)</option>
                         </select>
                       </div>
 
