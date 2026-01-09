@@ -105,8 +105,36 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
     setAlertDialogOpen(true);
   };
 
+  const getAlertValidation = () => {
+    if (!selectedCryptoForAlert || !targetPrice) return { valid: false, error: "" };
+    
+    const target = parseFloat(targetPrice);
+    const current = selectedCryptoForAlert.current_price;
+    
+    if (isNaN(target) || target <= 0) {
+      return { valid: false, error: "Enter a valid price" };
+    }
+    
+    const percentDiff = Math.abs((target - current) / current) * 100;
+    
+    if (percentDiff < 1) {
+      return { valid: false, error: "Target must be at least 1% from current price" };
+    }
+    
+    if (alertCondition === "above" && target <= current) {
+      return { valid: false, error: "Target must be above current price" };
+    }
+    
+    if (alertCondition === "below" && target >= current) {
+      return { valid: false, error: "Target must be below current price" };
+    }
+    
+    return { valid: true, error: "" };
+  };
+
   const handleCreateAlert = async () => {
-    if (!selectedCryptoForAlert || !targetPrice) return;
+    const validation = getAlertValidation();
+    if (!validation.valid || !selectedCryptoForAlert) return;
 
     const success = await createAlert(
       selectedCryptoForAlert.symbol,
@@ -403,11 +431,18 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                 onChange={(e) => setTargetPrice(e.target.value)}
                 placeholder="Enter target price"
                 step="any"
-                className="h-12 text-lg font-semibold"
+                className={`h-12 text-lg font-semibold ${!getAlertValidation().valid && targetPrice ? "border-destructive" : ""}`}
               />
+              {!getAlertValidation().valid && targetPrice && (
+                <p className="text-xs text-destructive">{getAlertValidation().error}</p>
+              )}
             </div>
 
-            <Button onClick={handleCreateAlert} className="w-full">
+            <Button 
+              onClick={handleCreateAlert} 
+              className="w-full"
+              disabled={!getAlertValidation().valid}
+            >
               <Bell className="w-4 h-4 mr-2" />
               Create Alert
             </Button>
