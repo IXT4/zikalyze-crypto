@@ -1,15 +1,16 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/dashboard/Sidebar";
-import { Search, User, Bell, BellRing, Trash2, Clock, CheckCircle, AlertCircle, Volume2, BellOff } from "lucide-react";
+import { Search, User, Bell, BellRing, Trash2, Clock, CheckCircle, AlertCircle, Volume2, BellOff, Music } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useCurrency } from "@/hooks/useCurrency";
-import { useSettings } from "@/hooks/useSettings";
+import { useSettings, SoundType } from "@/hooks/useSettings";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { alertSound } from "@/lib/alertSound";
@@ -38,6 +39,10 @@ const Alerts = () => {
 
   const handleVolumeChange = (value: number[]) => {
     saveSettings({ soundVolume: value[0] });
+  };
+
+  const handleSoundTypeChange = (value: SoundType) => {
+    saveSettings({ soundType: value });
   };
 
   // Fetch triggered alerts history
@@ -98,7 +103,7 @@ const Alerts = () => {
   };
 
   const handleTestSound = () => {
-    alertSound.playAlertSound();
+    alertSound.playTestSound(settings.soundType);
     toast.info(t("alerts.testSound") + "...");
   };
 
@@ -210,6 +215,20 @@ const Alerts = () => {
               </button>
             </div>
             <div className="flex items-center gap-4">
+              {/* Sound Type Selector */}
+              <div className="flex items-center gap-2 bg-secondary/50 rounded-lg px-3 py-1.5">
+                <Music className="h-4 w-4 text-muted-foreground" />
+                <Select value={settings.soundType} onValueChange={handleSoundTypeChange}>
+                  <SelectTrigger className="w-24 h-7 text-xs border-0 bg-transparent">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="chime">Chime</SelectItem>
+                    <SelectItem value="beep">Beep</SelectItem>
+                    <SelectItem value="bell">Bell</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               {/* Volume Slider */}
               <div className="flex items-center gap-2 bg-secondary/50 rounded-lg px-3 py-1.5">
                 <Volume2 className="h-4 w-4 text-muted-foreground" />

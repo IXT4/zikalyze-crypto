@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 
+export type SoundType = "chime" | "beep" | "bell";
+
 export interface AppSettings {
   soundEnabled: boolean;
   soundVolume: number;
+  soundType: SoundType;
   notifications: boolean;
   emailAlerts: boolean;
   priceAlerts: boolean;
@@ -14,6 +17,7 @@ export interface AppSettings {
 const DEFAULT_SETTINGS: AppSettings = {
   soundEnabled: true,
   soundVolume: 0.7,
+  soundType: "chime",
   notifications: true,
   emailAlerts: true,
   priceAlerts: true,
@@ -103,4 +107,20 @@ export const getSoundVolume = (): number => {
     console.error("Error reading volume setting:", error);
   }
   return 0.7; // Default volume
+};
+
+// Standalone function to get sound type (for use outside React components)
+export const getSoundType = (): SoundType => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed.soundType === "chime" || parsed.soundType === "beep" || parsed.soundType === "bell") {
+        return parsed.soundType;
+      }
+    }
+  } catch (error) {
+    console.error("Error reading sound type setting:", error);
+  }
+  return "chime"; // Default sound type
 };
