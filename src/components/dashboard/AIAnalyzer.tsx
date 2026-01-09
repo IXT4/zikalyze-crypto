@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, Radio, Wifi } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAnalysisHistory, AnalysisRecord } from "@/hooks/useAnalysisHistory";
+import { useBinanceLivePrice } from "@/hooks/useBinanceLivePrice";
 import { format } from "date-fns";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -47,6 +48,16 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const animationFrameRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Binance live price feed
+  const livePrice = useBinanceLivePrice(crypto, price);
+  
+  // Use live data when available, fallback to props
+  const currentPrice = livePrice.isLive ? livePrice.price : price;
+  const currentChange = livePrice.isLive ? livePrice.change24h : change;
+  const currentHigh = livePrice.isLive ? livePrice.high24h : high24h;
+  const currentLow = livePrice.isLive ? livePrice.low24h : low24h;
+  const currentVolume = livePrice.isLive ? livePrice.volume : volume;
   
   const { history, learningStats, loading: historyLoading, saveAnalysis, submitFeedback, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
   const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
@@ -113,13 +124,30 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     }, 600);
 
     try {
+      // Use live Binance data when available
+      const analysisPrice = currentPrice;
+      const analysisChange = currentChange;
+      const analysisHigh = currentHigh;
+      const analysisLow = currentLow;
+      const analysisVolume = currentVolume;
+      
       const response = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ crypto, price, change, high24h, low24h, volume, marketCap, language: currentLanguage }),
+        body: JSON.stringify({ 
+          crypto, 
+          price: analysisPrice, 
+          change: analysisChange, 
+          high24h: analysisHigh, 
+          low24h: analysisLow, 
+          volume: analysisVolume, 
+          marketCap, 
+          language: currentLanguage,
+          dataSource: livePrice.isLive ? 'binance-live' : 'coingecko'
+        }),
       });
 
       if (!response.ok) {
@@ -214,7 +242,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       clearInterval(stepInterval);
       setIsAnalyzing(false);
     }
-  }, [crypto, price, change, high24h, low24h, volume, marketCap, currentLanguage, saveAnalysis, t]);
+  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, t, livePrice.isLive]);
 
   const handleSelectHistory = (record: AnalysisRecord) => {
     setSelectedHistory(record);
@@ -248,7 +276,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     }
   };
 
-  const sentiment = change >= 0 ? "bullish" : "bearish";
+  const sentiment = currentChange >= 0 ? "bullish" : "bearish";
 
   const handleCopy = async () => {
     if (!fullAnalysis) return;
@@ -291,11 +319,33 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">v9.0</span>
+                {/* Live Price Indicator */}
+                <div className={cn(
+                  "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium",
+                  livePrice.isLive 
+                    ? "bg-success/20 text-success" 
+                    : "bg-muted text-muted-foreground"
+                )}>
+                  {livePrice.isLive ? (
+                    <>
+                      <Radio className="h-3 w-3 animate-pulse" />
+                      <span>LIVE</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wifi className="h-3 w-3" />
+                      <span>{livePrice.source === 'reconnecting' ? 'RECONNECTING' : 'CONNECTING'}</span>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">{displayedAccuracy.toFixed(0)}% Accuracy</span>
                 {learningStats && learningStats.total_feedback > 0 && (
                   <span className="text-xs text-primary/70">• {learningStats.total_feedback} feedback</span>
+                )}
+                {livePrice.isLive && (
+                  <span className="text-xs text-success/70">• Binance WebSocket</span>
                 )}
               </div>
             </div>
@@ -326,6 +376,43 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               <span className="text-xs text-muted-foreground">
                 {isAnalyzing ? "Analyzing..." : hasAnalyzed ? "Done" : "Ready"}
               </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Price Display */}
+        <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-background to-secondary/30 border border-border/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="text-lg font-bold text-foreground">
+                {crypto.toUpperCase()}
+              </div>
+              <div className={cn(
+                "text-2xl font-bold tabular-nums",
+                currentChange >= 0 ? "text-success" : "text-destructive"
+              )}>
+                ${currentPrice.toLocaleString(undefined, { 
+                  minimumFractionDigits: currentPrice < 1 ? 4 : 2,
+                  maximumFractionDigits: currentPrice < 1 ? 6 : 2 
+                })}
+              </div>
+              <div className={cn(
+                "text-sm font-medium px-2 py-0.5 rounded",
+                currentChange >= 0 ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
+              )}>
+                {currentChange >= 0 ? "+" : ""}{currentChange.toFixed(2)}%
+              </div>
+            </div>
+            <div className="text-right text-xs text-muted-foreground">
+              {livePrice.isLive && (
+                <div className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                  <span>Updated {new Date(livePrice.lastUpdate).toLocaleTimeString()}</span>
+                </div>
+              )}
+              <div className="mt-1">
+                24h H: ${currentHigh?.toLocaleString() || '-'} | L: ${currentLow?.toLocaleString() || '-'}
+              </div>
             </div>
           </div>
         </div>
