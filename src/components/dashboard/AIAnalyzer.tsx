@@ -354,8 +354,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                 {learningStats && learningStats.total_feedback > 0 && (
                   <span className="text-xs text-primary/70">• {learningStats.total_feedback} feedback</span>
                 )}
-                {livePrice.isLive && (
-                  <span className="text-xs text-success/70">• Live WebSocket</span>
+                {livePrice.isLive && livePrice.exchange && (
+                  <span className="text-xs text-success/70">• {livePrice.exchange}</span>
                 )}
               </div>
             </div>
