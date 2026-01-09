@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface OnChainMetrics {
   exchangeNetFlow: { value: number; trend: 'OUTFLOW' | 'INFLOW' | 'NEUTRAL'; magnitude: string; change24h: number };
@@ -111,6 +112,8 @@ export function useOnChainData(
   const isReconnectingRef = useRef(false);
   const streamStatusRef = useRef<'connected' | 'connecting' | 'disconnected' | 'polling'>('disconnected');
   const whaleTransactionsRef = useRef<Array<{ value: number; type: 'IN' | 'OUT'; timestamp: Date; chain: string }>>([]);
+  const lastWhaleAlertRef = useRef<{ txHash: string; timestamp: number } | null>(null);
+  const whaleAlertCooldownRef = useRef<number>(0);
 
   // Keep refs in sync
   useEffect(() => {
@@ -585,6 +588,68 @@ export function useOnChainData(
     return { whaleTxs, buyingPct, sellingPct };
   }, []);
 
+  // Send real-time whale alert push notification
+  const sendWhaleAlert = useCallback(async (
+    symbol: string,
+    whaleTx: { value: number; type: 'IN' | 'OUT'; timestamp: Date },
+    currentPrice: number
+  ) => {
+    const now = Date.now();
+    const WHALE_ALERT_COOLDOWN = 5 * 60 * 1000; // 5 minute cooldown per chain
+    
+    // Check cooldown
+    if (now - whaleAlertCooldownRef.current < WHALE_ALERT_COOLDOWN) {
+      return;
+    }
+    
+    const valueUSD = whaleTx.value * currentPrice;
+    const whaleThreshold = WHALE_THRESHOLDS[symbol] || WHALE_THRESHOLDS['DEFAULT'];
+    
+    // Only alert for truly significant transactions
+    if (valueUSD < whaleThreshold) return;
+    
+    whaleAlertCooldownRef.current = now;
+    
+    const direction = whaleTx.type === 'IN' ? 'buying' : 'selling';
+    const emoji = whaleTx.type === 'IN' ? '🐋💰' : '🐋📤';
+    const urgency = valueUSD >= 1000000 ? 'critical' : valueUSD >= 500000 ? 'high' : 'medium';
+    
+    const title = `${emoji} Whale ${direction.charAt(0).toUpperCase() + direction.slice(1)} ${symbol}!`;
+    const body = `Large ${direction} detected: ${whaleTx.value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${symbol} ($${(valueUSD / 1000000).toFixed(2)}M)`;
+    
+    console.log(`[OnChain] 🐋 Whale Alert: ${title} - ${body}`);
+    
+    try {
+      // Get current user for push notification
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user?.id) {
+        await supabase.functions.invoke('send-push-notification', {
+          body: {
+            userId: user.id,
+            title,
+            body,
+            symbol,
+            type: 'whale_activity',
+            urgency,
+            url: `/dashboard?crypto=${symbol.toLowerCase()}`
+          }
+        });
+        
+        // Also queue for email digest
+        await supabase.from('alert_digest_queue').insert({
+          user_id: user.id,
+          alert_type: 'whale_activity',
+          symbol,
+          title,
+          body,
+        });
+      }
+    } catch (err) {
+      console.warn('[OnChain] Whale alert notification error:', err);
+    }
+  }, []);
+
   const fetchOnChainData = useCallback(async () => {
     const now = Date.now();
     if (loading || (now - lastFetchRef.current < 5000)) return;
@@ -980,6 +1045,17 @@ export function useOnChainData(
       
       if (supportedWhaleChains.includes(cryptoUpper) && price > 0) {
         liveWhaleData = await fetchLiveWhaleData(cryptoUpper, price);
+        
+        // 🐋 REAL-TIME WHALE ALERT: Check for significant new transactions
+        if (liveWhaleData.whaleTxs.length > 0) {
+          const newestTx = liveWhaleData.whaleTxs[0];
+          const txAge = Date.now() - newestTx.timestamp.getTime();
+          
+          // Only alert for transactions in the last 10 minutes
+          if (txAge < 10 * 60 * 1000) {
+            await sendWhaleAlert(cryptoUpper, newestTx, price);
+          }
+        }
       }
 
       // Enhanced whale activity with live data integration
@@ -1069,7 +1145,7 @@ export function useOnChainData(
         setLoading(false);
       }
     }
-  }, [crypto, change, loading, price, cryptoInfo, fetchLiveWhaleData]);
+  }, [crypto, change, loading, price, cryptoInfo, fetchLiveWhaleData, sendWhaleAlert]);
 
   // Initialize connections and polling - ALL AUTOMATIC LIVE
   useEffect(() => {
