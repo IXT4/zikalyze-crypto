@@ -4710,6 +4710,35 @@ serve(async (req) => {
       allInsights.push(`⚡ ${institutionalVsRetail.divergenceNote}`);
     }
     
+    // Calculate 15M entry success probability based on alignment
+    const entrySuccessProbability = Math.min(85, Math.max(45, 
+      50 + 
+      (mtfAnalysis.confluence.alignment * 0.2) + 
+      (alignedPrecisionEntry.timing === 'NOW' ? 15 : alignedPrecisionEntry.timing === 'WAIT_PULLBACK' ? 8 : 0) +
+      (signalConfirmations * 3) - 
+      (signalConflicts * 4)
+    ));
+    
+    // Build Top-Down MTF breakdown
+    const dailyBias = mtfAnalysis.tfDaily?.trendAnalysis.direction || 'N/A';
+    const h4Bias = mtfAnalysis.tf4H?.trendAnalysis.direction || 'N/A';
+    const h1Bias = mtfAnalysis.tf1H?.trendAnalysis.direction || 'N/A';
+    const m15Bias = mtfAnalysis.tf15M?.trendAnalysis.direction || 'N/A';
+    
+    const dailyStrength = mtfAnalysis.tfDaily?.trendAnalysis.strength || 0;
+    const h4Strength = mtfAnalysis.tf4H?.trendAnalysis.strength || 0;
+    const h1Strength = mtfAnalysis.tf1H?.trendAnalysis.strength || 0;
+    const m15Strength = mtfAnalysis.tf15M?.trendAnalysis.strength || 0;
+    
+    // 15M specific entry details
+    const m15Structure = alignedPrecisionEntry.structureStatus || 'Analyzing...';
+    const m15Phase = alignedPrecisionEntry.movementPhase || 'Unknown';
+    const m15VolumeState = alignedPrecisionEntry.volumeCondition || 'Average';
+    
+    // Get 15M key levels
+    const m15Support = mtfAnalysis.keyLevels.m15Support[0]?.toFixed(2) || 'N/A';
+    const m15Resistance = mtfAnalysis.keyLevels.m15Resistance[0]?.toFixed(2) || 'N/A';
+    
     const analysis = `📊 ${sanitizedCrypto} ${t.quickAnalysis}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -4723,15 +4752,32 @@ serve(async (req) => {
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📍 ${t.whatToDo}
+📐 TOP-DOWN ANALYSIS (HTF → LTF)
+• Daily: ${dailyBias === 'BULLISH' ? '🟢' : dailyBias === 'BEARISH' ? '🔴' : '⚪'} ${dailyBias} (${dailyStrength}% strength)
+• 4H: ${h4Bias === 'BULLISH' ? '🟢' : h4Bias === 'BEARISH' ? '🔴' : '⚪'} ${h4Bias} (${h4Strength}% strength)
+• 1H: ${h1Bias === 'BULLISH' ? '🟢' : h1Bias === 'BEARISH' ? '🔴' : '⚪'} ${h1Bias} (${h1Strength}% strength)
+• 15M: ${m15Bias === 'BULLISH' ? '🟢' : m15Bias === 'BEARISH' ? '🔴' : '⚪'} ${m15Bias} (${m15Strength}% strength)
+📊 MTF Alignment: ${mtfAnalysis.confluence.alignment}% ${mtfAnalysis.confluence.alignment >= 80 ? '✓ STRONG' : mtfAnalysis.confluence.alignment >= 60 ? '◐ MODERATE' : '⚠️ WEAK'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏱️ 15-MINUTE PRECISION ENTRY
+${alignedPrecisionEntry.timing === 'NOW' ? `🟢 TIMING: EXECUTE NOW — ${entrySuccessProbability}% success probability` : alignedPrecisionEntry.timing === 'WAIT_PULLBACK' ? `🟡 TIMING: WAIT FOR PULLBACK — ${entrySuccessProbability}% success when conditions met` : alignedPrecisionEntry.timing === 'WAIT_BREAKOUT' ? `🟡 TIMING: WAIT FOR BREAKOUT — ${entrySuccessProbability}% success on confirmation` : `🔴 TIMING: AVOID — Low probability setup`}
+• Structure: ${m15Structure}
+• Phase: ${m15Phase}
+• Volume: ${m15VolumeState}
+• 15M S/R: $${m15Support} / $${m15Resistance}
+
+📍 ENTRY SIGNAL
 ${alignedPrecisionEntry.timing === 'NOW' ? 
-  `✅ ${t.timing}: ${t.goodEntry}
-🎯 ${t.action}: ${finalBias === 'LONG' ? t.buy : finalBias === 'SHORT' ? t.sell : t.wait}
-📍 ${t.zone}: ${alignedPrecisionEntry.zone}
-⛔ ${t.stopIf}: ${alignedPrecisionEntry.invalidation}` : 
-  `⏳ ${t.timing}: ${t.waitEntry}
-🔍 ${t.lookingFor}: ${alignedPrecisionEntry.trigger}
-📍 ${t.targetZone}: ${alignedPrecisionEntry.zone}`}
+  `✅ ${t.action}: ${finalBias === 'LONG' ? t.buy : finalBias === 'SHORT' ? t.sell : t.wait} ${finalBias === 'LONG' ? 'at current levels' : finalBias === 'SHORT' ? 'at current levels' : ''}
+🎯 Zone: ${alignedPrecisionEntry.zone}
+✓ Confirm: ${alignedPrecisionEntry.confirmation}
+⛔ Invalid: ${alignedPrecisionEntry.invalidation}` : 
+  `⏳ ${t.lookingFor}: ${alignedPrecisionEntry.trigger}
+🎯 ${t.targetZone}: ${alignedPrecisionEntry.zone}
+✓ Confirm: ${alignedPrecisionEntry.confirmation}
+⛔ Invalid: ${alignedPrecisionEntry.invalidation}`}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -4786,7 +4832,7 @@ ${allInsights.slice(0, 3).map((ins, i) => `${i + 1}. ${ins.replace(/[🔗💎�
 • ${t.volatileAdvice}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${finalBias === 'LONG' ? '🟢' : finalBias === 'SHORT' ? '🔴' : '⚪'} ${finalBias} ${t.bias} | ${finalConfidence}% ${t.confidence} | ${allPatterns.length} ${t.patterns}
+${finalBias === 'LONG' ? '🟢' : finalBias === 'SHORT' ? '🔴' : '⚪'} ${finalBias} ${t.bias} | ${finalConfidence}% ${t.confidence} | 15M Entry: ${entrySuccessProbability}% | ${allPatterns.length} ${t.patterns}
 🎓 ${t.feedbackHelps}`;
 
     // Stream the analysis with proper cancellation handling
