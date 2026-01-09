@@ -8,9 +8,18 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   TrendingUp, TrendingDown, MessageCircle, Users, 
-  Newspaper, RefreshCw, Twitter, AlertCircle, Flame, ExternalLink, Search
+  Newspaper, RefreshCw, Twitter, AlertCircle, Flame, ExternalLink, Search,
+  Calendar, Radio, Zap, Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+interface MacroEvent {
+  event: string;
+  date: string;
+  impact: 'high' | 'medium' | 'low';
+  countdown: string;
+  category: string;
+}
 
 interface SentimentData {
   crypto: string;
@@ -28,6 +37,7 @@ interface SentimentData {
     telegram: { mentions: number; sentiment: number; channelUsers?: number };
     overall: { score: number; label: string; change24h: number };
     trendingTopics: string[];
+    trendingMeta?: { lastUpdated: string; source: string };
     influencerMentions: Array<{ name: string; followers: string; sentiment: string; handle?: string; relevance?: string }>;
   };
   fearGreed: {
@@ -36,11 +46,17 @@ interface SentimentData {
     previousValue: number;
     previousLabel: string;
   };
+  macroEvents?: MacroEvent[];
   summary: {
     overallSentiment: string;
     sentimentScore: number;
     totalMentions: number;
     marketMood: string;
+  };
+  meta?: {
+    newsSource: string;
+    newsLastUpdated: string;
+    isLive: boolean;
   };
 }
 
@@ -198,6 +214,13 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
         <CardTitle className="flex items-center gap-2">
           <MessageCircle className="h-5 w-5 text-primary" />
           Sentiment Analysis — {crypto}
+          {/* Live indicator */}
+          {data.meta?.isLive && (
+            <span className="flex items-center gap-1 text-xs font-normal bg-success/20 text-success px-2 py-0.5 rounded-full animate-pulse">
+              <Radio className="h-3 w-3" />
+              LIVE
+            </span>
+          )}
         </CardTitle>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">
@@ -209,6 +232,33 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Macro Events Banner - if any upcoming */}
+        {data.macroEvents && data.macroEvents.length > 0 && (
+          <div className="rounded-lg border border-warning/50 bg-warning/10 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="h-4 w-4 text-warning" />
+              <span className="text-sm font-medium text-warning">Upcoming Macro Events</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {data.macroEvents.map((event, i) => (
+                <div 
+                  key={i} 
+                  className={`flex items-center gap-2 px-2 py-1 rounded text-xs ${
+                    event.impact === 'high' 
+                      ? 'bg-destructive/20 text-destructive border border-destructive/30' 
+                      : event.impact === 'medium'
+                      ? 'bg-warning/20 text-warning border border-warning/30'
+                      : 'bg-muted text-muted-foreground border border-border'
+                  }`}
+                >
+                  <Zap className={`h-3 w-3 ${event.impact === 'high' ? 'text-destructive' : event.impact === 'medium' ? 'text-warning' : 'text-muted-foreground'}`} />
+                  <span className="font-medium">{event.event}</span>
+                  <span className="opacity-70">({event.countdown})</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {/* Overview Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {/* Overall Sentiment */}
@@ -353,11 +403,19 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
               </div>
             </div>
 
-            {/* Trending Topics */}
+            {/* Trending Topics with Live Indicator */}
             <div className="rounded-lg border border-border p-4">
-              <div className="text-sm font-medium mb-3 flex items-center gap-2">
-                <Flame className="h-4 w-4 text-warning" />
-                Trending Topics
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-sm font-medium flex items-center gap-2">
+                  <Flame className="h-4 w-4 text-warning" />
+                  Trending Topics
+                </div>
+                {data.social.trendingMeta && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {data.social.trendingMeta.source}
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 {data.social.trendingTopics.map((topic, i) => (
@@ -369,8 +427,22 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
             </div>
           </TabsContent>
 
-          {/* News Tab */}
+          {/* News Tab with Live Source Indicator */}
           <TabsContent value="news" className="mt-4">
+            {data.meta?.newsSource && (
+              <div className="flex items-center justify-between mb-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Radio className={`h-3 w-3 ${data.meta.isLive ? 'text-success' : 'text-muted-foreground'}`} />
+                  Source: {data.meta.newsSource}
+                </span>
+                {data.meta.newsLastUpdated && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {new Date(data.meta.newsLastUpdated).toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
               {data.news.map((item, i) => (
                 <a 
