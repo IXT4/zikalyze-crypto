@@ -24,8 +24,9 @@ interface CryptoInfo {
 }
 
 const POLL_INTERVAL = 10000; // 10 seconds for live polling
-const WS_RECONNECT_DELAY = 2000; // Fast reconnect for seamless experience
-const API_TIMEOUT = 6000;
+const WS_RECONNECT_DELAY = 3000; // Stable reconnect delay
+const WS_MAX_RETRIES = 3; // Max retry attempts before falling back to polling
+const API_TIMEOUT = 8000;
 
 // Premium API endpoints
 const MEMPOOL_WS = 'wss://mempool.space/api/v1/ws';
@@ -74,6 +75,8 @@ export function useOnChainData(
   const isMountedRef = useRef(true);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const metricsRef = useRef<OnChainMetrics | null>(null);
+  const wsRetryCountRef = useRef(0);
+  const isReconnectingRef = useRef(false);
 
   // Keep metricsRef in sync
   useEffect(() => {
@@ -83,21 +86,36 @@ export function useOnChainData(
   // Initialize WebSocket for BTC live data
   const initBTCWebSockets = useCallback(() => {
     const cryptoUpper = crypto.toUpperCase();
-    if (cryptoUpper !== 'BTC') return;
+    if (cryptoUpper !== 'BTC' || isReconnectingRef.current) return;
 
+    // Check retry limit
+    if (wsRetryCountRef.current >= WS_MAX_RETRIES) {
+      console.log('[OnChain] Max retries reached, using polling mode');
+      setStreamStatus('polling');
+      return;
+    }
+
+    isReconnectingRef.current = true;
     setStreamStatus('connecting');
+
+    // Cleanup existing connections first
+    if (mempoolWsRef.current) {
+      try {
+        mempoolWsRef.current.onclose = null;
+        mempoolWsRef.current.onerror = null;
+        mempoolWsRef.current.close();
+      } catch {}
+      mempoolWsRef.current = null;
+    }
 
     // Mempool.space WebSocket for fee rates and blocks
     try {
-      if (mempoolWsRef.current?.readyState === WebSocket.OPEN) {
-        mempoolWsRef.current.close();
-      }
-
       mempoolWsRef.current = new WebSocket(MEMPOOL_WS);
       
       mempoolWsRef.current.onopen = () => {
         console.log('[OnChain] Mempool WS connected');
-        // Subscribe to live data
+        wsRetryCountRef.current = 0; // Reset retry count on successful connection
+        isReconnectingRef.current = false;
         mempoolWsRef.current?.send(JSON.stringify({ action: 'want', data: ['blocks', 'stats', 'mempool-blocks'] }));
         setStreamStatus('connected');
       };
@@ -108,7 +126,6 @@ export function useOnChainData(
         try {
           const data = JSON.parse(event.data);
           
-          // Handle different message types
           if (data.mempoolInfo) {
             setMetrics(prev => prev ? {
               ...prev,
@@ -148,7 +165,6 @@ export function useOnChainData(
                 ...prev.transactionVolume,
                 value: prev.transactionVolume.value + (data.block.tx_count || 0)
               },
-              avgBlockTime: data.block.extras?.avgFeeRate ? prev.avgBlockTime : prev.avgBlockTime,
               lastUpdated: new Date(),
               isLive: true
             } : prev);
@@ -177,21 +193,29 @@ export function useOnChainData(
 
       mempoolWsRef.current.onerror = () => {
         console.warn('[OnChain] Mempool WS error');
-        setStreamStatus('polling');
+        isReconnectingRef.current = false;
       };
 
       mempoolWsRef.current.onclose = () => {
         console.log('[OnChain] Mempool WS closed');
-        if (isMountedRef.current && streamStatus === 'connected') {
+        isReconnectingRef.current = false;
+        
+        if (isMountedRef.current) {
           setStreamStatus('polling');
-          // Attempt reconnect
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (isMountedRef.current) initBTCWebSockets();
-          }, WS_RECONNECT_DELAY);
+          wsRetryCountRef.current++;
+          
+          // Only attempt reconnect if under retry limit
+          if (wsRetryCountRef.current < WS_MAX_RETRIES) {
+            if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (isMountedRef.current) initBTCWebSockets();
+            }, WS_RECONNECT_DELAY * wsRetryCountRef.current); // Exponential backoff
+          }
         }
       };
     } catch (e) {
       console.warn('[OnChain] Mempool WS init error:', e);
+      isReconnectingRef.current = false;
       setStreamStatus('polling');
     }
 
@@ -273,7 +297,7 @@ export function useOnChainData(
     } catch (e) {
       console.warn('[OnChain] Blockchain WS init error:', e);
     }
-  }, [crypto, streamStatus]);
+  }, [crypto]);
 
   const fetchOnChainData = useCallback(async () => {
     const now = Date.now();
@@ -702,30 +726,18 @@ export function useOnChainData(
     };
   }, [crypto]);
 
-  // Automatic reconnection for BTC WebSockets
+  // Stable status management - non-BTC cryptos always show as connected (polling is reliable)
   useEffect(() => {
-    if (crypto.toUpperCase() === 'BTC' && streamStatus === 'disconnected' && isMountedRef.current) {
-      const timeout = setTimeout(() => {
-        if (isMountedRef.current) {
-          initBTCWebSockets();
-        }
-      }, WS_RECONNECT_DELAY);
-      return () => clearTimeout(timeout);
-    }
-  }, [streamStatus, crypto, initBTCWebSockets]);
-
-  // Auto-recovery: if disconnected for non-BTC, restore connected state
-  useEffect(() => {
-    if (crypto.toUpperCase() !== 'BTC' && streamStatus === 'disconnected' && isMountedRef.current) {
-      // Use ref to prevent loop - only recover once per disconnect
+    if (crypto.toUpperCase() !== 'BTC' && isMountedRef.current) {
+      // For non-BTC, polling is always active and reliable
       const timeoutId = setTimeout(() => {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && streamStatus !== 'connected') {
           setStreamStatus('connected');
         }
-      }, 500);
+      }, 1500);
       return () => clearTimeout(timeoutId);
     }
-  }, [streamStatus, crypto]);
+  }, [crypto, streamStatus]);
 
   return { 
     metrics, 
