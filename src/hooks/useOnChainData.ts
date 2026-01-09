@@ -24,77 +24,74 @@ interface CryptoInfo {
   coinGeckoId?: string;
 }
 
-const POLL_INTERVAL = 10000; // 10 seconds
+interface WebSocketState {
+  socket: WebSocket | null;
+  reconnectAttempts: number;
+  reconnectTimeout: ReturnType<typeof setTimeout> | null;
+}
+
+const POLL_INTERVAL = 10000;
 const API_TIMEOUT = 8000;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const BASE_RECONNECT_DELAY = 1000;
+
+// WebSocket endpoints
+const WS_ENDPOINTS = {
+  BTC: 'wss://mempool.space/api/v1/ws',
+  ETH: 'wss://ws.blockchain.info/inv',
+};
 
 // Live whale tracking thresholds per chain (in USD)
 const WHALE_THRESHOLDS: Record<string, number> = {
-  'BTC': 500000,
-  'ETH': 250000,
-  'SOL': 100000,
-  'XRP': 500000,
-  'ADA': 50000,
-  'DOGE': 100000,
-  'AVAX': 50000,
-  'DOT': 50000,
-  'MATIC': 50000,
-  'LINK': 50000,
-  'LTC': 50000,
-  'BCH': 50000,
-  'ATOM': 50000,
-  'NEAR': 50000,
-  'FTM': 50000,
-  'ARB': 50000,
-  'KAS': 25000,
-  'DEFAULT': 100000
+  'BTC': 500000, 'ETH': 250000, 'SOL': 100000, 'XRP': 500000, 'ADA': 50000,
+  'DOGE': 100000, 'AVAX': 50000, 'DOT': 50000, 'MATIC': 50000, 'LINK': 50000,
+  'LTC': 50000, 'BCH': 50000, 'ATOM': 50000, 'NEAR': 50000, 'FTM': 50000,
+  'ARB': 50000, 'KAS': 25000, 'DEFAULT': 100000
+};
+
+const blockchairCoinMap: Record<string, string> = {
+  'BTC': 'bitcoin', 'ETH': 'ethereum', 'LTC': 'litecoin', 'DOGE': 'dogecoin',
+  'BCH': 'bitcoin-cash', 'XRP': 'ripple', 'XLM': 'stellar', 'ADA': 'cardano',
+  'DOT': 'polkadot', 'AVAX': 'avalanche', 'MATIC': 'polygon', 'SOL': 'solana',
+  'ATOM': 'cosmos', 'NEAR': 'near', 'FTM': 'fantom', 'TRX': 'tron',
 };
 
 async function safeFetch<T>(url: string, fallback: T): Promise<T> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
-    
-    const response = await fetch(url, { 
-      signal: controller.signal,
-      headers: { 'Accept': 'application/json' }
-    });
-    
+    const response = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
     clearTimeout(timeoutId);
-    
     if (!response.ok) return fallback;
-    
     const contentType = response.headers.get('content-type');
-    if (contentType?.includes('application/json')) {
-      return await response.json();
-    }
-    return await response.text() as T;
+    return contentType?.includes('application/json') ? await response.json() : await response.text() as T;
   } catch {
     return fallback;
   }
 }
 
-export function useOnChainData(
-  crypto: string, 
-  price: number, 
-  change: number,
-  cryptoInfo?: CryptoInfo
-) {
+export function useOnChainData(crypto: string, price: number, change: number, cryptoInfo?: CryptoInfo) {
   const [metrics, setMetrics] = useState<OnChainMetrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [streamStatus, setStreamStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'polling'>('polling');
-  
-  // Use refs for values needed in callbacks to avoid dependency issues
+  const [streamStatus, setStreamStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'polling'>('connecting');
+
+  // Stable refs for values and state
   const cryptoRef = useRef(crypto);
   const priceRef = useRef(price);
   const changeRef = useRef(change);
   const cryptoInfoRef = useRef(cryptoInfo);
   const isMountedRef = useRef(true);
+  const metricsRef = useRef<OnChainMetrics | null>(null);
   const lastFetchRef = useRef<number>(0);
   const isLoadingRef = useRef(false);
   const whaleAlertCooldownRef = useRef<number>(0);
+  
+  // WebSocket state
+  const wsStateRef = useRef<WebSocketState>({ socket: null, reconnectAttempts: 0, reconnectTimeout: null });
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Update refs when props change
+  // Sync refs with prop changes
   useEffect(() => {
     cryptoRef.current = crypto;
     priceRef.current = price;
@@ -102,150 +99,113 @@ export function useOnChainData(
     cryptoInfoRef.current = cryptoInfo;
   }, [crypto, price, change, cryptoInfo]);
 
-  // Send whale alert
+  // Whale alert sender
   const sendWhaleAlert = useCallback(async (
-    symbol: string,
-    whaleTx: { value: number; type: 'IN' | 'OUT'; timestamp: Date },
-    currentPrice: number
+    symbol: string, whaleTx: { value: number; type: 'IN' | 'OUT'; timestamp: Date }, currentPrice: number
   ) => {
     const now = Date.now();
-    const WHALE_ALERT_COOLDOWN = 5 * 60 * 1000; // 5 minute cooldown
-    
-    if (now - whaleAlertCooldownRef.current < WHALE_ALERT_COOLDOWN) {
-      return;
-    }
+    if (now - whaleAlertCooldownRef.current < 300000) return; // 5min cooldown
     
     const valueUSD = whaleTx.value * currentPrice;
-    const whaleThreshold = WHALE_THRESHOLDS[symbol] || WHALE_THRESHOLDS['DEFAULT'];
-    
-    if (valueUSD < whaleThreshold) return;
+    const threshold = WHALE_THRESHOLDS[symbol] || WHALE_THRESHOLDS['DEFAULT'];
+    if (valueUSD < threshold) return;
     
     whaleAlertCooldownRef.current = now;
-    
     const direction = whaleTx.type === 'IN' ? 'buying' : 'selling';
     const emoji = whaleTx.type === 'IN' ? '🐋💰' : '🐋📤';
-    const urgency = valueUSD >= 1000000 ? 'critical' : valueUSD >= 500000 ? 'high' : 'medium';
-    
     const title = `${emoji} Whale ${direction.charAt(0).toUpperCase() + direction.slice(1)} ${symbol}!`;
-    const body = `Large ${direction} detected: ${whaleTx.value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${symbol} ($${(valueUSD / 1000000).toFixed(2)}M)`;
+    const body = `Large ${direction}: ${whaleTx.value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${symbol} ($${(valueUSD / 1000000).toFixed(2)}M)`;
     
-    console.log(`[OnChain] 🐋 Whale Alert: ${title} - ${body}`);
+    console.log(`[OnChain] 🐋 Whale Alert: ${title}`);
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
       if (user?.id) {
         await supabase.functions.invoke('send-push-notification', {
-          body: {
-            userId: user.id,
-            title,
-            body,
-            symbol,
-            type: 'whale_activity',
-            urgency,
-            url: `/dashboard?crypto=${symbol.toLowerCase()}`
-          }
+          body: { userId: user.id, title, body, symbol, type: 'whale_activity', urgency: valueUSD >= 1000000 ? 'critical' : 'high', url: `/dashboard?crypto=${symbol.toLowerCase()}` }
         });
-        
-        await supabase.from('alert_digest_queue').insert({
-          user_id: user.id,
-          alert_type: 'whale_activity',
-          symbol,
-          title,
-          body,
-        });
+        await supabase.from('alert_digest_queue').insert({ user_id: user.id, alert_type: 'whale_activity', symbol, title, body });
       }
     } catch (err) {
-      console.warn('[OnChain] Whale alert notification error:', err);
+      console.warn('[OnChain] Whale alert error:', err);
     }
   }, []);
 
-  // Main fetch function - stable, no external dependencies
-  const fetchOnChainData = useCallback(async () => {
+  // Update metrics helper
+  const updateMetrics = useCallback((partial: Partial<OnChainMetrics>) => {
+    if (!isMountedRef.current) return;
+    
+    const current = metricsRef.current;
+    const newMetrics: OnChainMetrics = {
+      exchangeNetFlow: partial.exchangeNetFlow || current?.exchangeNetFlow || { value: 0, trend: 'NEUTRAL', magnitude: 'LOW', change24h: 0 },
+      whaleActivity: partial.whaleActivity || current?.whaleActivity || { buying: 50, selling: 50, netFlow: 'BALANCED', largeTxCount24h: 0 },
+      mempoolData: partial.mempoolData || current?.mempoolData || { unconfirmedTxs: 0, avgFeeRate: 0 },
+      transactionVolume: partial.transactionVolume || current?.transactionVolume || { value: 0, change24h: 0, tps: 0 },
+      hashRate: partial.hashRate ?? current?.hashRate ?? 0,
+      activeAddresses: partial.activeAddresses || current?.activeAddresses || { current: 0, change24h: 0, trend: 'STABLE' },
+      blockHeight: partial.blockHeight ?? current?.blockHeight ?? 0,
+      difficulty: partial.difficulty ?? current?.difficulty ?? 0,
+      avgBlockTime: partial.avgBlockTime ?? current?.avgBlockTime ?? 0,
+      source: partial.source || current?.source || 'unknown',
+      lastUpdated: new Date(),
+      period: '24h',
+      isLive: partial.isLive ?? true,
+      streamStatus: partial.streamStatus || 'connected'
+    };
+    
+    metricsRef.current = newMetrics;
+    setMetrics(newMetrics);
+  }, []);
+
+  // REST API fetch (fallback/supplement)
+  const fetchRestData = useCallback(async () => {
     const now = Date.now();
     if (isLoadingRef.current || (now - lastFetchRef.current < 5000)) return;
     
     isLoadingRef.current = true;
     lastFetchRef.current = now;
-    
-    const currentCrypto = cryptoRef.current;
+    setLoading(true);
+
+    const currentCrypto = cryptoRef.current.toUpperCase();
     const currentPrice = priceRef.current;
     const currentChange = changeRef.current;
-    const currentCryptoInfo = cryptoInfoRef.current;
-    const cryptoUpper = currentCrypto.toUpperCase();
-    const isBTC = cryptoUpper === 'BTC';
-
-    if (isMountedRef.current) {
-      setLoading(true);
-    }
+    const currentInfo = cryptoInfoRef.current;
+    const isBTC = currentCrypto === 'BTC';
 
     try {
       let mempoolData = { unconfirmedTxs: 0, avgFeeRate: 0, fastestFee: 0, minimumFee: 0 };
-      let hashRate = 0;
-      let transactionVolume = { value: 0, change24h: 0, tps: 0 };
-      let blockHeight = 0;
-      let difficulty = 0;
-      let avgBlockTime = 0;
-      let activeAddressChange24h = 0;
-      let largeTxCount24h = 0;
-      let activeAddressesCurrent = 0;
-      let source = 'live-polling';
-
-      // Blockchain API mapping
-      const blockchairCoinMap: Record<string, string> = {
-        'BTC': 'bitcoin', 'ETH': 'ethereum', 'LTC': 'litecoin', 'DOGE': 'dogecoin',
-        'BCH': 'bitcoin-cash', 'XRP': 'ripple', 'XLM': 'stellar', 'ADA': 'cardano',
-        'DOT': 'polkadot', 'AVAX': 'avalanche', 'MATIC': 'polygon', 'SOL': 'solana',
-        'ATOM': 'cosmos', 'NEAR': 'near', 'FTM': 'fantom', 'TRX': 'tron',
-      };
+      let hashRate = 0, transactionVolume = { value: 0, change24h: 0, tps: 0 };
+      let blockHeight = 0, difficulty = 0, avgBlockTime = 0;
+      let activeAddressesCurrent = 0, activeAddressChange24h = 0, largeTxCount24h = 0;
+      let source = 'rest-api';
 
       if (isBTC) {
-        // Fetch BTC data from mempool.space REST API
-        const [mempoolFees, mempoolBlocks, btcStats, difficultyAdj] = await Promise.all([
+        const [fees, blocks, stats, diffAdj, tipHeight] = await Promise.all([
           safeFetch<any>('https://mempool.space/api/v1/fees/recommended', null),
           safeFetch<any>('https://mempool.space/api/v1/fees/mempool-blocks', null),
           safeFetch<any>('https://mempool.space/api/v1/mining/hashrate/1d', null),
           safeFetch<any>('https://mempool.space/api/v1/difficulty-adjustment', null),
+          safeFetch<number>('https://mempool.space/api/blocks/tip/height', 0),
         ]);
 
-        if (mempoolFees) {
-          mempoolData.avgFeeRate = mempoolFees.halfHourFee || mempoolFees.hourFee || 0;
-          mempoolData.fastestFee = mempoolFees.fastestFee;
-          mempoolData.minimumFee = mempoolFees.minimumFee;
+        if (fees) {
+          mempoolData = { avgFeeRate: fees.halfHourFee || 0, fastestFee: fees.fastestFee, minimumFee: fees.minimumFee, unconfirmedTxs: 0 };
         }
-
-        if (mempoolBlocks && Array.isArray(mempoolBlocks)) {
-          mempoolData.unconfirmedTxs = mempoolBlocks.reduce((acc: number, b: any) => acc + (b.nTx || 0), 0);
+        if (blocks && Array.isArray(blocks)) {
+          mempoolData.unconfirmedTxs = blocks.reduce((acc: number, b: any) => acc + (b.nTx || 0), 0);
         }
-
-        if (btcStats?.currentHashrate) {
-          hashRate = btcStats.currentHashrate;
-        }
-
-        if (difficultyAdj) {
-          difficulty = difficultyAdj.progressPercent || 0;
-          avgBlockTime = difficultyAdj.timeAvg ? difficultyAdj.timeAvg / 60000 : 10;
-        }
-
-        // Fetch block height
-        const tipHeight = await safeFetch<number>('https://mempool.space/api/blocks/tip/height', 0);
+        if (stats?.currentHashrate) hashRate = stats.currentHashrate;
+        if (diffAdj) { difficulty = diffAdj.progressPercent || 0; avgBlockTime = diffAdj.timeAvg ? diffAdj.timeAvg / 60000 : 10; }
         blockHeight = tipHeight || 0;
-
-        // Estimate metrics from price action
-        activeAddressesCurrent = Math.max(Math.round((currentCryptoInfo?.volume || 0) / currentPrice * 0.1), 500000);
+        activeAddressesCurrent = Math.max(Math.round((currentInfo?.volume || 0) / currentPrice * 0.1), 500000);
         activeAddressChange24h = currentChange * 0.7;
         largeTxCount24h = Math.max(Math.round(mempoolData.unconfirmedTxs * 0.02), 50);
-        transactionVolume.value = mempoolData.unconfirmedTxs * 100;
-        transactionVolume.tps = Math.round(mempoolData.unconfirmedTxs / 600);
-        
-        source = 'mempool-live';
+        transactionVolume = { value: mempoolData.unconfirmedTxs * 100, change24h: currentChange, tps: Math.round(mempoolData.unconfirmedTxs / 600) };
+        source = 'mempool-rest';
       } else {
-        // For other cryptos, use Blockchair or derive from market data
-        const blockchairCoin = blockchairCoinMap[cryptoUpper];
-        
+        const blockchairCoin = blockchairCoinMap[currentCrypto];
         if (blockchairCoin) {
           const data = await safeFetch<any>(`https://api.blockchair.com/${blockchairCoin}/stats`, null);
-          
           if (data?.data) {
             transactionVolume.value = data.data.transactions_24h || 0;
             mempoolData.unconfirmedTxs = data.data.mempool_transactions || 0;
@@ -253,33 +213,25 @@ export function useOnChainData(
             blockHeight = data.data.blocks || 0;
             hashRate = data.data.hashrate_24h || 0;
             difficulty = data.data.difficulty || 0;
-            source = 'blockchair-live';
+            source = 'blockchair';
           }
         }
-
-        // Derive missing metrics from price action
-        if (!activeAddressesCurrent && currentCryptoInfo?.volume) {
-          activeAddressesCurrent = Math.max(Math.round(currentCryptoInfo.volume / currentPrice * 0.15), 50000);
+        if (!activeAddressesCurrent && currentInfo?.volume) {
+          activeAddressesCurrent = Math.max(Math.round(currentInfo.volume / currentPrice * 0.15), 50000);
         }
-        
         activeAddressChange24h = currentChange * 0.6 + (Math.random() - 0.5) * 2;
         largeTxCount24h = Math.max(Math.round(transactionVolume.value * 0.005), 20);
-        
         if (!transactionVolume.tps) {
-          transactionVolume.tps = cryptoUpper === 'SOL' ? 3000 : 
-                                   cryptoUpper === 'AVAX' ? 4500 : 
-                                   cryptoUpper === 'MATIC' ? 2000 : 100;
+          transactionVolume.tps = currentCrypto === 'SOL' ? 3000 : currentCrypto === 'AVAX' ? 4500 : currentCrypto === 'MATIC' ? 2000 : 100;
         }
       }
 
-      // Calculate exchange flow and whale activity from price action
+      // Derive exchange flow from price action
       const isStrongBullish = currentChange > 5;
       const isStrongBearish = currentChange < -5;
       const mempoolHigh = mempoolData.unconfirmedTxs > 50000;
 
-      let exchangeNetFlow;
-      let whaleActivity;
-
+      let exchangeNetFlow, whaleActivity;
       if (isStrongBullish && !mempoolHigh) {
         exchangeNetFlow = { value: -15000, trend: 'OUTFLOW' as const, magnitude: 'SIGNIFICANT', change24h: -15000 };
         whaleActivity = { buying: 70, selling: 25, netFlow: 'NET BUYING', largeTxCount24h };
@@ -297,77 +249,218 @@ export function useOnChainData(
       const activeAddresses = {
         current: activeAddressesCurrent,
         change24h: activeAddressChange24h,
-        trend: activeAddressChange24h > 3 ? 'INCREASING' as const : 
-               activeAddressChange24h < -3 ? 'DECREASING' as const : 'STABLE' as const
+        trend: activeAddressChange24h > 3 ? 'INCREASING' as const : activeAddressChange24h < -3 ? 'DECREASING' as const : 'STABLE' as const
       };
 
-      // Check for whale alert
+      // Whale alert check
       if (largeTxCount24h > 100 && Math.abs(exchangeNetFlow.value) > 10000) {
-        const whaleTx = {
-          value: Math.abs(exchangeNetFlow.value) / currentPrice,
-          type: exchangeNetFlow.value > 0 ? 'IN' as const : 'OUT' as const,
-          timestamp: new Date()
-        };
-        sendWhaleAlert(cryptoUpper, whaleTx, currentPrice);
+        sendWhaleAlert(currentCrypto, { value: Math.abs(exchangeNetFlow.value) / currentPrice, type: exchangeNetFlow.value > 0 ? 'IN' : 'OUT', timestamp: new Date() }, currentPrice);
       }
 
-      if (isMountedRef.current) {
-        setMetrics({
-          exchangeNetFlow,
-          whaleActivity,
-          mempoolData,
-          transactionVolume,
-          hashRate,
-          activeAddresses,
-          blockHeight,
-          difficulty,
-          avgBlockTime,
-          source,
-          lastUpdated: new Date(),
-          period: '24h',
-          isLive: true,
-          streamStatus: 'connected'
-        });
-        setStreamStatus('connected');
-        setError(null);
-      }
+      updateMetrics({
+        exchangeNetFlow, whaleActivity, mempoolData, transactionVolume, hashRate,
+        activeAddresses, blockHeight, difficulty, avgBlockTime, source,
+        streamStatus: wsStateRef.current.socket?.readyState === WebSocket.OPEN ? 'connected' : 'polling'
+      });
+      setError(null);
     } catch (e) {
-      console.error('[OnChain] Fetch error:', e);
-      if (isMountedRef.current) {
-        setError('Failed to fetch on-chain data');
-        setStreamStatus('polling');
-      }
+      console.error('[OnChain] REST fetch error:', e);
+      setError('Failed to fetch on-chain data');
     } finally {
       isLoadingRef.current = false;
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
-  }, [sendWhaleAlert]);
+  }, [sendWhaleAlert, updateMetrics]);
 
-  // Initialize and poll - only depends on crypto symbol change
+  // WebSocket connection manager
+  const connectWebSocket = useCallback(() => {
+    const cryptoUpper = cryptoRef.current.toUpperCase();
+    const wsEndpoint = WS_ENDPOINTS[cryptoUpper as keyof typeof WS_ENDPOINTS];
+    
+    // Only BTC has reliable WebSocket support
+    if (!wsEndpoint || cryptoUpper !== 'BTC') {
+      console.log(`[OnChain] No WebSocket for ${cryptoUpper}, using polling`);
+      setStreamStatus('polling');
+      return;
+    }
+
+    // Cleanup existing connection
+    if (wsStateRef.current.socket) {
+      wsStateRef.current.socket.close();
+      wsStateRef.current.socket = null;
+    }
+
+    if (wsStateRef.current.reconnectTimeout) {
+      clearTimeout(wsStateRef.current.reconnectTimeout);
+      wsStateRef.current.reconnectTimeout = null;
+    }
+
+    setStreamStatus('connecting');
+    console.log(`[OnChain] Connecting WebSocket for ${cryptoUpper}...`);
+
+    try {
+      const ws = new WebSocket(wsEndpoint);
+      wsStateRef.current.socket = ws;
+
+      ws.onopen = () => {
+        if (!isMountedRef.current) return;
+        console.log(`[OnChain] WebSocket connected for ${cryptoUpper}`);
+        wsStateRef.current.reconnectAttempts = 0;
+        setStreamStatus('connected');
+
+        // Subscribe to mempool data
+        if (cryptoUpper === 'BTC') {
+          ws.send(JSON.stringify({ action: 'init' }));
+          ws.send(JSON.stringify({ action: 'want', data: ['blocks', 'mempool-blocks', 'stats'] }));
+        }
+      };
+
+      ws.onmessage = (event) => {
+        if (!isMountedRef.current) return;
+        
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Handle BTC mempool.space messages
+          if (data.mempoolInfo) {
+            updateMetrics({
+              mempoolData: {
+                unconfirmedTxs: data.mempoolInfo.size || 0,
+                avgFeeRate: data.mempoolInfo.vsize ? Math.round(data.mempoolInfo.vsize / 1000) : 0,
+                fastestFee: metricsRef.current?.mempoolData?.fastestFee,
+                minimumFee: metricsRef.current?.mempoolData?.minimumFee,
+              },
+              source: 'mempool-ws',
+              streamStatus: 'connected'
+            });
+          }
+
+          if (data.block) {
+            updateMetrics({
+              blockHeight: data.block.height || metricsRef.current?.blockHeight || 0,
+              source: 'mempool-ws',
+              streamStatus: 'connected'
+            });
+            console.log(`[OnChain] New block: ${data.block.height}`);
+          }
+
+          if (data['mempool-blocks']) {
+            const blocks = data['mempool-blocks'];
+            const totalTxs = blocks.reduce((acc: number, b: any) => acc + (b.nTx || 0), 0);
+            const avgFee = blocks[0]?.medianFee || 0;
+            
+            updateMetrics({
+              mempoolData: {
+                unconfirmedTxs: totalTxs,
+                avgFeeRate: avgFee,
+                fastestFee: blocks[0]?.feeRange?.[blocks[0].feeRange.length - 1] || avgFee,
+                minimumFee: blocks[blocks.length - 1]?.feeRange?.[0] || 1,
+              },
+              source: 'mempool-ws',
+              streamStatus: 'connected'
+            });
+          }
+
+          if (data.fees) {
+            updateMetrics({
+              mempoolData: {
+                unconfirmedTxs: metricsRef.current?.mempoolData?.unconfirmedTxs || 0,
+                avgFeeRate: data.fees.halfHourFee || data.fees.hourFee || 0,
+                fastestFee: data.fees.fastestFee,
+                minimumFee: data.fees.minimumFee,
+              },
+              source: 'mempool-ws',
+              streamStatus: 'connected'
+            });
+          }
+
+          // Large transaction detection
+          if (data.transactions && Array.isArray(data.transactions)) {
+            const largeTxs = data.transactions.filter((tx: any) => tx.value > 10);
+            if (largeTxs.length > 0) {
+              const largest = largeTxs.reduce((a: any, b: any) => (a.value > b.value ? a : b));
+              sendWhaleAlert(cryptoUpper, { value: largest.value, type: largest.value > 0 ? 'IN' : 'OUT', timestamp: new Date() }, priceRef.current);
+            }
+          }
+        } catch (e) {
+          // Ignore parse errors for non-JSON messages
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.warn(`[OnChain] WebSocket error:`, error);
+        setStreamStatus('disconnected');
+      };
+
+      ws.onclose = (event) => {
+        console.log(`[OnChain] WebSocket closed: ${event.code} ${event.reason}`);
+        wsStateRef.current.socket = null;
+        
+        if (!isMountedRef.current) return;
+        
+        setStreamStatus('disconnected');
+
+        // Reconnect with exponential backoff
+        if (wsStateRef.current.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          const delay = BASE_RECONNECT_DELAY * Math.pow(2, wsStateRef.current.reconnectAttempts);
+          console.log(`[OnChain] Reconnecting in ${delay}ms (attempt ${wsStateRef.current.reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+          
+          wsStateRef.current.reconnectAttempts++;
+          wsStateRef.current.reconnectTimeout = setTimeout(() => {
+            if (isMountedRef.current) connectWebSocket();
+          }, delay);
+        } else {
+          console.log('[OnChain] Max reconnection attempts reached, falling back to polling');
+          setStreamStatus('polling');
+        }
+      };
+    } catch (e) {
+      console.error('[OnChain] WebSocket creation error:', e);
+      setStreamStatus('polling');
+    }
+  }, [updateMetrics, sendWhaleAlert]);
+
+  // Main effect - setup and cleanup
   useEffect(() => {
     isMountedRef.current = true;
+    metricsRef.current = null;
     lastFetchRef.current = 0;
     isLoadingRef.current = false;
-    
-    // Set initial status
-    setStreamStatus('connecting');
+    wsStateRef.current.reconnectAttempts = 0;
+
     setMetrics(null);
-    
-    // Initial fetch
-    fetchOnChainData();
-    
-    // Set up polling
-    const pollInterval = setInterval(() => {
+    setStreamStatus('connecting');
+
+    // Initial REST fetch for complete data
+    fetchRestData();
+
+    // Connect WebSocket for supported chains
+    connectWebSocket();
+
+    // Setup polling as fallback/supplement
+    pollIntervalRef.current = setInterval(() => {
       if (isMountedRef.current) {
-        fetchOnChainData();
+        fetchRestData();
       }
     }, POLL_INTERVAL);
 
     return () => {
       isMountedRef.current = false;
-      clearInterval(pollInterval);
+      
+      if (wsStateRef.current.socket) {
+        wsStateRef.current.socket.close();
+        wsStateRef.current.socket = null;
+      }
+      
+      if (wsStateRef.current.reconnectTimeout) {
+        clearTimeout(wsStateRef.current.reconnectTimeout);
+        wsStateRef.current.reconnectTimeout = null;
+      }
+      
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
     };
   }, [crypto]); // Only re-run when crypto changes
 
@@ -376,6 +469,6 @@ export function useOnChainData(
     loading, 
     error, 
     streamStatus,
-    refresh: fetchOnChainData 
+    refresh: fetchRestData 
   };
 }
