@@ -74,7 +74,7 @@ class AlertSoundPlayer {
         const duration = 0.3;
 
         gainNode.gain.setValueAtTime(0, startTime);
-        gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.02);
+        gainNode.gain.linearRampToValueAtTime(0.7, startTime + 0.02);
         gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
 
         oscillator.start(startTime);
@@ -116,7 +116,7 @@ class AlertSoundPlayer {
         const duration = 0.4;
 
         gainNode.gain.setValueAtTime(0, startTime);
-        gainNode.gain.linearRampToValueAtTime(0.25, startTime + 0.02);
+        gainNode.gain.linearRampToValueAtTime(0.6, startTime + 0.02);
         gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
 
         oscillator.start(startTime);
@@ -148,7 +148,7 @@ class AlertSoundPlayer {
       oscillator.type = "sine";
       oscillator.frequency.setValueAtTime(440, ctx.currentTime); // A4
 
-      gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+      gainNode.gain.setValueAtTime(0.7, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
 
       oscillator.start();
