@@ -2814,6 +2814,25 @@ serve(async (req) => {
       ...patterns
     ].filter((v, i, a) => a.indexOf(v) === i).slice(0, 15);
     
+    // Calculate pattern directional bias for confluence alignment
+    const bullishPatternKeywords = ['Bullish', 'Hammer', 'Morning', 'Spring', 'Accumulation', 'Double Bottom', 'Inverse', 'Dragonfly'];
+    const bearishPatternKeywords = ['Bearish', 'Shooting', 'Evening', 'Upthrust', 'Distribution', 'Double Top', 'Head & Shoulders', 'Gravestone'];
+    
+    let bullishPatternCount = 0;
+    let bearishPatternCount = 0;
+    allPatterns.forEach(p => {
+      if (bullishPatternKeywords.some(kw => p.includes(kw))) bullishPatternCount++;
+      if (bearishPatternKeywords.some(kw => p.includes(kw))) bearishPatternCount++;
+    });
+    
+    const patternBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 
+      bullishPatternCount > bearishPatternCount + 1 ? 'BULLISH' :
+      bearishPatternCount > bullishPatternCount + 1 ? 'BEARISH' : 'NEUTRAL';
+    
+    const patternAlignment = allPatterns.length > 0 
+      ? Math.round((Math.max(bullishPatternCount, bearishPatternCount) / allPatterns.length) * 100) 
+      : 0;
+    
     // Adaptive confidence calculation — multi-timeframe neural weighting
     const mtfBoost = mtfAnalysis.confluence.alignment >= 90 ? 15 :
                      mtfAnalysis.confluence.alignment >= 70 ? 10 :
@@ -2975,6 +2994,20 @@ serve(async (req) => {
       }
     }
     
+    // 5. Pattern bias alignment check — detect conflicts with MTF
+    if (patternBias !== 'NEUTRAL' && patternAlignment >= 50) {
+      const mtfBullish = mtfAnalysis.confluence.overallBias === 'BULLISH';
+      const mtfBearish = mtfAnalysis.confluence.overallBias === 'BEARISH';
+      const patternBullish = patternBias === 'BULLISH';
+      const patternBearish = patternBias === 'BEARISH';
+      
+      if ((patternBullish && mtfBearish) || (patternBearish && mtfBullish)) {
+        allInsights.push(`⚠️ Pattern bias (${patternBias}) conflicts with MTF confluence (${mtfAnalysis.confluence.overallBias})`);
+      } else if ((patternBullish && mtfBullish) || (patternBearish && mtfBearish)) {
+        allInsights.push(`✓ Pattern bias (${patternBias}) aligns with MTF confluence`);
+      }
+    }
+    
     // Pattern success rate adjustments
     for (const [pattern, stats] of Object.entries(adaptiveLearning.patternSuccessRates)) {
       if (patterns.some(p => p.includes(pattern)) && stats.accuracy >= 75 && (stats.wins + stats.losses) >= 3) {
@@ -3023,9 +3056,9 @@ Daily S/R: ${mtfAnalysis.keyLevels.dailySupport.slice(0, 2).map(s => `$${s.toFix
 ${thoughts.map(t => `[Step ${t.step}] ${t.thought}
 → Conclusion: ${t.conclusion} (Weight: ${t.weight}/10)`).join('\n\n')}
 
-🔍 DETECTED PATTERNS (${allPatterns.length})
+🔍 DETECTED PATTERNS (${allPatterns.length}) — ${patternBias === 'BULLISH' ? '🟢 Bullish Bias' : patternBias === 'BEARISH' ? '🔴 Bearish Bias' : '⚪ Mixed'}
 ${allPatterns.slice(0, 10).map((p, i) => `${i + 1}. ${p}`).join('\n')}
-Pattern Confluence: ${allPatterns.length >= 8 ? 'EXCELLENT ⭐⭐⭐⭐⭐' : allPatterns.length >= 5 ? 'STRONG ⭐⭐⭐⭐' : allPatterns.length >= 3 ? 'GOOD ⭐⭐⭐' : allPatterns.length >= 2 ? 'MODERATE ⭐⭐' : 'DEVELOPING ⭐'}
+Pattern Confluence: ${allPatterns.length >= 8 ? 'EXCELLENT' : allPatterns.length >= 5 ? 'STRONG' : allPatterns.length >= 3 ? 'GOOD' : allPatterns.length >= 2 ? 'MODERATE' : 'DEVELOPING'} (${patternAlignment}% directional alignment) ${patternBias === finalBias || patternBias === 'NEUTRAL' || (patternBias === 'BULLISH' && finalBias === 'LONG') || (patternBias === 'BEARISH' && finalBias === 'SHORT') ? '✓ Aligned' : '⚠️ Divergent'}
 
 📊 PROBABILITY MATRIX
 Bull Probability: ${probabilities.bullProb}% ${'█'.repeat(Math.round(probabilities.bullProb / 5))}${'░'.repeat(20 - Math.round(probabilities.bullProb / 5))}
