@@ -44,8 +44,7 @@ export interface LiveMarketData {
   dataSourcesSummary: string;
 }
 
-const SENTIMENT_CACHE_TTL = 30000; // 30 seconds
-const ONCHAIN_POLL_INTERVAL = 15000; // 15 seconds
+const ONCHAIN_POLL_INTERVAL = 10000; // 10 seconds - live only, no caching
 
 export function useLiveMarketData(
   crypto: string,
@@ -177,11 +176,9 @@ export function useLiveMarketData(
     }
   }, [crypto, livePrice.isLive, livePrice.change24h, fallbackChange, checkWhaleActivity]);
 
-  // Fetch sentiment data (cached, less frequent)
+  // Fetch sentiment data - LIVE ONLY, no caching
   const fetchSentimentData = useCallback(async () => {
-    const now = Date.now();
-    if (now - lastSentimentFetchRef.current < SENTIMENT_CACHE_TTL) return;
-    lastSentimentFetchRef.current = now;
+    lastSentimentFetchRef.current = Date.now();
     
     try {
       const currentPrice = livePrice.isLive ? livePrice.price : fallbackPrice;
