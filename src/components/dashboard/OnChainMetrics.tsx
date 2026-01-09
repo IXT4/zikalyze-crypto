@@ -81,7 +81,7 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
   const whaleColor = metrics.whaleActivity.netFlow === 'NET BUYING' ? 'text-success' : 
                      metrics.whaleActivity.netFlow === 'NET SELLING' ? 'text-destructive' : 'text-warning';
 
-  const isConnected = streamStatus === 'connected' || streamStatus === 'polling';
+  const isConnected = streamStatus === 'connected';
   const isConnecting = streamStatus === 'connecting';
 
   const StatusIcon = isConnected ? Radio : isConnecting ? Wifi : WifiOff;
