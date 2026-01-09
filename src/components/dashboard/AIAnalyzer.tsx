@@ -179,9 +179,26 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         const confidenceMatch = fullText.match(/Confidence:\s*(\d+)%/);
         const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : undefined;
         
-        // Extract bias from analysis
-        const biasMatch = fullText.match(/Bias[:\s]+(\w+)/i) || fullText.match(/Signal:\s*(LONG|SHORT)/i);
-        const bias = biasMatch ? biasMatch[1].toUpperCase() : undefined;
+        // Extract bias from analysis - look for Primary Bias or Bias Direction patterns
+        let bias: string | undefined;
+        const primaryBiasMatch = fullText.match(/Primary Bias:\s*(BULLISH|BEARISH|NEUTRAL)/i);
+        if (primaryBiasMatch) {
+          const biasText = primaryBiasMatch[1].toUpperCase();
+          bias = biasText === 'BULLISH' ? 'LONG' : biasText === 'BEARISH' ? 'SHORT' : 'NEUTRAL';
+        } else {
+          const biasDirectionMatch = fullText.match(/Bias Direction:\s*[🟢🔴⚪]\s*(BULLISH|BEARISH|NEUTRAL)/i);
+          if (biasDirectionMatch) {
+            const biasText = biasDirectionMatch[1].toUpperCase();
+            bias = biasText === 'BULLISH' ? 'LONG' : biasText === 'BEARISH' ? 'SHORT' : 'NEUTRAL';
+          } else {
+            // Fallback to looking for LONG/SHORT in executive summary
+            const execBiasMatch = fullText.match(/(BULLISH BIAS|BEARISH BIAS|NEUTRAL)/i);
+            if (execBiasMatch) {
+              const match = execBiasMatch[1].toUpperCase();
+              bias = match.includes('BULLISH') ? 'LONG' : match.includes('BEARISH') ? 'SHORT' : 'NEUTRAL';
+            }
+          }
+        }
         
         saveAnalysis(fullText, price, change, confidence, bias);
       }
