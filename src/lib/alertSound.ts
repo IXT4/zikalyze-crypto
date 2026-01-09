@@ -1,5 +1,8 @@
 // Audio utility for playing notification sounds
-import { getSoundVolume, getSoundType, SoundType } from "@/hooks/useSettings";
+import { getSoundVolume, getSoundType, SoundType, isSoundEnabled } from "@/hooks/useSettings";
+
+// Volume multiplier for louder output
+const VOLUME_BOOST = 1.4;
 
 class AlertSoundPlayer {
   private audioContext: AudioContext | null = null;
@@ -43,6 +46,9 @@ class AlertSoundPlayer {
 
   // Play alert sound based on selected type
   async playAlertSound(overrideType?: SoundType): Promise<void> {
+    // Check if sound is enabled
+    if (!isSoundEnabled()) return;
+    
     // Prevent overlapping sounds
     if (this.isPlaying) return;
     this.isPlaying = true;
@@ -66,6 +72,11 @@ class AlertSoundPlayer {
       console.error("Error playing alert sound:", error);
       this.isPlaying = false;
     }
+  }
+
+  // Get boosted volume
+  private getVolume(): number {
+    return Math.min(1, getSoundVolume() * VOLUME_BOOST);
   }
 
   // Chime sound - pleasant two-tone arpeggio
@@ -93,7 +104,7 @@ class AlertSoundPlayer {
         const startTime = now + index * 0.08;
         const duration = 0.3;
 
-        const volume = getSoundVolume();
+        const volume = this.getVolume();
         gainNode.gain.setValueAtTime(0, startTime);
         gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.02);
         gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
@@ -134,7 +145,7 @@ class AlertSoundPlayer {
         const startTime = now + index * 0.06;
         const duration = 0.4;
 
-        const volume = getSoundVolume();
+        const volume = this.getVolume();
         gainNode.gain.setValueAtTime(0, startTime);
         gainNode.gain.linearRampToValueAtTime(volume * 0.85, startTime + 0.02);
         gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
@@ -157,7 +168,7 @@ class AlertSoundPlayer {
       }
 
       const now = ctx.currentTime;
-      const volume = getSoundVolume();
+      const volume = this.getVolume();
 
       // First beep
       this.createBeepTone(ctx, 880, now, 0.15, volume);
@@ -204,7 +215,7 @@ class AlertSoundPlayer {
       }
 
       const now = ctx.currentTime;
-      const volume = getSoundVolume();
+      const volume = this.getVolume();
 
       // Bell fundamental + harmonics
       const harmonics = [
@@ -249,7 +260,7 @@ class AlertSoundPlayer {
   private playBellHit(ctx: AudioContext, baseFreq: number): void {
     try {
       const now = ctx.currentTime;
-      const volume = getSoundVolume();
+      const volume = this.getVolume();
 
       const harmonics = [
         { freq: baseFreq, amp: 1.0 },
