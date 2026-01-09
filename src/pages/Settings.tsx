@@ -398,6 +398,8 @@ const Settings = () => {
                           <option value="French">French</option>
                           <option value="German">German</option>
                           <option value="Chinese">Chinese</option>
+                          <option value="Japanese">Japanese (日本語)</option>
+                          <option value="Pidgin">Pidgin</option>
                         </select>
                       </div>
 
