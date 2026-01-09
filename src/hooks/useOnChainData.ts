@@ -92,8 +92,7 @@ export function useOnChainData(
   crypto: string, 
   price: number, 
   change: number,
-  cryptoInfo?: CryptoInfo,
-  options?: { disableAlerts?: boolean }
+  cryptoInfo?: CryptoInfo
 ) {
   const [metrics, setMetrics] = useState<OnChainMetrics | null>(null);
   const [loading, setLoading] = useState(false);
@@ -595,12 +594,6 @@ export function useOnChainData(
     whaleTx: { value: number; type: 'IN' | 'OUT'; timestamp: Date },
     currentPrice: number
   ) => {
-    // Skip if alerts are disabled
-    if (options?.disableAlerts) {
-      console.log(`[OnChain] Whale alert skipped (alerts disabled)`);
-      return;
-    }
-    
     const now = Date.now();
     const WHALE_ALERT_COOLDOWN = 5 * 60 * 1000; // 5 minute cooldown per chain
     
@@ -655,7 +648,7 @@ export function useOnChainData(
     } catch (err) {
       console.warn('[OnChain] Whale alert notification error:', err);
     }
-  }, [options?.disableAlerts]);
+  }, []);
 
   const fetchOnChainData = useCallback(async () => {
     const now = Date.now();
