@@ -18,6 +18,7 @@ import { z } from "zod";
 import TwoFactorAuth from "@/components/settings/TwoFactorAuth";
 import { SessionManagement } from "@/components/settings/SessionManagement";
 import NotificationSettings from "@/components/settings/NotificationSettings";
+import EmailDigestSettings from "@/components/settings/EmailDigestSettings";
 import { languageCodes } from "@/i18n/config";
 
 const emailSchema = z.string().email("Please enter a valid email address");
@@ -473,9 +474,14 @@ const Settings = () => {
                     </div>
                   </div>
 
-                  {/* Divider */}
+                  {/* Push Notification Settings */}
                   <div className="border-t border-border pt-6">
                     <NotificationSettings />
+                  </div>
+
+                  {/* Email Digest Settings */}
+                  <div className="border-t border-border pt-6">
+                    <EmailDigestSettings />
                   </div>
                 </div>
               )}
