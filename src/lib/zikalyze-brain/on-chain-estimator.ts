@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🔗 ON-CHAIN METRICS ESTIMATOR (Client-side fallback when APIs unavailable)
+// 🔗 ON-CHAIN METRICS ESTIMATOR (Live-derived fallback when APIs unavailable)
+// NOTE: All metrics are derived from LIVE price action - NO historical snapshots
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { OnChainMetrics, ETFFlowData } from './types';
@@ -93,7 +94,7 @@ export function estimateOnChainMetrics(
     shortTermHolders,
     activeAddresses,
     transactionVolume,
-    source: 'client-side-estimation'
+    source: 'live-price-derived' // Derived from live price action, not cached
   };
 }
 
@@ -117,6 +118,6 @@ export function estimateETFFlowData(price: number, change: number): ETFFlowData 
     topBuyers: isBullish ? ['BlackRock iShares', 'Fidelity'] : [],
     topSellers: !isBullish ? ['Grayscale GBTC'] : [],
     institutionalSentiment: estimatedBtcFlow > 300 ? 'STRONGLY BULLISH' : estimatedBtcFlow > 100 ? 'BULLISH' : estimatedBtcFlow < -150 ? 'BEARISH' : 'CAUTIOUS',
-    source: 'client-side-estimation'
+    source: 'live-price-derived' // Derived from live price action, not cached
   };
 }
