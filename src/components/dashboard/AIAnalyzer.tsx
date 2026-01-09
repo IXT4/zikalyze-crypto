@@ -49,15 +49,15 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const lastFrameTimeRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
-  // Binance live price feed
-  const livePrice = useBinanceLivePrice(crypto, price);
+  // Binance live price feed with fallback to props
+  const livePrice = useBinanceLivePrice(crypto, price, change);
   
   // Use live data when available, fallback to props
-  const currentPrice = livePrice.isLive ? livePrice.price : price;
-  const currentChange = livePrice.isLive ? livePrice.change24h : change;
-  const currentHigh = livePrice.isLive ? livePrice.high24h : high24h;
-  const currentLow = livePrice.isLive ? livePrice.low24h : low24h;
-  const currentVolume = livePrice.isLive ? livePrice.volume : volume;
+  const currentPrice = livePrice.isLive ? livePrice.price : (livePrice.price || price);
+  const currentChange = livePrice.isLive ? livePrice.change24h : (livePrice.change24h || change);
+  const currentHigh = livePrice.isLive && livePrice.high24h ? livePrice.high24h : high24h;
+  const currentLow = livePrice.isLive && livePrice.low24h ? livePrice.low24h : low24h;
+  const currentVolume = livePrice.isLive && livePrice.volume ? livePrice.volume : volume;
   
   const { history, learningStats, loading: historyLoading, saveAnalysis, submitFeedback, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
   const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
@@ -331,10 +331,20 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                       <Radio className="h-3 w-3 animate-pulse" />
                       <span>LIVE</span>
                     </>
+                  ) : livePrice.source === 'cached' ? (
+                    <>
+                      <Activity className="h-3 w-3" />
+                      <span>CACHED</span>
+                    </>
+                  ) : livePrice.source.includes('reconnecting') ? (
+                    <>
+                      <Wifi className="h-3 w-3 animate-pulse" />
+                      <span>RECONNECTING</span>
+                    </>
                   ) : (
                     <>
                       <Wifi className="h-3 w-3" />
-                      <span>{livePrice.source === 'reconnecting' ? 'RECONNECTING' : 'CONNECTING'}</span>
+                      <span>CONNECTING</span>
                     </>
                   )}
                 </div>
@@ -345,7 +355,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                   <span className="text-xs text-primary/70">• {learningStats.total_feedback} feedback</span>
                 )}
                 {livePrice.isLive && (
-                  <span className="text-xs text-success/70">• Binance WebSocket</span>
+                  <span className="text-xs text-success/70">• Live WebSocket</span>
                 )}
               </div>
             </div>
