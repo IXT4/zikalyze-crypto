@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_digest_queue: {
+        Row: {
+          alert_type: string
+          body: string
+          digest_sent_at: string | null
+          id: string
+          included_in_digest: boolean
+          symbol: string
+          title: string
+          triggered_at: string
+          user_id: string
+        }
+        Insert: {
+          alert_type: string
+          body: string
+          digest_sent_at?: string | null
+          id?: string
+          included_in_digest?: boolean
+          symbol: string
+          title: string
+          triggered_at?: string
+          user_id: string
+        }
+        Update: {
+          alert_type?: string
+          body?: string
+          digest_sent_at?: string | null
+          id?: string
+          included_in_digest?: boolean
+          symbol?: string
+          title?: string
+          triggered_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       analysis_history: {
         Row: {
           analysis_text: string
@@ -177,6 +213,51 @@ export type Database = {
           id?: string
           is_enabled?: boolean
           totp_secret?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_email_preferences: {
+        Row: {
+          created_at: string
+          digest_frequency: string
+          digest_time: number
+          email: string
+          id: string
+          include_market_summary: boolean
+          include_price_alerts: boolean
+          include_sentiment: boolean
+          include_whale_activity: boolean
+          last_digest_sent_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          digest_frequency?: string
+          digest_time?: number
+          email: string
+          id?: string
+          include_market_summary?: boolean
+          include_price_alerts?: boolean
+          include_sentiment?: boolean
+          include_whale_activity?: boolean
+          last_digest_sent_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          digest_frequency?: string
+          digest_time?: number
+          email?: string
+          id?: string
+          include_market_summary?: boolean
+          include_price_alerts?: boolean
+          include_sentiment?: boolean
+          include_whale_activity?: boolean
+          last_digest_sent_at?: string | null
           updated_at?: string
           user_id?: string
         }
