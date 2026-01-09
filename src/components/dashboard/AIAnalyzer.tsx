@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BellOff } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -55,15 +55,12 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   // Comprehensive live market data (prices, on-chain, sentiment)
   const liveData = useLiveMarketData(crypto, price, change, high24h, low24h, volume);
   
-  // State to hide notifications during analysis
-  const [notificationsHidden, setNotificationsHidden] = useState(false);
-  
-  // Real-time on-chain data with whale tracking (alerts disabled when analyzing)
+  // Real-time on-chain data with whale tracking
   const { metrics: onChainMetrics, streamStatus } = useOnChainData(crypto, price, change, {
     volume,
     marketCap,
     coinGeckoId: undefined
-  }, { disableAlerts: notificationsHidden });
+  });
   
   // Use live data when available
   const currentPrice = liveData.price;
@@ -143,9 +140,6 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     setFullAnalysis("");
     setProcessingStep(0);
     charIndexRef.current = 0;
-    
-    // Hide notifications during analysis
-    setNotificationsHidden(true);
 
     const stepInterval = setInterval(() => {
       setProcessingStep(prev => prev < processingSteps.length - 1 ? prev + 1 : prev);
@@ -269,8 +263,6 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     } finally {
       clearInterval(stepInterval);
       setIsAnalyzing(false);
-      // Re-enable notifications after analysis completes
-      setTimeout(() => setNotificationsHidden(false), 2000);
     }
   }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, liveData.onChain, liveData.sentiment, useCachedAnalysis, getCacheAge, cacheAnalysis, markFreshData, onChainMetrics]);
 
@@ -391,12 +383,6 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                   <div className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-chart-cyan/20 text-chart-cyan font-medium" title="Live on-chain data connected">
                     <Activity className="h-2.5 w-2.5" />
                     <span>ON-CHAIN</span>
-                  </div>
-                )}
-                {/* Notifications Hidden Indicator */}
-                {notificationsHidden && (
-                  <div className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground animate-pulse" title="Notifications paused during analysis">
-                    <BellOff className="h-2.5 w-2.5" />
                   </div>
                 )}
               </div>
