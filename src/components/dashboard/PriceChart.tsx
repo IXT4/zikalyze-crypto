@@ -6,12 +6,15 @@ import { AlertCircle } from "lucide-react";
 interface PriceChartProps {
   crypto: string;
   coinGeckoId?: string;
+  change24h?: number; // Pass actual 24h change from parent
 }
 
-const PriceChart = ({ crypto, coinGeckoId }: PriceChartProps) => {
-  const { chartData, priceChange, isLoading, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
+const PriceChart = ({ crypto, coinGeckoId, change24h }: PriceChartProps) => {
+  const { chartData, priceChange: chartRangeChange, isLoading, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
   
-  const isPositive = priceChange >= 0;
+  // Use 24h change if provided, otherwise fall back to chart range change
+  const displayChange = change24h !== undefined ? change24h : chartRangeChange;
+  const isPositive = displayChange >= 0;
   const strokeColor = isPositive ? "hsl(142, 76%, 46%)" : "hsl(0, 84%, 60%)";
   const gradientId = `priceGradient-${crypto}`;
   
@@ -124,12 +127,15 @@ const PriceChart = ({ crypto, coinGeckoId }: PriceChartProps) => {
           )}
         </div>
         {isSupported && chartData.length > 0 && (
-          <span className={cn(
-            "rounded-lg px-2 py-1 text-xs font-medium",
-            isPositive ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
-          )}>
-            {isPositive ? "+" : ""}{priceChange.toFixed(2)}%
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              "rounded-lg px-2 py-1 text-xs font-medium",
+              isPositive ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
+            )}>
+              {isPositive ? "+" : ""}{displayChange.toFixed(2)}%
+            </span>
+            <span className="text-[10px] text-muted-foreground">24h</span>
+          </div>
         )}
       </div>
       <div className="h-64">
