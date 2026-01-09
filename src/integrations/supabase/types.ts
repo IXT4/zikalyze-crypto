@@ -408,6 +408,14 @@ export type Database = {
         }
         Returns: Json
       }
+      get_my_login_attempts: {
+        Args: { p_limit?: number }
+        Returns: {
+          attempted_at: string
+          ip_masked: string
+          success: boolean
+        }[]
+      }
       is_authenticated: { Args: never; Returns: boolean }
       record_login_attempt: {
         Args: { p_email: string; p_ip_address?: string; p_success: boolean }
