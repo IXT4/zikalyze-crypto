@@ -3341,11 +3341,6 @@ Structure: ${marketStructure.higherHighs ? 'HH ' : ''}${marketStructure.higherLo
 💧 LIQUIDITY MAP
 ${liquidityPools.slice(0, 4).map(p => `${p.type === 'BUYSIDE' ? '🔵' : '🔴'} ${p.type}: $${p.level.toFixed(2)} (Strength: ${p.strength}%)${p.swept ? ' [SWEPT]' : ''}`).join('\n')}
 
-🎓 LEARNING & MEMORY
-Historical Analyses: ${memory.length} records | Accuracy: ${learningAccuracy}%
-${memory.length > 0 ? `Last Analysis: ${memory[0].bias} at $${memory[0].price.toLocaleString()}${memory[0].wasCorrect !== undefined ? ` — ${memory[0].wasCorrect ? '✓ Correct' : '✗ Incorrect'}` : ''}` : 'Building memory...'}
-Bias Trend: ${memory.length >= 3 ? memory.slice(0, 5).map(m => m.bias === 'LONG' ? '🟢' : m.bias === 'SHORT' ? '🔴' : '⚪').join('') : 'Insufficient data'}
-${learningInsights.length > 0 ? learningInsights.slice(0, 5).map(l => `• ${l}`).join('\n') : ''}
 
 🌐 REAL-WORLD SENTIMENT (LIVE DATA)
 ${sentimentData ? `Fear & Greed Index: ${sentimentData.fearGreed.value} (${sentimentData.fearGreed.label}) ${sentimentData.fearGreed.value >= 70 ? '🟢' : sentimentData.fearGreed.value <= 30 ? '🔴' : '⚪'}
