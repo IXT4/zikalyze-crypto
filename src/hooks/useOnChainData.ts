@@ -111,6 +111,7 @@ export function useOnChainData(
   const wsRetryCountRef = useRef(0);
   const isReconnectingRef = useRef(false);
   const streamStatusRef = useRef<'connected' | 'connecting' | 'disconnected' | 'polling'>('disconnected');
+  const loadingRef = useRef(false);
   const whaleTransactionsRef = useRef<Array<{ value: number; type: 'IN' | 'OUT'; timestamp: Date; chain: string }>>([]);
   const lastWhaleAlertRef = useRef<{ txHash: string; timestamp: number } | null>(null);
   const whaleAlertCooldownRef = useRef<number>(0);
@@ -119,6 +120,10 @@ export function useOnChainData(
   useEffect(() => {
     metricsRef.current = metrics;
   }, [metrics]);
+
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
 
   // Keep streamStatusRef in sync
   useEffect(() => {
@@ -652,7 +657,7 @@ export function useOnChainData(
 
   const fetchOnChainData = useCallback(async () => {
     const now = Date.now();
-    if (loading || (now - lastFetchRef.current < 5000)) return;
+    if (loadingRef.current || (now - lastFetchRef.current < 5000)) return;
     lastFetchRef.current = now;
     
     const cryptoUpper = crypto.toUpperCase();
@@ -1145,12 +1150,14 @@ export function useOnChainData(
         setLoading(false);
       }
     }
-  }, [crypto, change, loading, price, cryptoInfo, fetchLiveWhaleData, sendWhaleAlert]);
+  }, [crypto, change, price, cryptoInfo, fetchLiveWhaleData, sendWhaleAlert]);
 
   // Initialize connections and polling - ALL AUTOMATIC LIVE
   useEffect(() => {
     isMountedRef.current = true;
     lastFetchRef.current = 0;
+    wsRetryCountRef.current = 0;
+    isReconnectingRef.current = false;
     
     // Set connecting immediately for responsive UI
     setStreamStatus('connecting');
