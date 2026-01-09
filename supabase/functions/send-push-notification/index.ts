@@ -30,6 +30,8 @@ interface PushPayload {
   body: string;
   url?: string;
   symbol?: string;
+  type?: 'price_alert' | 'price_surge' | 'price_drop' | 'sentiment_shift' | 'whale_activity' | 'volume_spike';
+  urgency?: 'low' | 'medium' | 'high' | 'critical';
 }
 
 // Enhanced input validation functions
@@ -203,7 +205,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { userId, title, body, url, symbol } = requestBody;
+    const { userId, title, body, url, symbol, type, urgency } = requestBody;
 
     // Validate userId (UUID format)
     const userIdValidation = validateUUID(userId, "userId");
@@ -279,8 +281,10 @@ Deno.serve(async (req) => {
     const payload = { 
       title: titleValidation.sanitized, 
       body: bodyValidation.sanitized, 
-      url: urlValidation.sanitized || "/alerts", 
-      symbol: symbolValidation.sanitized 
+      url: urlValidation.sanitized || "/dashboard/alerts", 
+      symbol: symbolValidation.sanitized,
+      type: type || 'price_alert',
+      urgency: urgency || 'medium'
     };
     let successCount = 0;
     const failedSubscriptions: string[] = [];
