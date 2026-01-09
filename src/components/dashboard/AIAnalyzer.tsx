@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAnalysisHistory, AnalysisRecord } from "@/hooks/useAnalysisHistory";
 import { useLiveMarketData } from "@/hooks/useLiveMarketData";
+import { useAnalysisCache } from "@/hooks/useAnalysisCache";
 import { format } from "date-fns";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -61,6 +62,18 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   
   const { history, learningStats, loading: historyLoading, saveAnalysis, submitFeedback, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
   const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
+
+  // Offline cache support
+  const { 
+    cachedAnalysis, 
+    isOffline, 
+    isUsingCache, 
+    cacheAnalysis, 
+    useCachedAnalysis, 
+    getCacheAge, 
+    hasCache,
+    markFreshData 
+  } = useAnalysisCache(crypto);
 
   // Get current language code
   const currentLanguage = i18n.language || 'en';
@@ -124,6 +137,25 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     }, 600);
 
     try {
+      // Check if offline - use cached analysis if available
+      if (isOffline) {
+        clearInterval(stepInterval);
+        const cached = useCachedAnalysis();
+        if (cached) {
+          setFullAnalysis(cached.analysis);
+          setDisplayedText(cached.analysis);
+          charIndexRef.current = cached.analysis.length;
+          setHasAnalyzed(true);
+          toast.info(`Offline mode: Showing cached analysis from ${getCacheAge()}`);
+          setIsAnalyzing(false);
+          return;
+        } else {
+          toast.error("You're offline and no cached analysis is available.");
+          setIsAnalyzing(false);
+          return;
+        }
+      }
+
       // Use live Binance data when available
       const analysisPrice = currentPrice;
       const analysisChange = currentChange;
@@ -169,6 +201,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
 
       clearInterval(stepInterval);
       setProcessingStep(processingSteps.length - 1);
+      markFreshData(); // Mark that we're receiving fresh data
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -209,8 +242,10 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
 
       setHasAnalyzed(true);
       
-      // Save to history after successful analysis
+      // Cache the analysis for offline use
       if (fullText.length > 100) {
+        cacheAnalysis(fullText, analysisPrice, analysisChange);
+        
         // Extract confidence from analysis text
         const confidenceMatch = fullText.match(/Confidence:\s*(\d+)%/);
         const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : undefined;
@@ -240,12 +275,23 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       }
     } catch (error) {
       console.error("Analysis error:", error);
-      toast.error("Failed to generate analysis. Please try again.");
+      
+      // On error, try to use cached analysis as fallback
+      const cached = useCachedAnalysis();
+      if (cached) {
+        setFullAnalysis(cached.analysis);
+        setDisplayedText(cached.analysis);
+        charIndexRef.current = cached.analysis.length;
+        setHasAnalyzed(true);
+        toast.warning(`Connection issue: Showing cached analysis from ${getCacheAge()}`);
+      } else {
+        toast.error("Failed to generate analysis. Please try again.");
+      }
     } finally {
       clearInterval(stepInterval);
       setIsAnalyzing(false);
     }
-  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, t, liveData.priceIsLive, liveData.onChain, liveData.sentiment]);
+  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, t, liveData.priceIsLive, liveData.onChain, liveData.sentiment, isOffline, useCachedAnalysis, getCacheAge, cacheAnalysis, markFreshData]);
 
   const handleSelectHistory = (record: AnalysisRecord) => {
     setSelectedHistory(record);
@@ -323,24 +369,42 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                 <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">v10.0</span>
                 <span className="text-[9px] px-1.5 py-0.5 rounded bg-chart-cyan/20 text-chart-cyan font-medium">DECENTRALIZED</span>
-                {/* Live Data Indicator */}
-                <div className={cn(
-                  "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium transition-all",
-                  liveData.priceIsLive 
-                    ? "bg-success/20 text-success" 
-                    : "bg-warning/20 text-warning"
-                )}>
-                  {liveData.priceIsLive ? (
-                    <>
-                      <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                      <span>LIVE</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="h-2 w-2 rounded-full bg-warning animate-pulse" />
-                    </>
-                  )}
-                </div>
+                {/* Offline/Live/Cache Indicator */}
+                {isOffline ? (
+                  <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-destructive/20 text-destructive">
+                    <WifiOff className="h-3 w-3" />
+                    <span>OFFLINE</span>
+                  </div>
+                ) : isUsingCache ? (
+                  <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-warning/20 text-warning">
+                    <Database className="h-3 w-3" />
+                    <span>CACHED</span>
+                  </div>
+                ) : (
+                  <div className={cn(
+                    "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium transition-all",
+                    liveData.priceIsLive 
+                      ? "bg-success/20 text-success" 
+                      : "bg-warning/20 text-warning"
+                  )}>
+                    {liveData.priceIsLive ? (
+                      <>
+                        <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                        <span>LIVE</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="h-2 w-2 rounded-full bg-warning animate-pulse" />
+                      </>
+                    )}
+                  </div>
+                )}
+                {/* Cache Available Indicator */}
+                {hasCache && !isUsingCache && !isOffline && (
+                  <div className="flex items-center gap-1 text-[9px] px-1 py-0.5 rounded bg-muted/50 text-muted-foreground" title={`Cached: ${getCacheAge()}`}>
+                    <Database className="h-2.5 w-2.5" />
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">{displayedAccuracy.toFixed(0)}% Accuracy</span>
@@ -417,8 +481,56 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           </div>
         </div>
 
+        {/* Offline/Cache Status Banner */}
+        {(isOffline || isUsingCache) && (
+          <div className={cn(
+            "mb-4 p-3 rounded-xl border flex items-center gap-3",
+            isOffline 
+              ? "bg-gradient-to-r from-destructive/10 to-warning/10 border-destructive/20" 
+              : "bg-gradient-to-r from-warning/10 to-muted/10 border-warning/20"
+          )}>
+            <div className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg",
+              isOffline ? "bg-destructive/20" : "bg-warning/20"
+            )}>
+              {isOffline ? (
+                <WifiOff className="h-4 w-4 text-destructive" />
+              ) : (
+                <Database className="h-4 w-4 text-warning" />
+              )}
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-medium">
+                {isOffline ? "You're Offline" : "Viewing Cached Analysis"}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {isOffline 
+                  ? hasCache 
+                    ? `Last analysis cached ${getCacheAge()} • Click Analyze to view` 
+                    : "No cached analysis available"
+                  : `Cached ${getCacheAge()} • Price at cache: $${cachedAnalysis?.price.toLocaleString()}`
+                }
+              </div>
+            </div>
+            {!isOffline && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  markFreshData();
+                  runAnalysis();
+                }}
+                className="text-xs"
+              >
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Refresh
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Learning Stats Banner */}
-        {learningStats && learningStats.total_feedback >= 3 && (
+        {learningStats && learningStats.total_feedback >= 3 && !isUsingCache && (
           <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-primary/10 to-chart-cyan/10 border border-primary/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -594,14 +706,22 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         {/* Analyze Button */}
         <Button
           onClick={runAnalysis}
-          disabled={isAnalyzing}
+          disabled={isAnalyzing || (isOffline && !hasCache)}
           className={cn(
             "w-full h-11 mb-4 font-semibold",
-            isAnalyzing ? "bg-primary/50" : "bg-gradient-to-r from-primary to-chart-cyan shadow-lg shadow-primary/20"
+            isAnalyzing ? "bg-primary/50" : 
+            isOffline ? (hasCache ? "bg-gradient-to-r from-warning to-warning/80" : "bg-muted") :
+            "bg-gradient-to-r from-primary to-chart-cyan shadow-lg shadow-primary/20"
           )}
         >
           {isAnalyzing ? (
             <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Analyzing {crypto}...</>
+          ) : isOffline ? (
+            hasCache ? (
+              <><Database className="h-4 w-4 mr-2" />View Cached Analysis</>
+            ) : (
+              <><WifiOff className="h-4 w-4 mr-2" />Offline - No Cache</>
+            )
           ) : hasAnalyzed ? (
             <><RefreshCw className="h-4 w-4 mr-2" />Re-Analyze {crypto}</>
           ) : (
