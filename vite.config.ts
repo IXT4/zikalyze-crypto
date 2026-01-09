@@ -6,6 +6,8 @@ import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Use relative paths for IPFS compatibility
+  base: './',
   server: {
     host: "::",
     port: 8080,
@@ -24,8 +26,8 @@ export default defineConfig(({ mode }) => ({
         background_color: "#0a0f1a",
         display: "standalone",
         orientation: "portrait",
-        scope: "/",
-        start_url: "/",
+        scope: "./",
+        start_url: "./",
         icons: [
           {
             src: "/pwa-192x192.png",
