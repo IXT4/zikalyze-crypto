@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-interface BinanceLivePrice {
+interface LivePriceData {
   price: number;
   change24h: number;
   high24h: number;
@@ -9,21 +9,102 @@ interface BinanceLivePrice {
   lastUpdate: number;
   isLive: boolean;
   source: string;
+  exchange: string;
 }
 
-// Multiple WebSocket endpoints for redundancy
-const WS_ENDPOINTS = [
-  "wss://stream.binance.com:9443/ws",
-  "wss://stream.binance.com:443/ws",
-  "wss://fstream.binance.com/ws",
-];
+// Multi-exchange WebSocket configuration
+const EXCHANGES = {
+  binance: {
+    name: "Binance",
+    endpoints: [
+      "wss://stream.binance.com:9443/ws",
+      "wss://stream.binance.com:443/ws",
+    ],
+    getStreamUrl: (symbol: string, endpoint: string) => 
+      `${endpoint}/${symbol.toLowerCase()}usdt@ticker`,
+    parseMessage: (data: any) => {
+      if (data.c) {
+        return {
+          price: parseFloat(data.c),
+          change24h: parseFloat(data.P),
+          high24h: parseFloat(data.h),
+          low24h: parseFloat(data.l),
+          volume: parseFloat(data.q),
+        };
+      }
+      return null;
+    },
+  },
+  coinbase: {
+    name: "Coinbase",
+    endpoints: ["wss://ws-feed.exchange.coinbase.com"],
+    getStreamUrl: (_symbol: string, endpoint: string) => endpoint,
+    getSubscribeMessage: (symbol: string) => ({
+      type: "subscribe",
+      product_ids: [`${symbol.toUpperCase()}-USD`],
+      channels: ["ticker"],
+    }),
+    parseMessage: (data: any, symbol: string) => {
+      if (data.type === "ticker" && data.product_id === `${symbol.toUpperCase()}-USD`) {
+        const price = parseFloat(data.price);
+        const open24h = parseFloat(data.open_24h);
+        const change24h = open24h ? ((price - open24h) / open24h) * 100 : 0;
+        return {
+          price,
+          change24h,
+          high24h: parseFloat(data.high_24h) || 0,
+          low24h: parseFloat(data.low_24h) || 0,
+          volume: parseFloat(data.volume_24h) * price || 0,
+        };
+      }
+      return null;
+    },
+  },
+  kraken: {
+    name: "Kraken",
+    endpoints: ["wss://ws.kraken.com"],
+    getStreamUrl: (_symbol: string, endpoint: string) => endpoint,
+    getSubscribeMessage: (symbol: string) => {
+      // Kraken uses XBT for Bitcoin
+      const krakenSymbol = symbol.toUpperCase() === "BTC" ? "XBT" : symbol.toUpperCase();
+      return {
+        event: "subscribe",
+        pair: [`${krakenSymbol}/USD`],
+        subscription: { name: "ticker" },
+      };
+    },
+    parseMessage: (data: any, symbol: string) => {
+      // Kraken ticker format: [channelID, tickerData, channelName, pair]
+      if (Array.isArray(data) && data.length >= 4 && data[2] === "ticker") {
+        const ticker = data[1];
+        if (ticker && ticker.c) {
+          const price = parseFloat(ticker.c[0]);
+          const open = parseFloat(ticker.o[1]); // Today's opening price
+          const change24h = open ? ((price - open) / open) * 100 : 0;
+          return {
+            price,
+            change24h,
+            high24h: parseFloat(ticker.h[1]) || 0,
+            low24h: parseFloat(ticker.l[1]) || 0,
+            volume: parseFloat(ticker.v[1]) * price || 0,
+          };
+        }
+      }
+      return null;
+    },
+  },
+};
 
-const MAX_RECONNECT_ATTEMPTS = 5;
-const INITIAL_RECONNECT_DELAY = 1000;
-const MAX_RECONNECT_DELAY = 30000;
+type ExchangeKey = keyof typeof EXCHANGES;
+const EXCHANGE_ORDER: ExchangeKey[] = ["binance", "coinbase", "kraken"];
+
+const MAX_ATTEMPTS_PER_EXCHANGE = 2;
+const CONNECTION_TIMEOUT = 8000;
+const RECONNECT_DELAY = 2000;
+const FALLBACK_RETRY_DELAY = 60000;
 
 export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fallbackChange?: number) => {
-  const [liveData, setLiveData] = useState<BinanceLivePrice>({
+  const [liveData, setLiveData] = useState<LivePriceData>({
     price: fallbackPrice || 0,
     change24h: fallbackChange || 0,
     high24h: 0,
@@ -32,19 +113,29 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
     lastUpdate: Date.now(),
     isLive: false,
     source: "initializing",
+    exchange: "",
   });
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
-  const reconnectAttemptsRef = useRef(0);
+  
+  // Exchange rotation state
+  const currentExchangeIndexRef = useRef(0);
   const currentEndpointIndexRef = useRef(0);
-  const hasConnectedOnceRef = useRef(false);
+  const attemptsOnCurrentExchangeRef = useRef(0);
+  const hasConnectedRef = useRef(false);
 
-  const connect = useCallback(() => {
-    if (!isMountedRef.current) return;
-    
-    // Clean up existing connection silently
+  const cleanup = useCallback(() => {
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
     if (wsRef.current) {
       try {
         wsRef.current.onclose = null;
@@ -57,36 +148,68 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
       }
       wsRef.current = null;
     }
+  }, []);
 
-    const normalizedSymbol = symbol.toUpperCase();
-    const pair = `${normalizedSymbol}USDT`;
+  const moveToNextExchange = useCallback(() => {
+    attemptsOnCurrentExchangeRef.current = 0;
+    currentEndpointIndexRef.current = 0;
+    currentExchangeIndexRef.current++;
     
-    // Cycle through endpoints on reconnect attempts
-    const endpointIndex = currentEndpointIndexRef.current % WS_ENDPOINTS.length;
-    const baseUrl = WS_ENDPOINTS[endpointIndex];
-    const streamUrl = `${baseUrl}/${pair.toLowerCase()}@ticker`;
+    if (currentExchangeIndexRef.current >= EXCHANGE_ORDER.length) {
+      // All exchanges exhausted - reset and try again later
+      currentExchangeIndexRef.current = 0;
+      return false;
+    }
+    return true;
+  }, []);
+
+  const connect = useCallback(() => {
+    if (!isMountedRef.current) return;
+    
+    cleanup();
+
+    const exchangeKey = EXCHANGE_ORDER[currentExchangeIndexRef.current];
+    const exchange = EXCHANGES[exchangeKey];
+    const endpointIndex = currentEndpointIndexRef.current % exchange.endpoints.length;
+    const endpoint = exchange.endpoints[endpointIndex];
+    
+    const streamUrl = exchange.getStreamUrl(symbol, endpoint);
 
     try {
       const ws = new WebSocket(streamUrl);
       wsRef.current = ws;
 
-      // Connection timeout - if not connected within 10s, try next endpoint
-      const connectionTimeout = setTimeout(() => {
+      // Connection timeout
+      connectionTimeoutRef.current = setTimeout(() => {
         if (ws.readyState !== WebSocket.OPEN) {
           ws.close();
         }
-      }, 10000);
+      }, CONNECTION_TIMEOUT);
 
       ws.onopen = () => {
         if (!isMountedRef.current) return;
-        clearTimeout(connectionTimeout);
         
-        // Reset reconnect state on successful connection
-        reconnectAttemptsRef.current = 0;
-        hasConnectedOnceRef.current = true;
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+        }
+
+        // Send subscribe message if needed (Coinbase, Kraken)
+        if ('getSubscribeMessage' in exchange) {
+          const subscribeMsg = exchange.getSubscribeMessage(symbol);
+          ws.send(JSON.stringify(subscribeMsg));
+        }
+
+        // Reset state on successful connection
+        attemptsOnCurrentExchangeRef.current = 0;
+        hasConnectedRef.current = true;
         
-        console.log(`✅ Live price feed connected for ${pair}`);
-        setLiveData(prev => ({ ...prev, isLive: true, source: "Live Feed" }));
+        console.log(`✅ ${exchange.name} live feed connected for ${symbol.toUpperCase()}`);
+        setLiveData(prev => ({ 
+          ...prev, 
+          isLive: true, 
+          source: "Live Feed",
+          exchange: exchange.name,
+        }));
       };
 
       ws.onmessage = (event) => {
@@ -94,19 +217,19 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
         
         try {
           const data = JSON.parse(event.data);
+          const parsed = exchange.parseMessage(data, symbol);
           
-          // Binance ticker format
-          // c: last price, P: 24h change %, h: high, l: low, q: quote volume
-          if (data.c) {
+          if (parsed) {
             setLiveData({
-              price: parseFloat(data.c),
-              change24h: parseFloat(data.P),
-              high24h: parseFloat(data.h),
-              low24h: parseFloat(data.l),
-              volume: parseFloat(data.q),
+              price: parsed.price,
+              change24h: parsed.change24h,
+              high24h: parsed.high24h,
+              low24h: parsed.low24h,
+              volume: parsed.volume,
               lastUpdate: Date.now(),
               isLive: true,
               source: "Live Feed",
+              exchange: exchange.name,
             });
           }
         } catch {
@@ -115,105 +238,104 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
       };
 
       ws.onerror = () => {
-        clearTimeout(connectionTimeout);
         // Error handled in onclose
       };
 
       ws.onclose = () => {
-        clearTimeout(connectionTimeout);
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+        }
         if (!isMountedRef.current) return;
         
-        reconnectAttemptsRef.current++;
+        attemptsOnCurrentExchangeRef.current++;
         
-        // Check if we should keep trying
-        if (reconnectAttemptsRef.current <= MAX_RECONNECT_ATTEMPTS) {
-          // Calculate delay with exponential backoff
-          const delay = Math.min(
-            INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttemptsRef.current - 1),
-            MAX_RECONNECT_DELAY
-          );
-          
-          // Try next endpoint on failures
-          if (reconnectAttemptsRef.current >= 2) {
-            currentEndpointIndexRef.current++;
-          }
+        // Try next endpoint on same exchange
+        if (attemptsOnCurrentExchangeRef.current < MAX_ATTEMPTS_PER_EXCHANGE) {
+          currentEndpointIndexRef.current++;
           
           setLiveData(prev => ({ 
             ...prev, 
             isLive: false, 
-            source: `reconnecting (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})` 
+            source: `reconnecting ${exchange.name}`,
+            exchange: exchange.name,
           }));
           
-          // Reconnect after delay
           reconnectTimeoutRef.current = setTimeout(() => {
-            if (isMountedRef.current) {
-              connect();
-            }
-          }, delay);
+            if (isMountedRef.current) connect();
+          }, RECONNECT_DELAY);
+          return;
+        }
+        
+        // Move to next exchange
+        if (moveToNextExchange()) {
+          const nextExchange = EXCHANGES[EXCHANGE_ORDER[currentExchangeIndexRef.current]];
+          console.log(`🔄 Trying ${nextExchange.name} for ${symbol.toUpperCase()}...`);
+          
+          setLiveData(prev => ({ 
+            ...prev, 
+            isLive: false, 
+            source: `trying ${nextExchange.name}`,
+            exchange: "",
+          }));
+          
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (isMountedRef.current) connect();
+          }, RECONNECT_DELAY);
         } else {
-          // Max attempts reached - use fallback data
-          console.log(`📡 Using cached data for ${pair} (WebSocket unavailable)`);
+          // All exchanges exhausted - use cached data
+          console.log(`📡 Using cached data for ${symbol.toUpperCase()}`);
           setLiveData(prev => ({ 
             ...prev, 
             isLive: false, 
             source: "cached",
+            exchange: "",
             price: fallbackPrice || prev.price,
             change24h: fallbackChange || prev.change24h,
           }));
           
-          // Try again after a longer delay (1 minute)
+          // Retry from first exchange after delay
           reconnectTimeoutRef.current = setTimeout(() => {
             if (isMountedRef.current) {
-              reconnectAttemptsRef.current = 0;
+              currentExchangeIndexRef.current = 0;
               currentEndpointIndexRef.current = 0;
+              attemptsOnCurrentExchangeRef.current = 0;
               connect();
             }
-          }, 60000);
+          }, FALLBACK_RETRY_DELAY);
         }
       };
     } catch {
-      // Failed to create WebSocket - use fallback
+      // Failed to create WebSocket
       setLiveData(prev => ({ 
         ...prev, 
         isLive: false, 
         source: "cached",
+        exchange: "",
         price: fallbackPrice || prev.price,
       }));
     }
-  }, [symbol, fallbackPrice, fallbackChange]);
+  }, [symbol, fallbackPrice, fallbackChange, cleanup, moveToNextExchange]);
 
   useEffect(() => {
     isMountedRef.current = true;
-    reconnectAttemptsRef.current = 0;
+    currentExchangeIndexRef.current = 0;
     currentEndpointIndexRef.current = 0;
+    attemptsOnCurrentExchangeRef.current = 0;
+    hasConnectedRef.current = false;
     
-    // Small delay before connecting to avoid race conditions
+    // Small delay before connecting
     const initTimeout = setTimeout(() => {
       if (isMountedRef.current) {
         connect();
       }
-    }, 500);
+    }, 300);
 
     return () => {
       isMountedRef.current = false;
       clearTimeout(initTimeout);
-      
-      if (wsRef.current) {
-        try {
-          wsRef.current.onclose = null;
-          wsRef.current.onerror = null;
-          wsRef.current.close();
-        } catch {
-          // Ignore cleanup errors
-        }
-        wsRef.current = null;
-      }
-      
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
+      cleanup();
     };
-  }, [connect]);
+  }, [connect, cleanup]);
 
   // Update with fallback data when props change and not live
   useEffect(() => {
