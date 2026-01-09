@@ -105,7 +105,7 @@ const Landing = () => {
           {t("landing.heroDescription")}
         </p>
 
-        <div className="flex flex-col gap-3 w-full max-w-sm sm:flex-row sm:max-w-none sm:gap-4 lg:gap-6">
+        <div className="flex flex-col gap-3 w-full max-w-sm sm:flex-row sm:justify-center sm:max-w-none sm:gap-4 lg:gap-6">
           <Button 
             size="lg" 
             onClick={() => handleNavigate("/auth")}
