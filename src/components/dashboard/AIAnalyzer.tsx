@@ -145,6 +145,40 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       const analysisLow = currentLow;
       const analysisVolume = currentVolume;
 
+      // Adapt on-chain data format for client-side analysis
+      const adaptedOnChainData = liveData.onChain ? {
+        exchangeNetFlow: liveData.onChain.exchangeNetFlow,
+        whaleActivity: liveData.onChain.whaleActivity,
+        longTermHolders: { 
+          accumulating: liveData.onChain.activeAddresses.trend === 'INCREASING', 
+          change7d: liveData.onChain.activeAddresses.change24h * 7, 
+          sentiment: liveData.onChain.activeAddresses.trend === 'INCREASING' ? 'BULLISH' : 'NEUTRAL' 
+        },
+        shortTermHolders: { 
+          behavior: 'NEUTRAL', 
+          profitLoss: 0 
+        },
+        activeAddresses: liveData.onChain.activeAddresses,
+        transactionVolume: liveData.onChain.transactionVolume,
+        mempoolData: { 
+          unconfirmedTxs: liveData.onChain.mempoolData.unconfirmedTxs, 
+          mempoolSize: liveData.onChain.mempoolData.unconfirmedTxs * 250, // estimate size
+          avgFeeRate: liveData.onChain.mempoolData.avgFeeRate 
+        },
+        source: 'live-market-data'
+      } : undefined;
+
+      // Adapt sentiment data format
+      const adaptedSentimentData = liveData.sentiment ? {
+        fearGreed: { 
+          value: liveData.sentiment.fearGreedValue, 
+          label: liveData.sentiment.fearGreedLabel 
+        },
+        social: liveData.sentiment.sentimentScore !== undefined ? { 
+          overall: { score: liveData.sentiment.sentimentScore } 
+        } : undefined
+      } : undefined;
+
       // Run analysis entirely client-side
       const result = runClientSideAnalysis({
         crypto,
@@ -155,8 +189,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         volume: analysisVolume,
         marketCap,
         language: currentLanguage,
-        onChainData: liveData.onChain,
-        sentimentData: liveData.sentiment
+        onChainData: adaptedOnChainData,
+        sentimentData: adaptedSentimentData
       });
 
       clearInterval(stepInterval);
@@ -174,126 +208,6 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       }
 
       toast.success("Analysis complete — 100% client-side, zero server calls");
-      setIsAnalyzing(false);
-      return;
-
-      // Use live Binance data when available
-      const analysisPrice = currentPrice;
-      const analysisChange = currentChange;
-      const analysisHigh = currentHigh;
-      const analysisLow = currentLow;
-      const analysisVolume = currentVolume;
-      
-      const response = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ 
-          crypto, 
-          price: analysisPrice, 
-          change: analysisChange, 
-          high24h: analysisHigh, 
-          low24h: analysisLow, 
-          volume: analysisVolume, 
-          marketCap, 
-          language: currentLanguage,
-          dataSource: liveData.dataSourcesSummary,
-          // Pass live on-chain and sentiment data for enhanced analysis
-          liveOnChain: liveData.onChain,
-          liveSentiment: liveData.sentiment,
-        }),
-      });
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          toast.error("Rate limit exceeded. Please try again later.");
-          throw new Error("Rate limit exceeded");
-        }
-        if (response.status === 402 || response.status === 503) {
-          toast.error("Service temporarily unavailable.");
-          throw new Error("Service unavailable");
-        }
-        throw new Error("Failed to start analysis");
-      }
-
-      if (!response.body) throw new Error("No response body");
-
-      clearInterval(stepInterval);
-      setProcessingStep(processingSteps.length - 1);
-      markFreshData(); // Mark that we're receiving fresh data
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = "";
-      let fullText = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        textBuffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) {
-              fullText += content;
-              setFullAnalysis(fullText);
-            }
-          } catch {
-            textBuffer = line + "\n" + textBuffer;
-            break;
-          }
-        }
-      }
-
-      setHasAnalyzed(true);
-      
-      // Cache the analysis for offline use
-      if (fullText.length > 100) {
-        cacheAnalysis(fullText, analysisPrice, analysisChange);
-        
-        // Extract confidence from analysis text
-        const confidenceMatch = fullText.match(/Confidence:\s*(\d+)%/);
-        const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : undefined;
-        
-        // Extract bias from analysis - look for Primary Bias or Bias Direction patterns
-        let bias: string | undefined;
-        const primaryBiasMatch = fullText.match(/Primary Bias:\s*(BULLISH|BEARISH|NEUTRAL)/i);
-        if (primaryBiasMatch) {
-          const biasText = primaryBiasMatch[1].toUpperCase();
-          bias = biasText === 'BULLISH' ? 'LONG' : biasText === 'BEARISH' ? 'SHORT' : 'NEUTRAL';
-        } else {
-          const biasDirectionMatch = fullText.match(/Bias Direction:\s*[🟢🔴⚪]\s*(BULLISH|BEARISH|NEUTRAL)/i);
-          if (biasDirectionMatch) {
-            const biasText = biasDirectionMatch[1].toUpperCase();
-            bias = biasText === 'BULLISH' ? 'LONG' : biasText === 'BEARISH' ? 'SHORT' : 'NEUTRAL';
-          } else {
-            // Fallback to looking for LONG/SHORT in executive summary
-            const execBiasMatch = fullText.match(/(BULLISH BIAS|BEARISH BIAS|NEUTRAL)/i);
-            if (execBiasMatch) {
-              const match = execBiasMatch[1].toUpperCase();
-              bias = match.includes('BULLISH') ? 'LONG' : match.includes('BEARISH') ? 'SHORT' : 'NEUTRAL';
-            }
-          }
-        }
-        
-        saveAnalysis(fullText, price, change, confidence, bias);
-      }
     } catch (error) {
       console.error("Analysis error:", error);
       
@@ -312,7 +226,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       clearInterval(stepInterval);
       setIsAnalyzing(false);
     }
-  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, t, liveData.priceIsLive, liveData.onChain, liveData.sentiment, isOffline, useCachedAnalysis, getCacheAge, cacheAnalysis, markFreshData]);
+  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, liveData.onChain, liveData.sentiment, useCachedAnalysis, getCacheAge, cacheAnalysis, markFreshData]);
 
   const handleSelectHistory = (record: AnalysisRecord) => {
     setSelectedHistory(record);
