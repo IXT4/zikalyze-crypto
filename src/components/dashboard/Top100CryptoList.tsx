@@ -403,6 +403,7 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                 onChange={(e) => setTargetPrice(e.target.value)}
                 placeholder="Enter target price"
                 step="any"
+                className="h-12 text-lg font-semibold"
               />
             </div>
 
