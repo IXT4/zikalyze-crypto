@@ -82,11 +82,11 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
                      metrics.whaleActivity.netFlow === 'NET SELLING' ? 'text-destructive' : 'text-warning';
 
   const isConnected = streamStatus === 'connected';
-  const isPolling = streamStatus === 'polling';
+  const isConnecting = streamStatus === 'connecting';
 
-  const StatusIcon = isConnected ? Radio : isPolling ? Wifi : WifiOff;
-  const statusColor = isConnected ? 'text-success' : isPolling ? 'text-primary' : 'text-muted-foreground';
-  const statusLabel = isConnected ? 'LIVE STREAM' : isPolling ? 'LIVE POLL' : 'CONNECTING';
+  const StatusIcon = isConnected ? Radio : isConnecting ? Wifi : WifiOff;
+  const statusColor = isConnected ? 'text-success' : isConnecting ? 'text-primary animate-pulse' : 'text-muted-foreground';
+  const statusLabel = isConnected ? 'LIVE' : isConnecting ? 'CONNECTING' : 'RECONNECTING';
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 relative overflow-hidden">
@@ -121,7 +121,7 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
             <Activity className="h-5 w-5 text-primary" />
             <span className={cn(
               "absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full",
-              isConnected ? "bg-success animate-pulse" : isPolling ? "bg-primary animate-pulse" : "bg-muted-foreground"
+              isConnected ? "bg-success animate-pulse" : isConnecting ? "bg-primary animate-pulse" : "bg-muted-foreground"
             )} />
           </div>
           <h3 className="font-semibold text-foreground">24h On-Chain Data</h3>
@@ -130,7 +130,7 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
           </span>
           <div className={cn(
             "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium",
-            isConnected ? "bg-success/20 text-success" : isPolling ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+            isConnected ? "bg-success/20 text-success" : isConnecting ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
           )}>
             <StatusIcon className="h-3 w-3" />
             {statusLabel}
