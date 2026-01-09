@@ -6,9 +6,15 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  APP_NAME: zikalyze
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    outputs:
+      ipfs_hash: ${{ steps.pinata.outputs.ipfs_hash }}
+      ens_content_hash: ${{ steps.pinata.outputs.ens_content_hash }}
     
     steps:
       - name: Checkout code
@@ -32,10 +38,7 @@ jobs:
           PINATA_API_KEY: ${{ secrets.PINATA_API_KEY }}
           PINATA_SECRET_KEY: ${{ secrets.PINATA_SECRET_KEY }}
         run: |
-          # Install pinata SDK
-          npm install -g @pinata/sdk
-          
-          # Create upload script
+          # Create upload script with ENS content hash output
           cat << 'EOF' > upload.mjs
           import axios from 'axios';
           import FormData from 'form-data';
@@ -44,6 +47,7 @@ jobs:
           
           const PINATA_API_KEY = process.env.PINATA_API_KEY;
           const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY;
+          const APP_NAME = process.env.APP_NAME || 'zikalyze';
           
           async function getAllFiles(dirPath, arrayOfFiles = []) {
             const files = fs.readdirSync(dirPath);
@@ -58,6 +62,11 @@ jobs:
             return arrayOfFiles;
           }
           
+          // Convert CIDv1 to ENS content hash format
+          function toEnsContentHash(cidV1) {
+            return `ipfs://${cidV1}`;
+          }
+          
           async function uploadToPinata() {
             const distPath = './dist';
             const files = await getAllFiles(distPath);
@@ -67,12 +76,18 @@ jobs:
             for (const filePath of files) {
               const relativePath = path.relative(distPath, filePath);
               formData.append('file', fs.createReadStream(filePath), {
-                filepath: `zikalyze/${relativePath}`
+                filepath: `${APP_NAME}/${relativePath}`
               });
             }
             
+            const timestamp = new Date().toISOString().split('T')[0];
             formData.append('pinataMetadata', JSON.stringify({
-              name: `Zikalyze-${new Date().toISOString()}`
+              name: `${APP_NAME}-${timestamp}`,
+              keyvalues: {
+                app: APP_NAME,
+                version: timestamp,
+                type: 'production'
+              }
             }));
             
             formData.append('pinataOptions', JSON.stringify({
@@ -93,22 +108,82 @@ jobs:
               }
             );
             
-            console.log(`IPFS_HASH=${response.data.IpfsHash}`);
-            console.log(`Gateway URL: https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}/zikalyze/`);
+            const ipfsHash = response.data.IpfsHash;
+            const ensContentHash = toEnsContentHash(ipfsHash);
+            
+            // Output for GitHub Actions
+            const outputFile = process.env.GITHUB_OUTPUT;
+            if (outputFile) {
+              fs.appendFileSync(outputFile, `ipfs_hash=${ipfsHash}\n`);
+              fs.appendFileSync(outputFile, `ens_content_hash=${ensContentHash}\n`);
+            }
+            
+            console.log('='.repeat(60));
+            console.log('🚀 IPFS DEPLOYMENT SUCCESSFUL');
+            console.log('='.repeat(60));
+            console.log(`\n📦 IPFS CID: ${ipfsHash}`);
+            console.log(`\n🔗 ACCESS URLS:`);
+            console.log(`   Pinata:  https://gateway.pinata.cloud/ipfs/${ipfsHash}/${APP_NAME}/`);
+            console.log(`   IPFS.io: https://ipfs.io/ipfs/${ipfsHash}/${APP_NAME}/`);
+            console.log(`   DWeb:    https://${ipfsHash}.ipfs.dweb.link/${APP_NAME}/`);
+            console.log(`\n🏷️  ENS CONTENT HASH:`);
+            console.log(`   ${ensContentHash}`);
+            console.log(`\n📝 To link to ENS (e.g., zikalyze.eth):`);
+            console.log(`   1. Go to https://app.ens.domains`);
+            console.log(`   2. Select your ENS domain`);
+            console.log(`   3. Click "Add/Edit Record" → "Content Hash"`);
+            console.log(`   4. Paste: ${ensContentHash}`);
+            console.log('='.repeat(60));
+            
+            // Save deployment info
+            const deploymentInfo = {
+              timestamp: new Date().toISOString(),
+              ipfsHash,
+              ensContentHash,
+              urls: {
+                pinata: `https://gateway.pinata.cloud/ipfs/${ipfsHash}/${APP_NAME}/`,
+                ipfs: `https://ipfs.io/ipfs/${ipfsHash}/${APP_NAME}/`,
+                dweb: `https://${ipfsHash}.ipfs.dweb.link/${APP_NAME}/`
+              }
+            };
+            
+            fs.writeFileSync('ipfs-deployment.json', JSON.stringify(deploymentInfo, null, 2));
           }
           
-          uploadToPinata().catch(console.error);
+          uploadToPinata().catch(err => {
+            console.error('Deployment failed:', err.message);
+            process.exit(1);
+          });
           EOF
           
           node upload.mjs
 
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipfs-deployment
+          path: ipfs-deployment.json
+
       - name: Create deployment summary
         run: |
-          echo "## 🚀 IPFS Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Zikalyze IPFS Deployment" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Your Zikalyze app has been pinned to IPFS!" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 IPFS Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **CID:** \`${{ steps.pinata.outputs.ipfs_hash }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **ENS Content Hash:** \`${{ steps.pinata.outputs.ens_content_hash }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Access URLs:" >> $GITHUB_STEP_SUMMARY
-          echo "- Pinata Gateway: Check the workflow logs for the IPFS hash" >> $GITHUB_STEP_SUMMARY
-          echo "- IPFS.io: \`https://ipfs.io/ipfs/<HASH>/zikalyze/\`" >> $GITHUB_STEP_SUMMARY
-          echo "- DWeb: \`https://<HASH>.ipfs.dweb.link/zikalyze/\`" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Access URLs" >> $GITHUB_STEP_SUMMARY
+          echo "- [Pinata Gateway](https://gateway.pinata.cloud/ipfs/${{ steps.pinata.outputs.ipfs_hash }}/zikalyze/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [IPFS.io](https://ipfs.io/ipfs/${{ steps.pinata.outputs.ipfs_hash }}/zikalyze/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [DWeb Link](https://${{ steps.pinata.outputs.ipfs_hash }}.ipfs.dweb.link/zikalyze/)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🏷️ ENS Setup" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to [ENS App](https://app.ens.domains)" >> $GITHUB_STEP_SUMMARY
+          echo "2. Select your domain (e.g., zikalyze.eth)" >> $GITHUB_STEP_SUMMARY
+          echo "3. Add Content Hash record with: \`${{ steps.pinata.outputs.ens_content_hash }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 Access via ENS" >> $GITHUB_STEP_SUMMARY
+          echo "Once configured, access via:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`zikalyze.eth.limo\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`zikalyze.eth.link\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Brave/Opera browsers: \`zikalyze.eth\`" >> $GITHUB_STEP_SUMMARY
