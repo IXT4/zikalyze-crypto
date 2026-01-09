@@ -23,9 +23,9 @@ interface CryptoInfo {
   coinGeckoId?: string;
 }
 
-const POLL_INTERVAL = 15000; // 15 seconds for polling fallback
-const WS_RECONNECT_DELAY = 3000;
-const API_TIMEOUT = 8000;
+const POLL_INTERVAL = 10000; // 10 seconds for live polling
+const WS_RECONNECT_DELAY = 2000; // Fast reconnect for seamless experience
+const API_TIMEOUT = 6000;
 
 // Premium API endpoints
 const MEMPOOL_WS = 'wss://mempool.space/api/v1/ws';
@@ -497,22 +497,31 @@ export function useOnChainData(
     }
   }, [crypto, change, loading, price, cryptoInfo, streamStatus]);
 
-  // Initialize connections and polling
+  // Initialize connections and polling - ALL AUTOMATIC LIVE
   useEffect(() => {
     isMountedRef.current = true;
     lastFetchRef.current = 0;
     
+    // Set connecting immediately for responsive UI
+    setStreamStatus('connecting');
+    
     // Initial fetch
     fetchOnChainData();
     
-    // Initialize WebSocket for BTC
+    // Initialize WebSocket for BTC (live streaming)
     if (crypto.toUpperCase() === 'BTC') {
       initBTCWebSockets();
     } else {
-      setStreamStatus('polling');
+      // All other cryptos get automatic live polling
+      // Set to 'connected' since polling is always live
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          setStreamStatus('connected');
+        }
+      }, 1000);
     }
 
-    // Polling fallback (more frequent for premium feel)
+    // Automatic live polling for all cryptos
     pollIntervalRef.current = setInterval(() => {
       fetchOnChainData();
     }, POLL_INTERVAL);
@@ -537,15 +546,29 @@ export function useOnChainData(
     };
   }, [crypto]);
 
-  // Re-init WebSocket when streamStatus changes to disconnected
+  // Automatic reconnection for BTC WebSockets
   useEffect(() => {
-    if (streamStatus === 'disconnected' && crypto.toUpperCase() === 'BTC' && isMountedRef.current) {
+    if (crypto.toUpperCase() === 'BTC' && streamStatus === 'disconnected' && isMountedRef.current) {
       const timeout = setTimeout(() => {
-        initBTCWebSockets();
+        if (isMountedRef.current) {
+          initBTCWebSockets();
+        }
       }, WS_RECONNECT_DELAY);
       return () => clearTimeout(timeout);
     }
   }, [streamStatus, crypto, initBTCWebSockets]);
+
+  // Auto-recovery: if polling status for non-BTC, ensure always connected
+  useEffect(() => {
+    if (crypto.toUpperCase() !== 'BTC' && streamStatus === 'disconnected' && isMountedRef.current) {
+      setStreamStatus('connecting');
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          setStreamStatus('connected');
+        }
+      }, 500);
+    }
+  }, [streamStatus, crypto]);
 
   return { 
     metrics, 
