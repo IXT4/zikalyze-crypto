@@ -3042,7 +3042,10 @@ serve(async (req) => {
       }
     }
     
-    const adjustedConfidence = Math.min(98, Math.max(55, probabilities.confidence + mtfBoost + realDataBoost + scenarioBoost + memoryBoost + sentimentBoost));
+    // Cap confidence at 78% max — crypto volatility makes higher confidence unrealistic
+    // Volume-adjusted: reduce confidence further if volume is low
+    const volumeAdjustment = volumeStrength === 'LOW' ? -10 : volumeStrength === 'MODERATE' ? -3 : 0;
+    const adjustedConfidence = Math.min(78, Math.max(45, probabilities.confidence + mtfBoost + realDataBoost + scenarioBoost + memoryBoost + sentimentBoost + volumeAdjustment));
     
     // Adaptive bias synthesis — MTF confluence + scenario learning + probability alignment
     // Priority: Probability Matrix > MTF Confluence > Scenario Learning > Chart Reinforcement
@@ -3165,6 +3168,93 @@ serve(async (req) => {
       }
     }
     
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ⏱️ RECALCULATE 15M PRECISION ENTRY TO ALIGN WITH FINAL BIAS
+    // ═══════════════════════════════════════════════════════════════════════════
+    // The MTF analysis calculated precision entry based on htfTrend, but we need to
+    // align it with the final synthesized bias to avoid contradictions
+    
+    let alignedPrecisionEntry = { ...mtfAnalysis.precisionEntry };
+    
+    if (mtfAnalysis.tf15M && finalBias !== 'NEUTRAL') {
+      const m15 = mtfAnalysis.tf15M;
+      const currentPrice = m15.candles[m15.candles.length - 1].close;
+      const m15Trend = m15.trendAnalysis.direction;
+      const m15Strength = m15.trendAnalysis.strength;
+      const m15Volume = m15.volumeProfile;
+      const m15Supports = m15.supportResistance.supports;
+      const m15Resistances = m15.supportResistance.resistances;
+      const m15Patterns = m15.candlePatterns;
+      
+      const nearestSupport = m15Supports.length > 0 ? m15Supports[0] : currentPrice * 0.99;
+      const nearestResistance = m15Resistances.length > 0 ? m15Resistances[0] : currentPrice * 1.01;
+      const distToSupport = ((currentPrice - nearestSupport) / currentPrice) * 100;
+      const distToResistance = ((nearestResistance - currentPrice) / currentPrice) * 100;
+      
+      // Recalculate based on FINAL BIAS (not htfTrend)
+      if (finalBias === 'LONG') {
+        // BULLISH entry aligned with final bias
+        if (m15Trend === 'BULLISH' && m15Strength >= 70 && m15Volume.currentVsAvg >= 120) {
+          alignedPrecisionEntry = {
+            ...alignedPrecisionEntry,
+            timing: 'NOW',
+            zone: `Current price zone ($${currentPrice.toFixed(2)})`,
+            trigger: 'BUY — Bullish momentum confirmed, enter on minor pullback',
+            confirmation: m15Patterns.length > 0 ? m15Patterns[0] : 'Strong green candle close + volume',
+            invalidation: `Below $${nearestSupport.toFixed(2)} (structure break)`
+          };
+        } else if (distToSupport < 2 && m15Patterns.some(p => p.includes('Hammer') || p.includes('Bullish'))) {
+          alignedPrecisionEntry = {
+            ...alignedPrecisionEntry,
+            timing: 'NOW',
+            zone: `Support zone ($${nearestSupport.toFixed(2)})`,
+            trigger: `BUY at support — ${m15Patterns.find(p => p.includes('Hammer') || p.includes('Bullish')) || 'bullish pattern'} detected`,
+            confirmation: 'Volume spike above average',
+            invalidation: `Close below $${(nearestSupport * 0.995).toFixed(2)}`
+          };
+        } else {
+          alignedPrecisionEntry = {
+            ...alignedPrecisionEntry,
+            timing: 'WAIT_PULLBACK',
+            zone: `Target: $${nearestSupport.toFixed(2)} - $${(nearestSupport + (nearestResistance - nearestSupport) * 0.3).toFixed(2)}`,
+            trigger: 'WAIT — Look for BUY entry at 15M support with bullish confirmation',
+            confirmation: 'Bullish reversal candle (hammer/engulfing) + volume increase',
+            invalidation: `Break below $${nearestSupport.toFixed(2)}`
+          };
+        }
+      } else if (finalBias === 'SHORT') {
+        // BEARISH entry aligned with final bias
+        if (m15Trend === 'BEARISH' && m15Strength >= 70 && m15Volume.currentVsAvg >= 120) {
+          alignedPrecisionEntry = {
+            ...alignedPrecisionEntry,
+            timing: 'NOW',
+            zone: `Current price zone ($${currentPrice.toFixed(2)})`,
+            trigger: 'SELL — Bearish momentum confirmed, enter on minor bounce',
+            confirmation: m15Patterns.length > 0 ? m15Patterns[0] : 'Strong red candle close + volume',
+            invalidation: `Above $${nearestResistance.toFixed(2)} (structure break)`
+          };
+        } else if (distToResistance < 2 && m15Patterns.some(p => p.includes('Shooting') || p.includes('Bearish') || p.includes('Engulfing'))) {
+          alignedPrecisionEntry = {
+            ...alignedPrecisionEntry,
+            timing: 'NOW',
+            zone: `Resistance zone ($${nearestResistance.toFixed(2)})`,
+            trigger: `SELL at resistance — ${m15Patterns.find(p => p.includes('Shooting') || p.includes('Bearish')) || 'bearish pattern'} detected`,
+            confirmation: 'Volume spike above average + wick rejection',
+            invalidation: `Close above $${(nearestResistance * 1.005).toFixed(2)}`
+          };
+        } else {
+          alignedPrecisionEntry = {
+            ...alignedPrecisionEntry,
+            timing: 'WAIT_PULLBACK',
+            zone: `Target: $${(nearestResistance - (nearestResistance - nearestSupport) * 0.3).toFixed(2)} - $${nearestResistance.toFixed(2)}`,
+            trigger: 'WAIT — Look for SELL entry at 15M resistance with bearish confirmation',
+            confirmation: 'Bearish reversal candle (shooting star/engulfing) + volume spike',
+            invalidation: `Break above $${nearestResistance.toFixed(2)}`
+          };
+        }
+      }
+    }
+    
     const analysis = `📊 ${sanitizedCrypto} ANALYSIS
 Price: $${priceNum.toLocaleString()} | ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3176,24 +3266,25 @@ LTF Trend (1H): ${mtfAnalysis.tf1H?.trendAnalysis.direction || 'N/A'} ${mtfAnaly
 Precision (15M): ${mtfAnalysis.tf15M?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tf15M ? `(${mtfAnalysis.tf15M.trendAnalysis.strength}%)` : ''}
 Confluence: ${mtfAnalysis.confluence.overallBias} — ${mtfAnalysis.confluence.alignment}% aligned
 Entry Quality: ${mtfAnalysis.confluence.ltfEntry === 'OPTIMAL' ? '🟢 OPTIMAL' : mtfAnalysis.confluence.ltfEntry === 'WAIT' ? '🟡 WAIT' : '🔴 RISKY'}
+Bias Direction: ${finalBias === 'LONG' ? '🟢 BULLISH' : finalBias === 'SHORT' ? '🔴 BEARISH' : '⚪ NEUTRAL'}
 
-⏱️ 15-MINUTE PRECISION ENTRY SYSTEM
+⏱️ 15-MINUTE PRECISION ENTRY SYSTEM (Aligned with ${finalBias} bias)
 ┌─────────────────────────────────────────────────┐
-│ TIMING: ${mtfAnalysis.precisionEntry.timing === 'NOW' ? '🟢 NOW — Execute entry' : mtfAnalysis.precisionEntry.timing === 'WAIT_PULLBACK' ? '🟡 WAIT — Pullback in progress' : mtfAnalysis.precisionEntry.timing === 'WAIT_BREAKOUT' ? '🟡 WAIT — Awaiting breakout' : '🔴 AVOID — Poor conditions'}
+│ TIMING: ${alignedPrecisionEntry.timing === 'NOW' ? '🟢 NOW — Execute entry' : alignedPrecisionEntry.timing === 'WAIT_PULLBACK' ? '🟡 WAIT — Pullback in progress' : alignedPrecisionEntry.timing === 'WAIT_BREAKOUT' ? '🟡 WAIT — Awaiting breakout' : '🔴 AVOID — Poor conditions'}
 │ 
-│ 📍 ENTRY ZONE: ${mtfAnalysis.precisionEntry.zone}
+│ 📍 ENTRY ZONE: ${alignedPrecisionEntry.zone}
 │ 
-│ 🎯 TRIGGER: ${mtfAnalysis.precisionEntry.trigger}
+│ 🎯 TRIGGER: ${alignedPrecisionEntry.trigger}
 │ 
-│ ✓ CONFIRMATION: ${mtfAnalysis.precisionEntry.confirmation}
+│ ✓ CONFIRMATION: ${alignedPrecisionEntry.confirmation}
 │ 
-│ ✗ INVALIDATION: ${mtfAnalysis.precisionEntry.invalidation}
+│ ✗ INVALIDATION: ${alignedPrecisionEntry.invalidation}
 │ 
-│ 📊 15M MARKET STRUCTURE: ${mtfAnalysis.precisionEntry.structureStatus}
+│ 📊 15M MARKET STRUCTURE: ${alignedPrecisionEntry.structureStatus}
 │ 
-│ 📈 MOVEMENT PHASE: ${mtfAnalysis.precisionEntry.movementPhase}
+│ 📈 MOVEMENT PHASE: ${alignedPrecisionEntry.movementPhase}
 │ 
-│ 🔊 VOLUME STATUS: ${mtfAnalysis.precisionEntry.volumeCondition}
+│ 🔊 VOLUME STATUS: ${alignedPrecisionEntry.volumeCondition}
 └─────────────────────────────────────────────────┘
 
 🎯 MTF KEY LEVELS
@@ -3216,6 +3307,7 @@ Bear Probability: ${probabilities.bearProb}% ${'█'.repeat(Math.round(probabili
 Neutral Zone: ${probabilities.neutralProb}%
 Primary Bias: ${finalBias === 'LONG' ? 'BULLISH 🟢' : finalBias === 'SHORT' ? 'BEARISH 🔴' : 'NEUTRAL ⚪'} (Source: ${biasSource.replace(/_/g, ' ')})
 Predictive Confidence: ${adjustedConfidence}%
+⚠️ Note: Crypto markets are highly volatile. These probabilities are based on current data and can shift rapidly.
 
 🔮 PREDICTIVE MEMORY (PAST → FUTURE)
 Historical Accuracy: ${predictiveMemory.predictionAccuracy}% | Trend Consistency: ${predictiveMemory.trendConsistency}%
@@ -3313,16 +3405,20 @@ Psychological: ${cryptoInfo ? cryptoInfo.keyLevels.psychological.filter(l => Mat
 Bull Invalid: Close below $${(lowNum - range * 0.1).toFixed(2)} — Structure break
 Bear Invalid: Close above $${(highNum + range * 0.1).toFixed(2)} — Structure break
 
+⚠️ RISK FACTORS
+${rsiEstimate > 70 ? `• RSI at ${rsiEstimate.toFixed(0)} — OVERBOUGHT warning, pullback risk elevated\n` : rsiEstimate < 30 ? `• RSI at ${rsiEstimate.toFixed(0)} — OVERSOLD condition, bounce possible\n` : ''}${rangePercent > 80 ? '• Price in DEEP PREMIUM — unfavorable risk/reward for longs\n' : rangePercent < 20 ? '• Price in DEEP DISCOUNT — caution on shorts\n' : ''}${volumeStrength === 'LOW' ? '• LOW VOLUME — moves may lack conviction, false breakouts likely\n' : ''}${mtfAnalysis.confluence.alignment < 50 ? '• MIXED MTF SIGNALS — reduced conviction, consider smaller position\n' : ''}${Math.abs(validatedChange) > 8 ? '• EXTREME DAILY MOVE — volatility elevated, widen stops\n' : ''}${learningAccuracy < 50 && totalFeedback >= 5 ? `• Historical accuracy at ${learningAccuracy}% — model adapting, exercise caution\n` : ''}• Crypto markets are 24/7 and highly volatile — never risk more than you can afford to lose
+• Always use stop losses and proper position sizing (1-2% risk per trade recommended)
+
 💡 AI INSIGHTS (${allInsights.length})
 ${allInsights.slice(0, 7).map((ins, i) => `${i + 1}. ${ins}`).join('\n')}
 
 🎯 EXECUTIVE SUMMARY
-${mtfAnalysis.precisionEntry.timing === 'NOW' ? `⏱️ 15M PRECISION ENTRY ACTIVE: ${mtfAnalysis.precisionEntry.trigger}` : ''}
+${alignedPrecisionEntry.timing === 'NOW' ? `⏱️ 15M PRECISION ENTRY ACTIVE: ${finalBias === 'LONG' ? 'BUY' : finalBias === 'SHORT' ? 'SELL' : 'WAIT'} — ${alignedPrecisionEntry.zone}` : ''}
 ${finalBias === 'LONG' ? 
-  `BULLISH BIAS with ${adjustedConfidence}% adaptive confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports longs.' : 'Developing setup.'} ${wyckoffPhase.phase === 'ACCUMULATION' ? 'Wyckoff accumulation active.' : ''} ${marketStructure.lastCHoCH === 'BULLISH' ? 'CHoCH confirms reversal.' : ''} Target: $${bullTP2} with stop at $${bullStop}.` :
+  `BULLISH BIAS — BUY setup with ${adjustedConfidence}% confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports longs.' : 'Developing setup.'} ${wyckoffPhase.phase === 'ACCUMULATION' ? 'Wyckoff accumulation active.' : ''} ${marketStructure.lastCHoCH === 'BULLISH' ? 'CHoCH confirms reversal.' : ''} Entry: $${bullEntry}, Target: $${bullTP2}, Stop: $${bullStop}. Position size: Risk 1-2% of capital.` :
   finalBias === 'SHORT' ?
-  `BEARISH BIAS with ${adjustedConfidence}% adaptive confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports shorts.' : 'Developing setup.'} ${wyckoffPhase.phase === 'DISTRIBUTION' ? 'Wyckoff distribution active.' : ''} ${marketStructure.lastCHoCH === 'BEARISH' ? 'CHoCH confirms reversal.' : ''} Target: $${bearTarget2.toFixed(2)} with stop at $${bearStop}.` :
-  `NEUTRAL — No clear edge. ${adaptiveLearning.currentScenario?.expectedOutcome === 'NEUTRAL' ? 'Scenario confirms caution.' : ''} Wait for ${rangePercent < 40 ? 'support confirmation' : rangePercent > 60 ? 'resistance rejection' : 'directional break'} with volume. Patience is a trade.`}
+  `BEARISH BIAS — SELL setup with ${adjustedConfidence}% confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports shorts.' : 'Developing setup.'} ${wyckoffPhase.phase === 'DISTRIBUTION' ? 'Wyckoff distribution active.' : ''} ${marketStructure.lastCHoCH === 'BEARISH' ? 'CHoCH confirms reversal.' : ''} Entry: $${bearEntry}, Target: $${bearTarget2.toFixed(2)}, Stop: $${bearStop}. Position size: Risk 1-2% of capital.` :
+  `NEUTRAL — No clear edge. Do not force a trade. ${adaptiveLearning.currentScenario?.expectedOutcome === 'NEUTRAL' ? 'Scenario confirms caution.' : ''} Wait for ${rangePercent < 40 ? 'support confirmation' : rangePercent > 60 ? 'resistance rejection' : 'directional break'} with volume expansion. Patience is a trade.`}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 Analysis Complete | Patterns: ${allPatterns.length} | Confidence: ${adjustedConfidence}%
