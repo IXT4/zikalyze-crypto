@@ -77,11 +77,17 @@ export function useOnChainData(
   const metricsRef = useRef<OnChainMetrics | null>(null);
   const wsRetryCountRef = useRef(0);
   const isReconnectingRef = useRef(false);
+  const streamStatusRef = useRef<'connected' | 'connecting' | 'disconnected' | 'polling'>('disconnected');
 
-  // Keep metricsRef in sync
+  // Keep refs in sync
   useEffect(() => {
     metricsRef.current = metrics;
   }, [metrics]);
+
+  // Keep streamStatusRef in sync
+  useEffect(() => {
+    streamStatusRef.current = streamStatus;
+  }, [streamStatus]);
 
   // Initialize WebSocket for BTC live data
   const initBTCWebSockets = useCallback(() => {
@@ -645,7 +651,7 @@ export function useOnChainData(
 
       if (!isMountedRef.current) return;
 
-      const currentStatus = streamStatus === 'connected' ? 'connected' : 'polling';
+      const currentStatus = streamStatusRef.current === 'connected' ? 'connected' : 'polling';
 
       setMetrics({
         exchangeNetFlow,
@@ -675,7 +681,7 @@ export function useOnChainData(
         setLoading(false);
       }
     }
-  }, [crypto, change, loading, price, cryptoInfo, streamStatus]);
+  }, [crypto, change, loading, price, cryptoInfo]);
 
   // Initialize connections and polling - ALL AUTOMATIC LIVE
   useEffect(() => {
