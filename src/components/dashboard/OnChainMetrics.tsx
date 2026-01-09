@@ -4,8 +4,6 @@ import {
   ArrowDownRight, 
   ArrowUpRight, 
   Database, 
-  Hash, 
-  RefreshCw, 
   TrendingDown, 
   TrendingUp,
   Wallet,
@@ -15,7 +13,6 @@ import {
   WifiOff
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect } from "react";
 
@@ -29,7 +26,7 @@ interface OnChainMetricsProps {
 }
 
 const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId }: OnChainMetricsProps) => {
-  const { metrics, loading, streamStatus, refresh } = useOnChainData(crypto, price, change, {
+  const { metrics, loading, streamStatus } = useOnChainData(crypto, price, change, {
     volume,
     marketCap,
     coinGeckoId
@@ -143,15 +140,6 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
           <span className="text-xs text-muted-foreground">
             {loading ? 'Syncing...' : timeSinceUpdate < 60 ? `${timeSinceUpdate}s ago` : `${Math.floor(timeSinceUpdate / 60)}m ago`}
           </span>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-7 w-7"
-            onClick={refresh}
-            disabled={loading}
-          >
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          </Button>
         </div>
       </div>
 
