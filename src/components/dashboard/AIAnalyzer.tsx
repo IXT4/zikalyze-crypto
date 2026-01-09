@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ const CHARS_PER_FRAME = 12; // Much faster rendering
 const FRAME_INTERVAL = 8; // 120fps smooth
 
 const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap }: AIAnalyzerProps) => {
+  const { t, i18n } = useTranslation();
   const [displayedText, setDisplayedText] = useState("");
   const [fullAnalysis, setFullAnalysis] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -49,11 +51,14 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const { history, learningStats, loading: historyLoading, saveAnalysis, submitFeedback, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
   const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
 
+  // Get current language code
+  const currentLanguage = i18n.language || 'en';
+
   const processingSteps = [
-    "Connecting to AI...",
-    "Fetching data...",
-    "Analyzing patterns...",
-    "Generating insights..."
+    t("analyzer.connecting", "Connecting to AI..."),
+    t("analyzer.fetching", "Fetching data..."),
+    t("analyzer.analyzing", "Analyzing patterns..."),
+    t("analyzer.generating", "Generating insights...")
   ];
 
   // Smooth scroll to bottom
@@ -114,7 +119,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ crypto, price, change, high24h, low24h, volume, marketCap }),
+        body: JSON.stringify({ crypto, price, change, high24h, low24h, volume, marketCap, language: currentLanguage }),
       });
 
       if (!response.ok) {
@@ -209,7 +214,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       clearInterval(stepInterval);
       setIsAnalyzing(false);
     }
-  }, [crypto, price, change, high24h, low24h, volume, marketCap, saveAnalysis]);
+  }, [crypto, price, change, high24h, low24h, volume, marketCap, currentLanguage, saveAnalysis, t]);
 
   const handleSelectHistory = (record: AnalysisRecord) => {
     setSelectedHistory(record);

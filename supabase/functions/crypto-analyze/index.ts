@@ -3023,7 +3023,7 @@ serve(async (req) => {
   }
 
   try {
-    let body: { crypto?: unknown; price?: unknown; change?: unknown; high24h?: unknown; low24h?: unknown; volume?: unknown; marketCap?: unknown };
+    let body: { crypto?: unknown; price?: unknown; change?: unknown; high24h?: unknown; low24h?: unknown; volume?: unknown; marketCap?: unknown; language?: unknown };
     try {
       body = await req.json();
     } catch {
@@ -3040,7 +3040,12 @@ serve(async (req) => {
       });
     }
 
-    const { crypto, price, change, high24h, low24h, volume, marketCap } = body;
+    const { crypto, price, change, high24h, low24h, volume, marketCap, language } = body;
+    
+    // Validate and set language (default to English)
+    const validLanguages = ['en', 'es', 'fr', 'de', 'zh', 'pt', 'ja', 'ko'];
+    const langString = typeof language === 'string' ? language : 'en';
+    const userLanguage = validLanguages.includes(langString) ? langString : 'en';
     
     const cryptoValidation = validateCryptoSymbol(crypto);
     if (!cryptoValidation.valid) {
@@ -3080,7 +3085,525 @@ serve(async (req) => {
     const validatedVolume = volumeValidation.value;
     const validatedMarketCap = marketCapValidation.value;
     
-    console.log(`🧠 AI Brain v9.0 analyzing ${sanitizedCrypto} at $${validatedPrice} with ${validatedChange}% change`);
+    console.log(`🧠 AI Brain v9.0 analyzing ${sanitizedCrypto} at $${validatedPrice} with ${validatedChange}% change (Language: ${userLanguage})`);
+    
+    // Multi-language translation maps
+    const translations: Record<string, Record<string, string>> = {
+      en: {
+        quickAnalysis: 'QUICK ANALYSIS',
+        price: 'PRICE',
+        range24h: '24H Range',
+        verdict: 'VERDICT',
+        bullish: 'BULLISH — Look for BUY opportunities',
+        bearish: 'BEARISH — Look for SELL opportunities',
+        neutral: 'NEUTRAL — No clear direction, wait',
+        confidence: 'Confidence',
+        whatToDo: 'WHAT TO DO NOW',
+        timing: 'TIMING',
+        goodEntry: 'Good entry available',
+        waitEntry: 'Wait for better entry',
+        action: 'Action',
+        buy: 'BUY',
+        sell: 'SELL',
+        wait: 'WAIT',
+        zone: 'Zone',
+        stopIf: 'Stop If',
+        lookingFor: 'Looking for',
+        targetZone: 'Target Zone',
+        buySetup: 'BUY SETUP',
+        sellSetup: 'SELL SETUP',
+        noTrade: 'NO TRADE — Wait for clear signal',
+        entry: 'Entry',
+        stopLoss: 'Stop Loss',
+        target: 'Target',
+        riskReward: 'Risk/Reward',
+        risk: 'risk',
+        whyBias: 'WHY THIS BIAS?',
+        trend: 'Trend',
+        timeframesAgree: 'timeframes agree',
+        bullProb: 'Bull Probability',
+        bearProb: 'Bear Probability',
+        patternAnalysis: 'Pattern Analysis',
+        patternsFound: 'patterns found',
+        leaning: 'leaning',
+        warning: 'Warning: Some signals conflict — trade with caution',
+        strong: 'Strong: Multiple signals confirm this direction',
+        marketMood: 'MARKET MOOD',
+        fearGreed: 'Fear & Greed',
+        extremeFear: 'Extreme fear = buying opportunity',
+        extremeGreed: 'Extreme greed = be cautious',
+        socialSentiment: 'Social Sentiment',
+        whales: 'Whales',
+        exchangeFlow: 'Exchange Flow',
+        bullishFlow: 'bullish — coins leaving exchanges',
+        bearishFlow: 'bearish — coins entering exchanges',
+        keyLevels: 'KEY LEVELS',
+        support: 'Support',
+        resistance: 'Resistance',
+        dontTrade: "DON'T TRADE IF",
+        priceDrops: 'Price drops below',
+        priceRises: 'Price rises above',
+        noBreakout: 'No clear breakout with volume',
+        topInsights: 'TOP 3 INSIGHTS',
+        remember: 'REMEMBER',
+        riskAdvice: 'Only risk 1-2% of your capital per trade',
+        stopLossAdvice: 'Always use a stop loss',
+        volatileAdvice: 'Crypto is volatile — this is analysis, not financial advice',
+        bias: 'BIAS',
+        patterns: 'Patterns',
+        feedbackHelps: 'Your feedback helps improve future predictions!'
+      },
+      es: {
+        quickAnalysis: 'ANÁLISIS RÁPIDO',
+        price: 'PRECIO',
+        range24h: 'Rango 24H',
+        verdict: 'VEREDICTO',
+        bullish: 'ALCISTA — Busca oportunidades de COMPRA',
+        bearish: 'BAJISTA — Busca oportunidades de VENTA',
+        neutral: 'NEUTRAL — Sin dirección clara, espera',
+        confidence: 'Confianza',
+        whatToDo: 'QUÉ HACER AHORA',
+        timing: 'MOMENTO',
+        goodEntry: 'Buena entrada disponible',
+        waitEntry: 'Esperar mejor entrada',
+        action: 'Acción',
+        buy: 'COMPRAR',
+        sell: 'VENDER',
+        wait: 'ESPERAR',
+        zone: 'Zona',
+        stopIf: 'Detener Si',
+        lookingFor: 'Buscando',
+        targetZone: 'Zona Objetivo',
+        buySetup: 'SETUP DE COMPRA',
+        sellSetup: 'SETUP DE VENTA',
+        noTrade: 'SIN OPERACIÓN — Esperar señal clara',
+        entry: 'Entrada',
+        stopLoss: 'Stop Loss',
+        target: 'Objetivo',
+        riskReward: 'Riesgo/Beneficio',
+        risk: 'riesgo',
+        whyBias: '¿POR QUÉ ESTA TENDENCIA?',
+        trend: 'Tendencia',
+        timeframesAgree: 'marcos temporales coinciden',
+        bullProb: 'Probabilidad Alcista',
+        bearProb: 'Probabilidad Bajista',
+        patternAnalysis: 'Análisis de Patrones',
+        patternsFound: 'patrones encontrados',
+        leaning: 'inclinación',
+        warning: 'Advertencia: Algunas señales conflictan — opera con cautela',
+        strong: 'Fuerte: Múltiples señales confirman esta dirección',
+        marketMood: 'ESTADO DEL MERCADO',
+        fearGreed: 'Miedo y Codicia',
+        extremeFear: 'Miedo extremo = oportunidad de compra',
+        extremeGreed: 'Codicia extrema = ten cuidado',
+        socialSentiment: 'Sentimiento Social',
+        whales: 'Ballenas',
+        exchangeFlow: 'Flujo de Exchanges',
+        bullishFlow: 'alcista — monedas saliendo de exchanges',
+        bearishFlow: 'bajista — monedas entrando a exchanges',
+        keyLevels: 'NIVELES CLAVE',
+        support: 'Soporte',
+        resistance: 'Resistencia',
+        dontTrade: 'NO OPERES SI',
+        priceDrops: 'El precio cae por debajo de',
+        priceRises: 'El precio sube por encima de',
+        noBreakout: 'Sin ruptura clara con volumen',
+        topInsights: '3 PRINCIPALES PERSPECTIVAS',
+        remember: 'RECUERDA',
+        riskAdvice: 'Solo arriesga 1-2% de tu capital por operación',
+        stopLossAdvice: 'Siempre usa un stop loss',
+        volatileAdvice: 'Las criptos son volátiles — esto es análisis, no consejo financiero',
+        bias: 'TENDENCIA',
+        patterns: 'Patrones',
+        feedbackHelps: '¡Tu feedback ayuda a mejorar predicciones futuras!'
+      },
+      fr: {
+        quickAnalysis: 'ANALYSE RAPIDE',
+        price: 'PRIX',
+        range24h: 'Plage 24H',
+        verdict: 'VERDICT',
+        bullish: 'HAUSSIER — Cherchez des opportunités ACHAT',
+        bearish: 'BAISSIER — Cherchez des opportunités VENTE',
+        neutral: 'NEUTRE — Pas de direction claire, attendez',
+        confidence: 'Confiance',
+        whatToDo: 'QUE FAIRE MAINTENANT',
+        timing: 'TIMING',
+        goodEntry: 'Bonne entrée disponible',
+        waitEntry: 'Attendre meilleure entrée',
+        action: 'Action',
+        buy: 'ACHETER',
+        sell: 'VENDRE',
+        wait: 'ATTENDRE',
+        zone: 'Zone',
+        stopIf: 'Stop Si',
+        lookingFor: 'Recherche',
+        targetZone: 'Zone Cible',
+        buySetup: "SETUP D'ACHAT",
+        sellSetup: 'SETUP DE VENTE',
+        noTrade: 'PAS DE TRADE — Attendre signal clair',
+        entry: 'Entrée',
+        stopLoss: 'Stop Loss',
+        target: 'Objectif',
+        riskReward: 'Risque/Récompense',
+        risk: 'risque',
+        whyBias: 'POURQUOI CE BIAIS?',
+        trend: 'Tendance',
+        timeframesAgree: 'timeframes en accord',
+        bullProb: 'Probabilité Haussière',
+        bearProb: 'Probabilité Baissière',
+        patternAnalysis: 'Analyse des Patterns',
+        patternsFound: 'patterns trouvés',
+        leaning: 'penchant',
+        warning: 'Attention: Certains signaux conflictuels — tradez prudemment',
+        strong: 'Fort: Plusieurs signaux confirment cette direction',
+        marketMood: 'HUMEUR DU MARCHÉ',
+        fearGreed: 'Peur et Avidité',
+        extremeFear: "Peur extrême = opportunité d'achat",
+        extremeGreed: 'Avidité extrême = soyez prudent',
+        socialSentiment: 'Sentiment Social',
+        whales: 'Baleines',
+        exchangeFlow: 'Flux Exchange',
+        bullishFlow: 'haussier — coins quittant les exchanges',
+        bearishFlow: 'baissier — coins entrant sur les exchanges',
+        keyLevels: 'NIVEAUX CLÉS',
+        support: 'Support',
+        resistance: 'Résistance',
+        dontTrade: 'NE TRADEZ PAS SI',
+        priceDrops: 'Le prix tombe sous',
+        priceRises: 'Le prix monte au-dessus de',
+        noBreakout: 'Pas de cassure claire avec volume',
+        topInsights: 'TOP 3 INSIGHTS',
+        remember: 'RAPPEL',
+        riskAdvice: 'Ne risquez que 1-2% de votre capital par trade',
+        stopLossAdvice: 'Utilisez toujours un stop loss',
+        volatileAdvice: 'La crypto est volatile — ceci est une analyse, pas un conseil financier',
+        bias: 'BIAIS',
+        patterns: 'Patterns',
+        feedbackHelps: 'Votre feedback aide à améliorer les prédictions futures!'
+      },
+      de: {
+        quickAnalysis: 'SCHNELLANALYSE',
+        price: 'PREIS',
+        range24h: '24H Spanne',
+        verdict: 'URTEIL',
+        bullish: 'BULLISCH — Suche nach KAUF-Gelegenheiten',
+        bearish: 'BÄRISCH — Suche nach VERKAUF-Gelegenheiten',
+        neutral: 'NEUTRAL — Keine klare Richtung, warten',
+        confidence: 'Vertrauen',
+        whatToDo: 'WAS JETZT TUN',
+        timing: 'TIMING',
+        goodEntry: 'Guter Einstieg verfügbar',
+        waitEntry: 'Auf besseren Einstieg warten',
+        action: 'Aktion',
+        buy: 'KAUFEN',
+        sell: 'VERKAUFEN',
+        wait: 'WARTEN',
+        zone: 'Zone',
+        stopIf: 'Stop Wenn',
+        lookingFor: 'Suche nach',
+        targetZone: 'Zielzone',
+        buySetup: 'KAUF-SETUP',
+        sellSetup: 'VERKAUF-SETUP',
+        noTrade: 'KEIN TRADE — Auf klares Signal warten',
+        entry: 'Einstieg',
+        stopLoss: 'Stop Loss',
+        target: 'Ziel',
+        riskReward: 'Risiko/Ertrag',
+        risk: 'Risiko',
+        whyBias: 'WARUM DIESER BIAS?',
+        trend: 'Trend',
+        timeframesAgree: 'Zeitrahmen stimmen überein',
+        bullProb: 'Bull-Wahrscheinlichkeit',
+        bearProb: 'Bear-Wahrscheinlichkeit',
+        patternAnalysis: 'Musteranalyse',
+        patternsFound: 'Muster gefunden',
+        leaning: 'Tendenz',
+        warning: 'Warnung: Einige Signale widersprechen sich — vorsichtig handeln',
+        strong: 'Stark: Mehrere Signale bestätigen diese Richtung',
+        marketMood: 'MARKTSTIMMUNG',
+        fearGreed: 'Angst und Gier',
+        extremeFear: 'Extreme Angst = Kaufgelegenheit',
+        extremeGreed: 'Extreme Gier = Vorsicht',
+        socialSentiment: 'Soziale Stimmung',
+        whales: 'Wale',
+        exchangeFlow: 'Börsenfluss',
+        bullishFlow: 'bullisch — Coins verlassen Börsen',
+        bearishFlow: 'bärisch — Coins strömen zu Börsen',
+        keyLevels: 'SCHLÜSSELNIVEAUS',
+        support: 'Unterstützung',
+        resistance: 'Widerstand',
+        dontTrade: 'NICHT HANDELN WENN',
+        priceDrops: 'Preis fällt unter',
+        priceRises: 'Preis steigt über',
+        noBreakout: 'Kein klarer Ausbruch mit Volumen',
+        topInsights: 'TOP 3 ERKENNTNISSE',
+        remember: 'DENKE DARAN',
+        riskAdvice: 'Riskiere nur 1-2% deines Kapitals pro Trade',
+        stopLossAdvice: 'Nutze immer einen Stop Loss',
+        volatileAdvice: 'Krypto ist volatil — dies ist Analyse, keine Finanzberatung',
+        bias: 'BIAS',
+        patterns: 'Muster',
+        feedbackHelps: 'Dein Feedback hilft, zukünftige Vorhersagen zu verbessern!'
+      },
+      zh: {
+        quickAnalysis: '快速分析',
+        price: '价格',
+        range24h: '24小时范围',
+        verdict: '判断',
+        bullish: '看涨 — 寻找买入机会',
+        bearish: '看跌 — 寻找卖出机会',
+        neutral: '中性 — 无明确方向，等待',
+        confidence: '置信度',
+        whatToDo: '现在该做什么',
+        timing: '时机',
+        goodEntry: '良好入场点',
+        waitEntry: '等待更好入场点',
+        action: '操作',
+        buy: '买入',
+        sell: '卖出',
+        wait: '等待',
+        zone: '区域',
+        stopIf: '止损条件',
+        lookingFor: '寻找',
+        targetZone: '目标区域',
+        buySetup: '买入设置',
+        sellSetup: '卖出设置',
+        noTrade: '无交易 — 等待明确信号',
+        entry: '入场',
+        stopLoss: '止损',
+        target: '目标',
+        riskReward: '风险/收益',
+        risk: '风险',
+        whyBias: '为什么是这个倾向？',
+        trend: '趋势',
+        timeframesAgree: '时间框架一致',
+        bullProb: '看涨概率',
+        bearProb: '看跌概率',
+        patternAnalysis: '形态分析',
+        patternsFound: '个形态发现',
+        leaning: '倾向',
+        warning: '警告：一些信号冲突 — 谨慎交易',
+        strong: '强：多个信号确认此方向',
+        marketMood: '市场情绪',
+        fearGreed: '恐惧与贪婪',
+        extremeFear: '极度恐惧 = 买入机会',
+        extremeGreed: '极度贪婪 = 需谨慎',
+        socialSentiment: '社交情绪',
+        whales: '巨鲸',
+        exchangeFlow: '交易所流量',
+        bullishFlow: '看涨 — 币离开交易所',
+        bearishFlow: '看跌 — 币进入交易所',
+        keyLevels: '关键价位',
+        support: '支撑',
+        resistance: '阻力',
+        dontTrade: '不要交易如果',
+        priceDrops: '价格跌破',
+        priceRises: '价格升破',
+        noBreakout: '没有明确的放量突破',
+        topInsights: '三大洞察',
+        remember: '记住',
+        riskAdvice: '每笔交易只冒1-2%的资金风险',
+        stopLossAdvice: '始终使用止损',
+        volatileAdvice: '加密货币波动大 — 这是分析，不是财务建议',
+        bias: '倾向',
+        patterns: '形态',
+        feedbackHelps: '你的反馈有助于改进未来的预测！'
+      },
+      pt: {
+        quickAnalysis: 'ANÁLISE RÁPIDA',
+        price: 'PREÇO',
+        range24h: 'Faixa 24H',
+        verdict: 'VEREDITO',
+        bullish: 'ALTISTA — Procure oportunidades de COMPRA',
+        bearish: 'BAIXISTA — Procure oportunidades de VENDA',
+        neutral: 'NEUTRO — Sem direção clara, aguarde',
+        confidence: 'Confiança',
+        whatToDo: 'O QUE FAZER AGORA',
+        timing: 'MOMENTO',
+        goodEntry: 'Boa entrada disponível',
+        waitEntry: 'Aguardar melhor entrada',
+        action: 'Ação',
+        buy: 'COMPRAR',
+        sell: 'VENDER',
+        wait: 'AGUARDAR',
+        zone: 'Zona',
+        stopIf: 'Parar Se',
+        lookingFor: 'Procurando',
+        targetZone: 'Zona Alvo',
+        buySetup: 'SETUP DE COMPRA',
+        sellSetup: 'SETUP DE VENDA',
+        noTrade: 'SEM OPERAÇÃO — Aguardar sinal claro',
+        entry: 'Entrada',
+        stopLoss: 'Stop Loss',
+        target: 'Alvo',
+        riskReward: 'Risco/Recompensa',
+        risk: 'risco',
+        whyBias: 'POR QUE ESSA TENDÊNCIA?',
+        trend: 'Tendência',
+        timeframesAgree: 'timeframes concordam',
+        bullProb: 'Probabilidade de Alta',
+        bearProb: 'Probabilidade de Baixa',
+        patternAnalysis: 'Análise de Padrões',
+        patternsFound: 'padrões encontrados',
+        leaning: 'inclinação',
+        warning: 'Aviso: Alguns sinais conflitam — opere com cautela',
+        strong: 'Forte: Múltiplos sinais confirmam esta direção',
+        marketMood: 'HUMOR DO MERCADO',
+        fearGreed: 'Medo e Ganância',
+        extremeFear: 'Medo extremo = oportunidade de compra',
+        extremeGreed: 'Ganância extrema = tenha cuidado',
+        socialSentiment: 'Sentimento Social',
+        whales: 'Baleias',
+        exchangeFlow: 'Fluxo de Exchange',
+        bullishFlow: 'altista — moedas saindo das exchanges',
+        bearishFlow: 'baixista — moedas entrando nas exchanges',
+        keyLevels: 'NÍVEIS CHAVE',
+        support: 'Suporte',
+        resistance: 'Resistência',
+        dontTrade: 'NÃO OPERE SE',
+        priceDrops: 'O preço cair abaixo de',
+        priceRises: 'O preço subir acima de',
+        noBreakout: 'Sem rompimento claro com volume',
+        topInsights: 'TOP 3 INSIGHTS',
+        remember: 'LEMBRE-SE',
+        riskAdvice: 'Arrisque apenas 1-2% do seu capital por operação',
+        stopLossAdvice: 'Sempre use um stop loss',
+        volatileAdvice: 'Cripto é volátil — isso é análise, não conselho financeiro',
+        bias: 'TENDÊNCIA',
+        patterns: 'Padrões',
+        feedbackHelps: 'Seu feedback ajuda a melhorar previsões futuras!'
+      },
+      ja: {
+        quickAnalysis: 'クイック分析',
+        price: '価格',
+        range24h: '24時間レンジ',
+        verdict: '判定',
+        bullish: '強気 — 買いの機会を探す',
+        bearish: '弱気 — 売りの機会を探す',
+        neutral: '中立 — 明確な方向なし、待機',
+        confidence: '信頼度',
+        whatToDo: '今何をすべきか',
+        timing: 'タイミング',
+        goodEntry: '良いエントリーあり',
+        waitEntry: 'より良いエントリーを待つ',
+        action: 'アクション',
+        buy: '買い',
+        sell: '売り',
+        wait: '待機',
+        zone: 'ゾーン',
+        stopIf: 'ストップ条件',
+        lookingFor: '探している',
+        targetZone: 'ターゲットゾーン',
+        buySetup: '買いセットアップ',
+        sellSetup: '売りセットアップ',
+        noTrade: 'トレードなし — 明確なシグナルを待つ',
+        entry: 'エントリー',
+        stopLoss: 'ストップロス',
+        target: 'ターゲット',
+        riskReward: 'リスク/リワード',
+        risk: 'リスク',
+        whyBias: 'なぜこのバイアス？',
+        trend: 'トレンド',
+        timeframesAgree: 'タイムフレームが一致',
+        bullProb: '上昇確率',
+        bearProb: '下落確率',
+        patternAnalysis: 'パターン分析',
+        patternsFound: 'パターン発見',
+        leaning: '傾向',
+        warning: '警告：一部のシグナルが矛盾 — 慎重に取引',
+        strong: '強い：複数のシグナルがこの方向を確認',
+        marketMood: '市場ムード',
+        fearGreed: '恐怖と貪欲',
+        extremeFear: '極度の恐怖 = 買いの機会',
+        extremeGreed: '極度の貪欲 = 注意',
+        socialSentiment: 'ソーシャルセンチメント',
+        whales: 'クジラ',
+        exchangeFlow: '取引所フロー',
+        bullishFlow: '強気 — コインが取引所から流出',
+        bearishFlow: '弱気 — コインが取引所に流入',
+        keyLevels: 'キーレベル',
+        support: 'サポート',
+        resistance: 'レジスタンス',
+        dontTrade: '取引しない条件',
+        priceDrops: '価格が下回った場合',
+        priceRises: '価格が上回った場合',
+        noBreakout: '出来高を伴う明確なブレイクアウトなし',
+        topInsights: 'トップ3インサイト',
+        remember: '覚えておく',
+        riskAdvice: '1取引あたり資本の1-2%のみリスク',
+        stopLossAdvice: '常にストップロスを使用',
+        volatileAdvice: '暗号資産は変動性が高い — これは分析であり、財務アドバイスではありません',
+        bias: 'バイアス',
+        patterns: 'パターン',
+        feedbackHelps: 'フィードバックが将来の予測改善に役立ちます！'
+      },
+      ko: {
+        quickAnalysis: '빠른 분석',
+        price: '가격',
+        range24h: '24시간 범위',
+        verdict: '판정',
+        bullish: '강세 — 매수 기회를 찾으세요',
+        bearish: '약세 — 매도 기회를 찾으세요',
+        neutral: '중립 — 명확한 방향 없음, 대기',
+        confidence: '신뢰도',
+        whatToDo: '지금 무엇을 해야 하나',
+        timing: '타이밍',
+        goodEntry: '좋은 진입 가능',
+        waitEntry: '더 나은 진입 대기',
+        action: '행동',
+        buy: '매수',
+        sell: '매도',
+        wait: '대기',
+        zone: '구역',
+        stopIf: '정지 조건',
+        lookingFor: '찾는 중',
+        targetZone: '목표 구역',
+        buySetup: '매수 설정',
+        sellSetup: '매도 설정',
+        noTrade: '거래 없음 — 명확한 신호 대기',
+        entry: '진입',
+        stopLoss: '손절',
+        target: '목표',
+        riskReward: '위험/보상',
+        risk: '위험',
+        whyBias: '왜 이 편향인가?',
+        trend: '추세',
+        timeframesAgree: '타임프레임 일치',
+        bullProb: '상승 확률',
+        bearProb: '하락 확률',
+        patternAnalysis: '패턴 분석',
+        patternsFound: '패턴 발견',
+        leaning: '경향',
+        warning: '경고: 일부 신호가 충돌 — 신중하게 거래',
+        strong: '강함: 여러 신호가 이 방향을 확인',
+        marketMood: '시장 분위기',
+        fearGreed: '공포와 탐욕',
+        extremeFear: '극도의 공포 = 매수 기회',
+        extremeGreed: '극도의 탐욕 = 주의',
+        socialSentiment: '소셜 감정',
+        whales: '고래',
+        exchangeFlow: '거래소 흐름',
+        bullishFlow: '강세 — 코인이 거래소를 떠남',
+        bearishFlow: '약세 — 코인이 거래소로 유입',
+        keyLevels: '핵심 레벨',
+        support: '지지',
+        resistance: '저항',
+        dontTrade: '거래하지 마세요',
+        priceDrops: '가격이 아래로 떨어지면',
+        priceRises: '가격이 위로 올라가면',
+        noBreakout: '거래량을 동반한 명확한 돌파 없음',
+        topInsights: '상위 3 인사이트',
+        remember: '기억하세요',
+        riskAdvice: '거래당 자본의 1-2%만 위험',
+        stopLossAdvice: '항상 손절을 사용',
+        volatileAdvice: '암호화폐는 변동성이 큼 — 이것은 분석이며 재정 조언이 아닙니다',
+        bias: '편향',
+        patterns: '패턴',
+        feedbackHelps: '피드백이 미래 예측 개선에 도움이 됩니다!'
+      }
+    };
+    
+    const t = translations[userLanguage] || translations.en;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // 🌐 REAL-WORLD SENTIMENT DATA (FEAR & GREED, SOCIAL, NEWS)
@@ -3931,84 +4454,84 @@ serve(async (req) => {
       allInsights.push(`⚡ ${institutionalVsRetail.divergenceNote}`);
     }
     
-    const analysis = `📊 ${sanitizedCrypto} QUICK ANALYSIS
+    const analysis = `📊 ${sanitizedCrypto} ${t.quickAnalysis}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💰 PRICE: $${priceNum.toLocaleString()} ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
-📈 24H Range: $${lowNum.toLocaleString()} - $${highNum.toLocaleString()}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 VERDICT: ${finalBias === 'LONG' ? '🟢 BULLISH — Look for BUY opportunities' : finalBias === 'SHORT' ? '🔴 BEARISH — Look for SELL opportunities' : '⚪ NEUTRAL — No clear direction, wait'}
-📊 Confidence: ${finalConfidence}%
+💰 ${t.price}: $${priceNum.toLocaleString()} ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
+📈 ${t.range24h}: $${lowNum.toLocaleString()} - $${highNum.toLocaleString()}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📍 WHAT TO DO NOW
+🎯 ${t.verdict}: ${finalBias === 'LONG' ? `🟢 ${t.bullish}` : finalBias === 'SHORT' ? `🔴 ${t.bearish}` : `⚪ ${t.neutral}`}
+📊 ${t.confidence}: ${finalConfidence}%
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📍 ${t.whatToDo}
 ${alignedPrecisionEntry.timing === 'NOW' ? 
-  `✅ TIMING: Good entry available
-🎯 Action: ${finalBias === 'LONG' ? 'BUY' : finalBias === 'SHORT' ? 'SELL' : 'WAIT'}
-📍 Zone: ${alignedPrecisionEntry.zone}
-⛔ Stop If: ${alignedPrecisionEntry.invalidation}` : 
-  `⏳ TIMING: Wait for better entry
-🔍 Looking for: ${alignedPrecisionEntry.trigger}
-📍 Target Zone: ${alignedPrecisionEntry.zone}`}
+  `✅ ${t.timing}: ${t.goodEntry}
+🎯 ${t.action}: ${finalBias === 'LONG' ? t.buy : finalBias === 'SHORT' ? t.sell : t.wait}
+📍 ${t.zone}: ${alignedPrecisionEntry.zone}
+⛔ ${t.stopIf}: ${alignedPrecisionEntry.invalidation}` : 
+  `⏳ ${t.timing}: ${t.waitEntry}
+🔍 ${t.lookingFor}: ${alignedPrecisionEntry.trigger}
+📍 ${t.targetZone}: ${alignedPrecisionEntry.zone}`}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${finalBias === 'LONG' ? `🟢 BUY SETUP
-• Entry: $${bullEntry}
-• Stop Loss: $${bullStop} (${((priceNum - Number(bullStop)) / priceNum * 100).toFixed(1)}% risk)
-• Target 1: $${bullTP1} (+${((Number(bullTP1) - priceNum) / priceNum * 100).toFixed(1)}%)
-• Target 2: $${bullTP2} (+${((Number(bullTP2) - priceNum) / priceNum * 100).toFixed(1)}%)
-• Risk/Reward: 1:${bullRR}` : finalBias === 'SHORT' ? `🔴 SELL SETUP
-• Entry: $${bearEntry}
-• Stop Loss: $${bearStop} (${((Number(bearStop) - priceNum) / priceNum * 100).toFixed(1)}% risk)
-• Target 1: $${bearTarget1.toFixed(2)} (${((priceNum - bearTarget1) / priceNum * 100).toFixed(1)}%)
-• Target 2: $${bearTarget2.toFixed(2)} (${((priceNum - bearTarget2) / priceNum * 100).toFixed(1)}%)
-• Risk/Reward: 1:${bearRR}` : `⚪ NO TRADE — Wait for clear signal`}
+${finalBias === 'LONG' ? `🟢 ${t.buySetup}
+• ${t.entry}: $${bullEntry}
+• ${t.stopLoss}: $${bullStop} (${((priceNum - Number(bullStop)) / priceNum * 100).toFixed(1)}% ${t.risk})
+• ${t.target} 1: $${bullTP1} (+${((Number(bullTP1) - priceNum) / priceNum * 100).toFixed(1)}%)
+• ${t.target} 2: $${bullTP2} (+${((Number(bullTP2) - priceNum) / priceNum * 100).toFixed(1)}%)
+• ${t.riskReward}: 1:${bullRR}` : finalBias === 'SHORT' ? `🔴 ${t.sellSetup}
+• ${t.entry}: $${bearEntry}
+• ${t.stopLoss}: $${bearStop} (${((Number(bearStop) - priceNum) / priceNum * 100).toFixed(1)}% ${t.risk})
+• ${t.target} 1: $${bearTarget1.toFixed(2)} (${((priceNum - bearTarget1) / priceNum * 100).toFixed(1)}%)
+• ${t.target} 2: $${bearTarget2.toFixed(2)} (${((priceNum - bearTarget2) / priceNum * 100).toFixed(1)}%)
+• ${t.riskReward}: 1:${bearRR}` : `⚪ ${t.noTrade}`}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📊 WHY THIS BIAS?
-• Trend: ${mtfAnalysis.confluence.overallBias} (${mtfAnalysis.confluence.alignment}% timeframes agree)
-• Bull Probability: ${probabilities.bullProb}%
-• Bear Probability: ${probabilities.bearProb}%
-• Pattern Analysis: ${allPatterns.length} patterns found → ${patternBias} leaning
-${signalConflicts >= 2 ? `⚠️ Warning: Some signals conflict — trade with caution` : signalConfirmations >= 3 ? `✓ Strong: Multiple signals confirm this direction` : ''}
+📊 ${t.whyBias}
+• ${t.trend}: ${mtfAnalysis.confluence.overallBias} (${mtfAnalysis.confluence.alignment}% ${t.timeframesAgree})
+• ${t.bullProb}: ${probabilities.bullProb}%
+• ${t.bearProb}: ${probabilities.bearProb}%
+• ${t.patternAnalysis}: ${allPatterns.length} ${t.patternsFound} → ${patternBias} ${t.leaning}
+${signalConflicts >= 2 ? `⚠️ ${t.warning}` : signalConfirmations >= 3 ? `✓ ${t.strong}` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🌐 MARKET MOOD
-${sentimentData ? `• Fear & Greed: ${sentimentData.fearGreed.value}/100 (${sentimentData.fearGreed.label}) ${sentimentData.fearGreed.value <= 25 ? '→ Extreme fear = buying opportunity' : sentimentData.fearGreed.value >= 75 ? '→ Extreme greed = be cautious' : ''}
-• Social Sentiment: ${sentimentData.social.overall.label} (${sentimentData.social.overall.score}%)` : '• Sentiment data unavailable'}
-• Whales: ${onChainMetrics.whaleActivity.netFlow}
-• Exchange Flow: ${onChainMetrics.exchangeNetFlow.trend} ${onChainMetrics.exchangeNetFlow.trend === 'OUTFLOW' ? '(bullish — coins leaving exchanges)' : onChainMetrics.exchangeNetFlow.trend === 'INFLOW' ? '(bearish — coins entering exchanges)' : ''}
+🌐 ${t.marketMood}
+${sentimentData ? `• ${t.fearGreed}: ${sentimentData.fearGreed.value}/100 (${sentimentData.fearGreed.label}) ${sentimentData.fearGreed.value <= 25 ? `→ ${t.extremeFear}` : sentimentData.fearGreed.value >= 75 ? `→ ${t.extremeGreed}` : ''}
+• ${t.socialSentiment}: ${sentimentData.social.overall.label} (${sentimentData.social.overall.score}%)` : `• ${t.socialSentiment}: N/A`}
+• ${t.whales}: ${onChainMetrics.whaleActivity.netFlow}
+• ${t.exchangeFlow}: ${onChainMetrics.exchangeNetFlow.trend} ${onChainMetrics.exchangeNetFlow.trend === 'OUTFLOW' ? `(${t.bullishFlow})` : onChainMetrics.exchangeNetFlow.trend === 'INFLOW' ? `(${t.bearishFlow})` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-⚠️ KEY LEVELS
-Support: $${lowNum.toFixed(2)} → $${(lowNum - range * 0.236).toFixed(2)}
-Resistance: $${highNum.toFixed(2)} → $${(highNum + range * 0.236).toFixed(2)}
+⚠️ ${t.keyLevels}
+${t.support}: $${lowNum.toFixed(2)} → $${(lowNum - range * 0.236).toFixed(2)}
+${t.resistance}: $${highNum.toFixed(2)} → $${(highNum + range * 0.236).toFixed(2)}
 
-🚫 DON'T TRADE IF:
-• ${finalBias === 'LONG' ? `Price drops below $${(lowNum - range * 0.1).toFixed(2)}` : finalBias === 'SHORT' ? `Price rises above $${(highNum + range * 0.1).toFixed(2)}` : 'No clear breakout with volume'}
+🚫 ${t.dontTrade}:
+• ${finalBias === 'LONG' ? `${t.priceDrops} $${(lowNum - range * 0.1).toFixed(2)}` : finalBias === 'SHORT' ? `${t.priceRises} $${(highNum + range * 0.1).toFixed(2)}` : t.noBreakout}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💡 TOP 3 INSIGHTS
+💡 ${t.topInsights}
 ${allInsights.slice(0, 3).map((ins, i) => `${i + 1}. ${ins.replace(/[🔗💎📈📉🌐💬⚡🎯✓⚠️📊📡💼]/g, '').trim()}`).join('\n')}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-⚠️ REMEMBER
-• Only risk 1-2% of your capital per trade
-• Always use a stop loss
-• Crypto is volatile — this is analysis, not financial advice
+⚠️ ${t.remember}
+• ${t.riskAdvice}
+• ${t.stopLossAdvice}
+• ${t.volatileAdvice}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${finalBias === 'LONG' ? '🟢' : finalBias === 'SHORT' ? '🔴' : '⚪'} ${finalBias} BIAS | ${finalConfidence}% Confidence | ${allPatterns.length} Patterns
-🎓 Your feedback helps improve future predictions!`;
+${finalBias === 'LONG' ? '🟢' : finalBias === 'SHORT' ? '🔴' : '⚪'} ${finalBias} ${t.bias} | ${finalConfidence}% ${t.confidence} | ${allPatterns.length} ${t.patterns}
+🎓 ${t.feedbackHelps}`;
 
     // Stream the analysis with proper cancellation handling
     const encoder = new TextEncoder();
