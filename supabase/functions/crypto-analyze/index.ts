@@ -3031,7 +3031,7 @@ Pattern Confluence: ${allPatterns.length >= 8 ? 'EXCELLENT ⭐⭐⭐⭐⭐' : al
 Bull Probability: ${probabilities.bullProb}% ${'█'.repeat(Math.round(probabilities.bullProb / 5))}${'░'.repeat(20 - Math.round(probabilities.bullProb / 5))}
 Bear Probability: ${probabilities.bearProb}% ${'█'.repeat(Math.round(probabilities.bearProb / 5))}${'░'.repeat(20 - Math.round(probabilities.bearProb / 5))}
 Neutral Zone: ${probabilities.neutralProb}%
-Primary Bias: ${probabilities.bullProb > probabilities.bearProb + 10 ? 'BULLISH 🟢' : probabilities.bearProb > probabilities.bullProb + 10 ? 'BEARISH 🔴' : 'NEUTRAL ⚪'}
+Primary Bias: ${finalBias === 'LONG' ? 'BULLISH 🟢' : finalBias === 'SHORT' ? 'BEARISH 🔴' : 'NEUTRAL ⚪'} (Source: ${biasSource.replace(/_/g, ' ')})
 Predictive Confidence: ${adjustedConfidence}%
 
 🔮 PREDICTIVE MEMORY (PAST → FUTURE)
@@ -3104,8 +3104,8 @@ Fair Value Gap: ${finalBias === 'LONG' ? fvgBullishZone : fvgBearishZone}
 OTE Zone (61.8-78.6%): ${finalBias === 'LONG' ? oteZoneBullish : oteZoneBearish}
 Equilibrium: $${equilibrium.toFixed(2)}
 
-🟢 BULL CASE ${finalBias === 'LONG' || probabilities.bullProb > probabilities.bearProb + 10 ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
-Probability: ${probabilities.bullProb}% | Confidence: ${finalBias === 'LONG' ? adjustedConfidence : Math.max(45, 100 - adjustedConfidence)}%
+🟢 BULL CASE ${finalBias === 'LONG' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
+Probability: ${probabilities.bullProb}% | Confidence: ${finalBias === 'LONG' ? adjustedConfidence : Math.max(40, adjustedConfidence - 25)}%
 Entry Zone: $${bullEntry} — OTE/Order Block confluence
 Stop Loss: $${bullStop} — Below structure low
 TP1: $${bullTP1} (+${((Number(bullTP1) - priceNum) / priceNum * 100).toFixed(1)}%) — First resistance
@@ -3114,8 +3114,8 @@ TP3: $${bullTP3} (+${((Number(bullTP3) - priceNum) / priceNum * 100).toFixed(1)}
 TP4: $${bullTP4} (+${((Number(bullTP4) - priceNum) / priceNum * 100).toFixed(1)}%) — 1.618 extension
 R:R = 1:${bullRR} ${Number(bullRR) >= 3 ? '✓ Excellent' : Number(bullRR) >= 2 ? '◐ Good' : '⚠️ Consider'}
 
-🔴 BEAR CASE ${finalBias === 'SHORT' || probabilities.bearProb > probabilities.bullProb + 10 ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
-Probability: ${probabilities.bearProb}% | Confidence: ${finalBias === 'SHORT' ? adjustedConfidence : Math.max(45, 100 - adjustedConfidence)}%
+🔴 BEAR CASE ${finalBias === 'SHORT' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
+Probability: ${probabilities.bearProb}% | Confidence: ${finalBias === 'SHORT' ? adjustedConfidence : Math.max(40, adjustedConfidence - 25)}%
 Entry Zone: $${bearEntry} — Premium zone rejection
 Stop Loss: $${bearStop} — Above structure high
 TP1: $${bearTarget1.toFixed(2)} | TP2: $${bearTarget2.toFixed(2)} | TP3: $${bearTarget3.toFixed(2)} | TP4: $${bearTarget4.toFixed(2)}
@@ -3135,10 +3135,10 @@ ${allInsights.slice(0, 7).map((ins, i) => `${i + 1}. ${ins}`).join('\n')}
 
 🎯 EXECUTIVE SUMMARY
 ${mtfAnalysis.precisionEntry.timing === 'NOW' ? `⏱️ 15M PRECISION ENTRY ACTIVE: ${mtfAnalysis.precisionEntry.trigger}` : ''}
-${probabilities.bullProb > probabilities.bearProb + 15 ? 
-  `BULLISH BIAS with ${adjustedConfidence}% adaptive confidence. ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports longs.' : 'Developing setup.'} ${wyckoffPhase.phase === 'ACCUMULATION' ? 'Wyckoff accumulation active.' : ''} ${marketStructure.lastCHoCH === 'BULLISH' ? 'CHoCH confirms reversal.' : ''} Target: $${bullTP2} with stop at $${bullStop}.` :
-  probabilities.bearProb > probabilities.bullProb + 15 ?
-  `BEARISH BIAS with ${adjustedConfidence}% adaptive confidence. ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports shorts.' : 'Developing setup.'} ${wyckoffPhase.phase === 'DISTRIBUTION' ? 'Wyckoff distribution active.' : ''} ${marketStructure.lastCHoCH === 'BEARISH' ? 'CHoCH confirms reversal.' : ''} Target: $${bearTarget2.toFixed(2)} with stop at $${bearStop}.` :
+${finalBias === 'LONG' ? 
+  `BULLISH BIAS with ${adjustedConfidence}% adaptive confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports longs.' : 'Developing setup.'} ${wyckoffPhase.phase === 'ACCUMULATION' ? 'Wyckoff accumulation active.' : ''} ${marketStructure.lastCHoCH === 'BULLISH' ? 'CHoCH confirms reversal.' : ''} Target: $${bullTP2} with stop at $${bullStop}.` :
+  finalBias === 'SHORT' ?
+  `BEARISH BIAS with ${adjustedConfidence}% adaptive confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports shorts.' : 'Developing setup.'} ${wyckoffPhase.phase === 'DISTRIBUTION' ? 'Wyckoff distribution active.' : ''} ${marketStructure.lastCHoCH === 'BEARISH' ? 'CHoCH confirms reversal.' : ''} Target: $${bearTarget2.toFixed(2)} with stop at $${bearStop}.` :
   `NEUTRAL — No clear edge. ${adaptiveLearning.currentScenario?.expectedOutcome === 'NEUTRAL' ? 'Scenario confirms caution.' : ''} Wait for ${rangePercent < 40 ? 'support confirmation' : rangePercent > 60 ? 'resistance rejection' : 'directional break'} with volume. Patience is a trade.`}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
