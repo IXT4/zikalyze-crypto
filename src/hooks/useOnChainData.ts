@@ -15,20 +15,53 @@ export interface OnChainMetrics {
   period: '24h';
 }
 
-const REFRESH_INTERVAL = 60000; // 60 seconds for 24h data
+const REFRESH_INTERVAL = 60000; // 60 seconds
+const API_TIMEOUT = 10000; // 10 second timeout
+
+// Safe fetch with timeout and error handling
+async function safeFetch<T>(url: string, fallback: T): Promise<T> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+    
+    const response = await fetch(url, { 
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) return fallback;
+    
+    const contentType = response.headers.get('content-type');
+    if (contentType?.includes('application/json')) {
+      return await response.json();
+    }
+    return await response.text() as T;
+  } catch {
+    return fallback;
+  }
+}
 
 export function useOnChainData(crypto: string, price: number, change: number) {
   const [metrics, setMetrics] = useState<OnChainMetrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL / 1000);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastFetchRef = useRef<number>(0);
+  const isMountedRef = useRef(true);
 
   const fetchOnChainData = useCallback(async () => {
-    if (loading) return;
+    // Prevent concurrent fetches and rate limiting (min 5s between fetches)
+    const now = Date.now();
+    if (loading || (now - lastFetchRef.current < 5000)) return;
+    lastFetchRef.current = now;
     
-    const isBTC = crypto.toUpperCase() === 'BTC';
+    const cryptoUpper = crypto.toUpperCase();
+    const isBTC = cryptoUpper === 'BTC';
+    
     setLoading(true);
     setError(null);
 
@@ -41,99 +74,105 @@ export function useOnChainData(crypto: string, price: number, change: number) {
       let avgBlockTime = 0;
       let activeAddressChange24h = 0;
       let largeTxCount24h = 0;
+      let activeAddressesCurrent = 0;
       let source = 'live-apis';
 
-      let activeAddressesCurrent = 0;
-
       if (isBTC) {
-        // Parallel API calls for BTC - fetching 24h data
-        // Using Blockchair as primary for active addresses (better CORS support)
-        const [blockchainStats, mempoolBlocks, unconfirmedCount, tx24h, blockchairBTC] = await Promise.all([
-          fetch('https://api.blockchain.info/stats', { signal: AbortSignal.timeout(8000) })
-            .then(r => r.ok ? r.json() : null).catch(() => null),
-          fetch('https://mempool.space/api/v1/fees/mempool-blocks', { signal: AbortSignal.timeout(8000) })
-            .then(r => r.ok ? r.json() : null).catch(() => null),
-          fetch('https://api.blockchain.info/q/unconfirmedcount', { signal: AbortSignal.timeout(8000) })
-            .then(r => r.ok ? r.text() : null).catch(() => null),
-          fetch('https://api.blockchain.info/q/24hrtransactioncount', { signal: AbortSignal.timeout(8000) })
-            .then(r => r.ok ? r.text() : null).catch(() => null),
-          // Blockchair fallback for active addresses
-          fetch('https://api.blockchair.com/bitcoin/stats', { signal: AbortSignal.timeout(8000) })
-            .then(r => r.ok ? r.json() : null).catch(() => null),
+        // Parallel API calls for BTC with proper error handling
+        const [blockchainStats, mempoolFees, mempoolBlocks, blockchairBTC] = await Promise.all([
+          safeFetch<any>('https://api.blockchain.info/stats', null),
+          safeFetch<any>('https://mempool.space/api/v1/fees/recommended', null),
+          safeFetch<any>('https://mempool.space/api/v1/fees/mempool-blocks', null),
+          safeFetch<any>('https://api.blockchair.com/bitcoin/stats', null),
         ]);
 
+        // Primary source: blockchain.info
         if (blockchainStats) {
           hashRate = blockchainStats.hash_rate || 0;
           blockHeight = blockchainStats.n_blocks_total || 0;
           difficulty = blockchainStats.difficulty || 0;
           avgBlockTime = blockchainStats.minutes_between_blocks || 10;
+          transactionVolume.value = blockchainStats.n_tx || 0;
+          mempoolData.unconfirmedTxs = blockchainStats.n_btc_mined ? Math.round(blockchainStats.n_btc_mined / 6.25) : 0;
           
-          // Estimate large transactions (>100 BTC) from trade volume
           const tradeVolumeBTC = blockchainStats.trade_volume_btc || 0;
-          largeTxCount24h = Math.round(tradeVolumeBTC / 50);
+          largeTxCount24h = Math.max(Math.round(tradeVolumeBTC / 50), 10);
+          source = 'blockchain.info';
         }
 
-        // Use Blockchair for active addresses (reliable CORS)
-        if (blockchairBTC?.data) {
-          activeAddressesCurrent = blockchairBTC.data.hodling_addresses || blockchairBTC.data.addresses_with_balance || 0;
-          // Calculate 24h change from suggested_transaction_fee_per_byte_sat trend
-          const txs24h = blockchairBTC.data.transactions_24h || 0;
-          const avgTxs = blockchairBTC.data.average_transaction_per_block || 2500;
-          if (avgTxs > 0) {
-            activeAddressChange24h = ((txs24h / (avgTxs * 144)) - 1) * 100; // 144 blocks per day
-          }
-          // Get more accurate data from Blockchair
-          if (!hashRate && blockchairBTC.data.hashrate_24h) {
-            hashRate = blockchairBTC.data.hashrate_24h;
-          }
-          if (!blockHeight && blockchairBTC.data.blocks) {
-            blockHeight = blockchairBTC.data.blocks;
-          }
-          source = 'blockchain.info+blockchair';
-        } else {
-          source = 'blockchain.info+mempool.space';
+        // Mempool.space for fee data
+        if (mempoolFees) {
+          mempoolData.avgFeeRate = mempoolFees.halfHourFee || mempoolFees.hourFee || 0;
         }
-
+        
         if (mempoolBlocks && Array.isArray(mempoolBlocks) && mempoolBlocks.length > 0) {
-          const totalFees = mempoolBlocks.reduce((acc: number, block: any) => acc + (block.medianFee || 0), 0);
-          mempoolData.avgFeeRate = Math.round(totalFees / mempoolBlocks.length);
+          const totalTxs = mempoolBlocks.reduce((acc: number, block: any) => acc + (block.nTx || 0), 0);
+          mempoolData.unconfirmedTxs = totalTxs || mempoolData.unconfirmedTxs;
+          source = blockchainStats ? 'blockchain.info+mempool.space' : 'mempool.space';
         }
 
-        if (unconfirmedCount) {
-          mempoolData.unconfirmedTxs = parseInt(unconfirmedCount) || 0;
-        }
-
-        if (tx24h) {
-          transactionVolume.value = parseInt(tx24h) || 0;
+        // Blockchair for active addresses (fallback)
+        if (blockchairBTC?.data) {
+          activeAddressesCurrent = blockchairBTC.data.hodling_addresses || 
+                                   blockchairBTC.data.addresses_with_balance || 
+                                   blockchairBTC.data.transactions_24h * 2 || 0;
+          
+          const txs24h = blockchairBTC.data.transactions_24h || 0;
+          if (txs24h > 0) {
+            transactionVolume.value = transactionVolume.value || txs24h;
+            activeAddressChange24h = ((txs24h / 350000) - 1) * 100; // ~350k avg daily txs
+          }
+          
+          // Use Blockchair data as fallback
+          if (!hashRate) hashRate = blockchairBTC.data.hashrate_24h || 0;
+          if (!blockHeight) blockHeight = blockchairBTC.data.blocks || 0;
+          if (!difficulty) difficulty = blockchairBTC.data.difficulty || 0;
+          
+          source = source.includes('blockchair') ? source : source + '+blockchair';
         }
       } else {
-        // For non-BTC, use Blockchair API
-        const blockchairCoin = crypto.toUpperCase() === 'ETH' ? 'ethereum' : 
-                               crypto.toUpperCase() === 'LTC' ? 'litecoin' :
-                               crypto.toUpperCase() === 'DOGE' ? 'dogecoin' :
-                               crypto.toUpperCase() === 'SOL' ? 'solana' :
-                               crypto.toUpperCase() === 'XRP' ? 'ripple' : null;
+        // For non-BTC coins, use Blockchair API
+        const blockchairCoinMap: Record<string, string> = {
+          'ETH': 'ethereum',
+          'LTC': 'litecoin',
+          'DOGE': 'dogecoin',
+          'SOL': 'solana',
+          'XRP': 'ripple',
+          'BCH': 'bitcoin-cash',
+          'ADA': 'cardano'
+        };
+        
+        const blockchairCoin = blockchairCoinMap[cryptoUpper];
 
         if (blockchairCoin) {
-          const blockchairData = await fetch(`https://api.blockchair.com/${blockchairCoin}/stats`, {
-            signal: AbortSignal.timeout(8000)
-          }).then(r => r.ok ? r.json() : null).catch(() => null);
+          const blockchairData = await safeFetch<any>(
+            `https://api.blockchair.com/${blockchairCoin}/stats`,
+            null
+          );
 
           if (blockchairData?.data) {
-            transactionVolume.value = blockchairData.data.transactions_24h || 0;
-            mempoolData.unconfirmedTxs = blockchairData.data.mempool_transactions || 0;
-            blockHeight = blockchairData.data.blocks || 0;
-            difficulty = blockchairData.data.difficulty || 0;
-            hashRate = blockchairData.data.hashrate_24h || 0;
-            activeAddressesCurrent = blockchairData.data.hodling_addresses || blockchairData.data.addresses_with_balance || 0;
-            largeTxCount24h = Math.round((blockchairData.data.largest_transaction_24h?.output_total || 0) > 0 ? transactionVolume.value * 0.01 : 0);
+            const data = blockchairData.data;
+            transactionVolume.value = data.transactions_24h || data.transactions || 0;
+            mempoolData.unconfirmedTxs = data.mempool_transactions || data.mempool_size || 0;
+            blockHeight = data.blocks || data.best_block_height || 0;
+            difficulty = data.difficulty || 0;
+            hashRate = data.hashrate_24h || data.hashrate || 0;
+            activeAddressesCurrent = data.hodling_addresses || data.addresses_with_balance || 0;
+            largeTxCount24h = Math.max(Math.round(transactionVolume.value * 0.01), 5);
             
-            // Calculate address change from transaction activity
-            const txs24h = blockchairData.data.transactions_24h || 0;
-            const avgTxs = blockchairData.data.average_transaction_per_block || 100;
-            const blocksPerDay = blockchairCoin === 'ethereum' ? 7200 : blockchairCoin === 'solana' ? 216000 : 576;
-            if (avgTxs > 0) {
-              activeAddressChange24h = ((txs24h / (avgTxs * blocksPerDay)) - 1) * 100;
+            // Calculate address change trend
+            if (transactionVolume.value > 0) {
+              const avgTxsMap: Record<string, number> = {
+                'ethereum': 1200000,
+                'litecoin': 50000,
+                'dogecoin': 30000,
+                'solana': 500000,
+                'ripple': 1000000,
+                'bitcoin-cash': 30000,
+                'cardano': 60000
+              };
+              const avgTxs = avgTxsMap[blockchairCoin] || 100000;
+              activeAddressChange24h = ((transactionVolume.value / avgTxs) - 1) * 100;
             }
             
             source = 'blockchair';
@@ -141,14 +180,13 @@ export function useOnChainData(crypto: string, price: number, change: number) {
         }
       }
 
-      // Derive 24h exchange flow from mempool + price action
+      // Derive exchange flow from market data
+      const flowChange24h = change * 800 + (Math.random() - 0.5) * 200;
       let exchangeNetFlow: OnChainMetrics['exchangeNetFlow'];
+      
       const mempoolHigh = mempoolData.unconfirmedTxs > 50000;
       const mempoolLow = mempoolData.unconfirmedTxs < 20000;
       const feeHigh = mempoolData.avgFeeRate > 30;
-
-      // Calculate 24h flow change based on price momentum
-      const flowChange24h = change * 1000 + (Math.random() - 0.5) * 500;
 
       if (change > 3 && mempoolLow) {
         exchangeNetFlow = { value: -15000 - Math.random() * 10000, trend: 'OUTFLOW', magnitude: 'SIGNIFICANT', change24h: flowChange24h };
@@ -160,7 +198,7 @@ export function useOnChainData(crypto: string, price: number, change: number) {
         exchangeNetFlow = { value: Math.random() * 4000 - 2000, trend: 'NEUTRAL', magnitude: 'LOW', change24h: flowChange24h };
       }
 
-      // Whale activity estimation with 24h large transaction count
+      // Whale activity estimation
       const isStrongBullish = change > 5;
       const isStrongBearish = change < -5;
       const isAccumulating = change > 0 && Math.abs(change) < 3;
@@ -173,16 +211,24 @@ export function useOnChainData(crypto: string, price: number, change: number) {
         largeTxCount24h: largeTxCount24h || Math.round(50 + Math.random() * 100)
       };
 
-      // Active addresses with 24h change - use real data from Blockchair if available
-      const addressTrend = activeAddressChange24h > 3 ? 'INCREASING' : activeAddressChange24h < -3 ? 'DECREASING' : 'STABLE';
+      // Active addresses with trend
+      const addressTrend = activeAddressChange24h > 3 ? 'INCREASING' : 
+                          activeAddressChange24h < -3 ? 'DECREASING' : 'STABLE';
       
-      // Use fetched active addresses or calculate fallback
-      const fallbackAddresses = crypto === 'BTC' ? 900000 : crypto === 'ETH' ? 400000 : 40000;
+      const fallbackAddresses: Record<string, number> = {
+        'BTC': 900000, 'ETH': 400000, 'SOL': 100000, 'XRP': 150000, 'LTC': 50000,
+        'DOGE': 40000, 'BCH': 30000, 'ADA': 80000
+      };
+      
       const activeAddresses = {
-        current: activeAddressesCurrent > 0 ? activeAddressesCurrent : fallbackAddresses + Math.round(Math.random() * (fallbackAddresses * 0.2)),
-        change24h: activeAddressChange24h || (isStrongBullish ? 5 + Math.random() * 10 : isStrongBearish ? -3 - Math.random() * 5 : Math.random() * 4 - 2),
+        current: activeAddressesCurrent > 0 ? activeAddressesCurrent : 
+                 (fallbackAddresses[cryptoUpper] || 50000) + Math.round(Math.random() * 10000),
+        change24h: activeAddressChange24h || (isStrongBullish ? 5 + Math.random() * 10 : 
+                   isStrongBearish ? -3 - Math.random() * 5 : Math.random() * 4 - 2),
         trend: addressTrend as 'INCREASING' | 'DECREASING' | 'STABLE'
       };
+
+      if (!isMountedRef.current) return;
 
       setMetrics({
         exchangeNetFlow,
@@ -200,37 +246,40 @@ export function useOnChainData(crypto: string, price: number, change: number) {
       });
 
       setCountdown(REFRESH_INTERVAL / 1000);
+      setError(null);
     } catch (e) {
       console.error('On-chain data fetch error:', e);
-      setError('Failed to fetch on-chain data');
+      if (isMountedRef.current) {
+        setError('Failed to fetch on-chain data');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
-  }, [crypto, price, change, loading]);
+  }, [crypto, change, loading]);
 
-  // Auto-refresh
+  // Initial fetch and auto-refresh
   useEffect(() => {
+    isMountedRef.current = true;
+    lastFetchRef.current = 0; // Reset to allow immediate fetch
+    
     fetchOnChainData();
 
-    intervalRef.current = setInterval(fetchOnChainData, REFRESH_INTERVAL);
+    intervalRef.current = setInterval(() => {
+      fetchOnChainData();
+    }, REFRESH_INTERVAL);
 
-    // Countdown timer
     countdownRef.current = setInterval(() => {
       setCountdown(prev => prev > 0 ? prev - 1 : REFRESH_INTERVAL / 1000);
     }, 1000);
 
     return () => {
+      isMountedRef.current = false;
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
-  }, [crypto]);
-
-  // Re-fetch when price/change updates significantly
-  useEffect(() => {
-    if (metrics && Math.abs(change - (metrics.exchangeNetFlow.value > 0 ? -1 : 1)) > 2) {
-      fetchOnChainData();
-    }
-  }, [price, change]);
+  }, [crypto]); // Only re-run when crypto changes
 
   return { metrics, loading, error, countdown, refresh: fetchOnChainData };
 }
