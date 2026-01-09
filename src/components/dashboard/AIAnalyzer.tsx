@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAnalysisHistory, AnalysisRecord } from "@/hooks/useAnalysisHistory";
-import { useBinanceLivePrice } from "@/hooks/useBinanceLivePrice";
+import { useLiveMarketData } from "@/hooks/useLiveMarketData";
 import { format } from "date-fns";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -49,15 +49,15 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const lastFrameTimeRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
-  // Binance live price feed with fallback to props
-  const livePrice = useBinanceLivePrice(crypto, price, change);
+  // Comprehensive live market data (prices, on-chain, sentiment)
+  const liveData = useLiveMarketData(crypto, price, change, high24h, low24h, volume);
   
-  // Use live data when available, fallback to props
-  const currentPrice = livePrice.isLive ? livePrice.price : (livePrice.price || price);
-  const currentChange = livePrice.isLive ? livePrice.change24h : (livePrice.change24h || change);
-  const currentHigh = livePrice.isLive && livePrice.high24h ? livePrice.high24h : high24h;
-  const currentLow = livePrice.isLive && livePrice.low24h ? livePrice.low24h : low24h;
-  const currentVolume = livePrice.isLive && livePrice.volume ? livePrice.volume : volume;
+  // Use live data when available
+  const currentPrice = liveData.price;
+  const currentChange = liveData.change24h;
+  const currentHigh = liveData.high24h || high24h;
+  const currentLow = liveData.low24h || low24h;
+  const currentVolume = liveData.volume || volume;
   
   const { history, learningStats, loading: historyLoading, saveAnalysis, submitFeedback, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
   const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
@@ -146,7 +146,10 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           volume: analysisVolume, 
           marketCap, 
           language: currentLanguage,
-          dataSource: livePrice.isLive ? 'binance-live' : 'coingecko'
+          dataSource: liveData.dataSourcesSummary,
+          // Pass live on-chain and sentiment data for enhanced analysis
+          liveOnChain: liveData.onChain,
+          liveSentiment: liveData.sentiment,
         }),
       });
 
@@ -242,7 +245,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       clearInterval(stepInterval);
       setIsAnalyzing(false);
     }
-  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, t, livePrice.isLive]);
+  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, t, liveData.priceIsLive, liveData.onChain, liveData.sentiment]);
 
   const handleSelectHistory = (record: AnalysisRecord) => {
     setSelectedHistory(record);
@@ -319,30 +322,30 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">v9.0</span>
-                {/* Live Price Indicator */}
+                {/* Live Data Indicator */}
                 <div className={cn(
                   "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium transition-all",
-                  livePrice.isLive 
+                  liveData.priceIsLive 
                     ? "bg-success/20 text-success" 
-                    : livePrice.isConnecting
-                    ? "bg-warning/20 text-warning"
-                    : "bg-muted text-muted-foreground"
+                    : "bg-warning/20 text-warning"
                 )}>
-                  {livePrice.isLive ? (
+                  {liveData.priceIsLive ? (
                     <>
                       <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
                       <span>LIVE</span>
                     </>
-                  ) : livePrice.isConnecting ? (
+                  ) : (
                     <>
                       <span className="h-2 w-2 rounded-full bg-warning animate-pulse" />
                     </>
-                  ) : (
-                    <>
-                      <span className="h-2 w-2 rounded-full bg-muted-foreground" />
-                    </>
                   )}
                 </div>
+                {/* Data sources badge */}
+                {liveData.dataSourcesSummary !== 'cached' && (
+                  <span className="text-[9px] text-muted-foreground">
+                    {liveData.dataSourcesSummary}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">{displayedAccuracy.toFixed(0)}% Accuracy</span>
@@ -406,10 +409,10 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               </div>
             </div>
             <div className="text-right text-xs text-muted-foreground">
-              {livePrice.isLive && (
+              {liveData.priceIsLive && (
                 <div className="flex items-center gap-1">
                   <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                  <span>Updated {new Date(livePrice.lastUpdate).toLocaleTimeString()}</span>
+                  <span>Updated {new Date(liveData.lastUpdated).toLocaleTimeString()}</span>
                 </div>
               )}
               <div className="mt-1">

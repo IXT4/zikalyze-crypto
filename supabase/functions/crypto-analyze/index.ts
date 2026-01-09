@@ -3108,7 +3108,7 @@ serve(async (req) => {
   }
 
   try {
-    let body: { crypto?: unknown; price?: unknown; change?: unknown; high24h?: unknown; low24h?: unknown; volume?: unknown; marketCap?: unknown; language?: unknown };
+    let body: { crypto?: unknown; price?: unknown; change?: unknown; high24h?: unknown; low24h?: unknown; volume?: unknown; marketCap?: unknown; language?: unknown; dataSource?: string; liveOnChain?: unknown; liveSentiment?: unknown };
     try {
       body = await req.json();
     } catch {
@@ -3125,7 +3125,7 @@ serve(async (req) => {
       });
     }
 
-    const { crypto, price, change, high24h, low24h, volume, marketCap, language } = body;
+    const { crypto, price, change, high24h, low24h, volume, marketCap, language, dataSource, liveOnChain, liveSentiment } = body;
     
     // Validate and set language (default to English)
     const validLanguages = ['en', 'es', 'fr', 'de', 'zh', 'pt', 'ja', 'ko', 'pcm', 'ar', 'hi', 'ru'];
@@ -3965,22 +3965,50 @@ serve(async (req) => {
     
     let sentimentData: SentimentData | null = null;
     
-    try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL');
-      if (supabaseUrl) {
-        const sentimentResponse = await fetch(`${supabaseUrl}/functions/v1/crypto-sentiment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ crypto: sanitizedCrypto, price: validatedPrice, change: validatedChange })
-        });
-        
-        if (sentimentResponse.ok) {
-          sentimentData = await sentimentResponse.json();
-          console.log(`🌐 Sentiment: F&G ${sentimentData?.fearGreed?.value} (${sentimentData?.fearGreed?.label}), Social: ${sentimentData?.social?.overall?.score}% ${sentimentData?.social?.overall?.label}`);
+    // Use live sentiment data from client if available, otherwise fetch fresh
+    if (liveSentiment && typeof liveSentiment === 'object' && (liveSentiment as any).isLive) {
+      const liveData = liveSentiment as any;
+      console.log(`🌐 Using LIVE sentiment data from client (F&G: ${liveData.fearGreedValue})`);
+      sentimentData = {
+        fearGreed: { 
+          value: liveData.fearGreedValue || 50, 
+          label: liveData.fearGreedLabel || 'Neutral',
+          previousValue: liveData.fearGreedValue || 50,
+          previousLabel: liveData.fearGreedLabel || 'Neutral'
+        },
+        social: {
+          twitter: { mentions: liveData.socialMentions || 0, sentiment: liveData.sentimentScore || 50, trending: false },
+          reddit: { mentions: 0, sentiment: liveData.sentimentScore || 50, activeThreads: 0 },
+          telegram: { mentions: 0, sentiment: liveData.sentimentScore || 50 },
+          overall: { score: liveData.sentimentScore || 50, label: liveData.overallSentiment || 'Neutral', change24h: 0 },
+          trendingTopics: liveData.trendingTopics || [],
+          influencerMentions: []
+        },
+        summary: { 
+          overallSentiment: liveData.overallSentiment || 'Neutral', 
+          sentimentScore: liveData.sentimentScore || 50, 
+          totalMentions: liveData.socialMentions || 0, 
+          marketMood: liveData.overallSentiment || 'Neutral' 
         }
+      };
+    } else {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        if (supabaseUrl) {
+          const sentimentResponse = await fetch(`${supabaseUrl}/functions/v1/crypto-sentiment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ crypto: sanitizedCrypto, price: validatedPrice, change: validatedChange })
+          });
+          
+          if (sentimentResponse.ok) {
+            sentimentData = await sentimentResponse.json();
+            console.log(`🌐 Sentiment: F&G ${sentimentData?.fearGreed?.value} (${sentimentData?.fearGreed?.label}), Social: ${sentimentData?.social?.overall?.score}% ${sentimentData?.social?.overall?.label}`);
+          }
+        }
+      } catch (e) {
+        console.log("Sentiment fetch skipped:", e);
       }
-    } catch (e) {
-      console.log("Sentiment fetch skipped:", e);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -3993,16 +4021,38 @@ serve(async (req) => {
     console.log(`📊 MTF Analysis: ${mtfAnalysis.confluence.overallBias} bias, ${mtfAnalysis.confluence.alignment}% alignment, HTF: ${mtfAnalysis.confluence.htfTrend}`);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // 📡 ON-CHAIN METRICS & ETF FLOW DATA
+    // 📡 ON-CHAIN METRICS & ETF FLOW DATA (prefer live client data if available)
     // ═══════════════════════════════════════════════════════════════════════════
     
-    const onChainMetrics = await fetchOnChainMetrics(sanitizedCrypto, validatedPrice, validatedChange);
+    // Use live on-chain data from client if available, otherwise fetch fresh
+    let onChainMetrics: OnChainMetrics;
+    if (liveOnChain && typeof liveOnChain === 'object' && (liveOnChain as any).isLive) {
+      const liveData = liveOnChain as any;
+      console.log(`📡 Using LIVE on-chain data from client (${dataSource || 'live'})`);
+      onChainMetrics = {
+        exchangeNetFlow: liveData.exchangeNetFlow || { value: 0, trend: 'NEUTRAL', magnitude: 'LOW' },
+        whaleActivity: { 
+          buying: liveData.whaleActivity?.buying || 50, 
+          selling: liveData.whaleActivity?.selling || 50, 
+          netFlow: liveData.whaleActivity?.netFlow || 'BALANCED' 
+        },
+        longTermHolders: { accumulating: validatedChange > 0, change7d: validatedChange * 0.5, sentiment: validatedChange > 0 ? 'ACCUMULATING' : 'HOLDING' },
+        shortTermHolders: { behavior: validatedChange > 3 ? 'FOMO BUYING' : validatedChange < -3 ? 'PANIC SELLING' : 'NEUTRAL', profitLoss: validatedChange },
+        activeAddresses: liveData.activeAddresses || { current: 0, change24h: 0, trend: 'STABLE' },
+        transactionVolume: liveData.transactionVolume || { value: 0, change24h: 0 },
+        mempoolData: liveData.mempoolData,
+        source: 'client-live'
+      };
+    } else {
+      onChainMetrics = await fetchOnChainMetrics(sanitizedCrypto, validatedPrice, validatedChange);
+    }
+    
     const etfFlowData = sanitizedCrypto === 'BTC' || sanitizedCrypto === 'ETH' 
       ? await fetchETFFlowData(validatedPrice, validatedChange)
       : null;
     const macroCatalysts = getUpcomingMacroCatalysts();
     
-    console.log(`📡 On-Chain: ${onChainMetrics.exchangeNetFlow.trend} (${onChainMetrics.exchangeNetFlow.magnitude}), Whales: ${onChainMetrics.whaleActivity.netFlow}`);
+    console.log(`📡 On-Chain: ${onChainMetrics.exchangeNetFlow.trend} (${onChainMetrics.exchangeNetFlow.magnitude}), Whales: ${onChainMetrics.whaleActivity.netFlow}, Source: ${onChainMetrics.source}`);
     if (etfFlowData) {
       console.log(`💼 ETF Flows: $${etfFlowData.btcNetFlow24h}M (${etfFlowData.trend})`);
     }
