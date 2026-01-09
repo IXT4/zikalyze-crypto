@@ -3931,218 +3931,83 @@ serve(async (req) => {
       allInsights.push(`⚡ ${institutionalVsRetail.divergenceNote}`);
     }
     
-    const analysis = `📊 ${sanitizedCrypto} ANALYSIS — v10.0
-Price: $${priceNum.toLocaleString()} | ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const analysis = `📊 ${sanitizedCrypto} QUICK ANALYSIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📊 MULTI-TIMEFRAME CONFLUENCE
-HTF Trend (Daily): ${mtfAnalysis.tfDaily?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tfDaily ? `(${mtfAnalysis.tfDaily.trendAnalysis.strength}%)` : ''}
-MTF Trend (4H): ${mtfAnalysis.tf4H?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tf4H ? `(${mtfAnalysis.tf4H.trendAnalysis.strength}%)` : ''}
-LTF Trend (1H): ${mtfAnalysis.tf1H?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tf1H ? `(${mtfAnalysis.tf1H.trendAnalysis.strength}%)` : ''}
-Precision (15M): ${mtfAnalysis.tf15M?.trendAnalysis.direction || 'N/A'} ${mtfAnalysis.tf15M ? `(${mtfAnalysis.tf15M.trendAnalysis.strength}%)` : ''}
-Confluence: ${mtfAnalysis.confluence.overallBias} — ${mtfAnalysis.confluence.alignment}% aligned
-Entry Quality: ${mtfAnalysis.confluence.ltfEntry === 'OPTIMAL' ? '🟢 OPTIMAL' : mtfAnalysis.confluence.ltfEntry === 'WAIT' ? '🟡 WAIT' : '🔴 RISKY'}
-Bias Direction: ${finalBias === 'LONG' ? '🟢 BULLISH' : finalBias === 'SHORT' ? '🔴 BEARISH' : '⚪ NEUTRAL'}
+💰 PRICE: $${priceNum.toLocaleString()} ${trendEmoji} ${Math.abs(validatedChange).toFixed(2)}%
+📈 24H Range: $${lowNum.toLocaleString()} - $${highNum.toLocaleString()}
 
-⏱️ 15-MINUTE PRECISION ENTRY SYSTEM (Aligned with ${finalBias} bias)
-┌─────────────────────────────────────────────────┐
-│ TIMING: ${alignedPrecisionEntry.timing === 'NOW' ? '🟢 NOW — Execute entry' : alignedPrecisionEntry.timing === 'WAIT_PULLBACK' ? '🟡 WAIT — Pullback in progress' : alignedPrecisionEntry.timing === 'WAIT_BREAKOUT' ? '🟡 WAIT — Awaiting breakout' : '🔴 AVOID — Poor conditions'}
-│ 
-│ 📍 ENTRY ZONE: ${alignedPrecisionEntry.zone}
-│ 
-│ 🎯 TRIGGER: ${alignedPrecisionEntry.trigger}
-│ 
-│ ✓ CONFIRMATION: ${alignedPrecisionEntry.confirmation}
-│ 
-│ ✗ INVALIDATION: ${alignedPrecisionEntry.invalidation}
-│ 
-│ 📊 15M MARKET STRUCTURE: ${alignedPrecisionEntry.structureStatus}
-│ 
-│ 📈 MOVEMENT PHASE: ${alignedPrecisionEntry.movementPhase}
-│ 
-│ 🔊 VOLUME STATUS: ${alignedPrecisionEntry.volumeCondition}
-└─────────────────────────────────────────────────┘
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🎯 MTF KEY LEVELS
-Daily S/R: ${mtfAnalysis.keyLevels.dailySupport.slice(0, 2).map(s => `$${s.toFixed(2)}`).join(', ') || 'N/A'} | ${mtfAnalysis.keyLevels.dailyResistance.slice(0, 2).map(r => `$${r.toFixed(2)}`).join(', ') || 'N/A'}
-4H S/R: ${mtfAnalysis.keyLevels.h4Support.slice(0, 2).map(s => `$${s.toFixed(2)}`).join(', ') || 'N/A'} | ${mtfAnalysis.keyLevels.h4Resistance.slice(0, 2).map(r => `$${r.toFixed(2)}`).join(', ') || 'N/A'}
-1H S/R: ${mtfAnalysis.keyLevels.h1Support.slice(0, 2).map(s => `$${s.toFixed(2)}`).join(', ') || 'N/A'} | ${mtfAnalysis.keyLevels.h1Resistance.slice(0, 2).map(r => `$${r.toFixed(2)}`).join(', ') || 'N/A'}
-15M S/R: ${mtfAnalysis.keyLevels.m15Support.slice(0, 2).map(s => `$${s.toFixed(2)}`).join(', ') || 'N/A'} | ${mtfAnalysis.keyLevels.m15Resistance.slice(0, 2).map(r => `$${r.toFixed(2)}`).join(', ') || 'N/A'}
+🎯 VERDICT: ${finalBias === 'LONG' ? '🟢 BULLISH — Look for BUY opportunities' : finalBias === 'SHORT' ? '🔴 BEARISH — Look for SELL opportunities' : '⚪ NEUTRAL — No clear direction, wait'}
+📊 Confidence: ${finalConfidence}%
 
-💭 CHAIN-OF-THOUGHT REASONING
-${thoughts.map(t => `[Step ${t.step}] ${t.thought}
-→ Conclusion: ${t.conclusion} (Weight: ${t.weight}/10)`).join('\n\n')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🔍 DETECTED PATTERNS (${allPatterns.length}) — ${patternBias === 'BULLISH' ? '🟢 Bullish Bias' : patternBias === 'BEARISH' ? '🔴 Bearish Bias' : '⚪ Mixed'}
-${allPatterns.slice(0, 10).map((p, i) => `${i + 1}. ${p}`).join('\n')}
-Pattern Confluence: ${allPatterns.length >= 8 ? 'EXCELLENT' : allPatterns.length >= 5 ? 'STRONG' : allPatterns.length >= 3 ? 'GOOD' : allPatterns.length >= 2 ? 'MODERATE' : 'DEVELOPING'} (${patternAlignment}% directional alignment)
-${(() => {
-  const patternsAligned = patternBias === 'NEUTRAL' || (patternBias === 'BULLISH' && finalBias === 'LONG') || (patternBias === 'BEARISH' && finalBias === 'SHORT');
-  if (patternsAligned) {
-    return `✓ ALIGNED — ${patternBias === 'NEUTRAL' ? 'Patterns balanced, final bias driven by probability matrix' : `${bullishPatternCount > bearishPatternCount ? bullishPatternCount : bearishPatternCount} ${patternBias.toLowerCase()} patterns vs ${bullishPatternCount > bearishPatternCount ? bearishPatternCount : bullishPatternCount} opposing confirm ${finalBias} bias`}`;
-  } else {
-    // Divergent - explain resolution
-    const dominantCount = Math.max(bullishPatternCount, bearishPatternCount);
-    const minorityCount = Math.min(bullishPatternCount, bearishPatternCount);
-    const dominantSide = bullishPatternCount > bearishPatternCount ? 'Bullish' : 'Bearish';
-    const minoritySide = bullishPatternCount > bearishPatternCount ? 'Bearish' : 'Bullish';
-    const biasOverrideReason = biasSource === 'probability_matrix' ? 'probability matrix weighting' : 
-                               biasSource === 'mtf_confluence' ? 'higher-timeframe trend dominance' :
-                               biasSource === 'scenario_learning' ? 'historical scenario matching' : 'chart trend priority';
-    return `⚠️ DIVERGENT — ${dominantCount} ${dominantSide} vs ${minorityCount} ${minoritySide} patterns, but ${finalBias} bias maintained via ${biasOverrideReason}. ${minoritySide} patterns (${minorityCount}) create headwinds; monitor for reversal signals.`;
-  }
-})()}
+📍 WHAT TO DO NOW
+${alignedPrecisionEntry.timing === 'NOW' ? 
+  `✅ TIMING: Good entry available
+🎯 Action: ${finalBias === 'LONG' ? 'BUY' : finalBias === 'SHORT' ? 'SELL' : 'WAIT'}
+📍 Zone: ${alignedPrecisionEntry.zone}
+⛔ Stop If: ${alignedPrecisionEntry.invalidation}` : 
+  `⏳ TIMING: Wait for better entry
+🔍 Looking for: ${alignedPrecisionEntry.trigger}
+📍 Target Zone: ${alignedPrecisionEntry.zone}`}
 
-📊 PROBABILITY MATRIX
-Bull Probability: ${probabilities.bullProb}% ${'█'.repeat(Math.round(probabilities.bullProb / 5))}${'░'.repeat(20 - Math.round(probabilities.bullProb / 5))}
-Bear Probability: ${probabilities.bearProb}% ${'█'.repeat(Math.round(probabilities.bearProb / 5))}${'░'.repeat(20 - Math.round(probabilities.bearProb / 5))}
-Neutral Zone: ${probabilities.neutralProb}%
-Primary Bias: ${finalBias === 'LONG' ? 'BULLISH 🟢' : finalBias === 'SHORT' ? 'BEARISH 🔴' : 'NEUTRAL ⚪'} (Source: ${biasSource.replace(/_/g, ' ')})
-Predictive Confidence: ${finalConfidence}%${signalConflicts >= 2 ? ` (⚠️ ${signalConflicts} conflicting signals detected)` : signalConfirmations >= 3 ? ` (✓ ${signalConfirmations} confirming signals)` : ''}
-⚠️ Note: Crypto markets are highly volatile. These probabilities are based on current data and can shift rapidly.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🔮 PREDICTIVE MEMORY (PAST → FUTURE)
-Historical Accuracy: ${predictiveMemory.predictionAccuracy}% | Trend Consistency: ${predictiveMemory.trendConsistency}%
-${predictiveMemory.futurePredictions.length > 0 ? predictiveMemory.futurePredictions.map(p => 
-  `${p.timeframe}: $${p.target.toFixed(2)} (${p.probability}% probability) — ${p.basis}`
-).join('\n') : 'Building prediction model...'}
+${finalBias === 'LONG' ? `🟢 BUY SETUP
+• Entry: $${bullEntry}
+• Stop Loss: $${bullStop} (${((priceNum - Number(bullStop)) / priceNum * 100).toFixed(1)}% risk)
+• Target 1: $${bullTP1} (+${((Number(bullTP1) - priceNum) / priceNum * 100).toFixed(1)}%)
+• Target 2: $${bullTP2} (+${((Number(bullTP2) - priceNum) / priceNum * 100).toFixed(1)}%)
+• Risk/Reward: 1:${bullRR}` : finalBias === 'SHORT' ? `🔴 SELL SETUP
+• Entry: $${bearEntry}
+• Stop Loss: $${bearStop} (${((Number(bearStop) - priceNum) / priceNum * 100).toFixed(1)}% risk)
+• Target 1: $${bearTarget1.toFixed(2)} (${((priceNum - bearTarget1) / priceNum * 100).toFixed(1)}%)
+• Target 2: $${bearTarget2.toFixed(2)} (${((priceNum - bearTarget2) / priceNum * 100).toFixed(1)}%)
+• Risk/Reward: 1:${bearRR}` : `⚪ NO TRADE — Wait for clear signal`}
 
-🧬 ADAPTIVE LEARNING STATUS
-${adaptiveLearning.currentScenario ? `Active Scenario: ${adaptiveLearning.currentScenario.name} (${adaptiveLearning.scenarioConfidence.toFixed(0)}% match)` : 'Scenario: Analyzing market conditions...'}
-Learning Velocity: ${adaptiveLearning.learningVelocity}% ${'█'.repeat(Math.round(adaptiveLearning.learningVelocity / 10))}${'░'.repeat(10 - Math.round(adaptiveLearning.learningVelocity / 10))}
-Matched Scenarios: ${adaptiveLearning.matchedScenarios.length}
-Pattern Tracking: ${Object.keys(adaptiveLearning.patternSuccessRates).length} patterns with feedback
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📈 WYCKOFF PHASE ANALYSIS
-Phase: ${wyckoffPhase.phase} — ${wyckoffPhase.subPhase}
-Confidence: ${wyckoffPhase.confidence}%
-${wyckoffPhase.description}
+📊 WHY THIS BIAS?
+• Trend: ${mtfAnalysis.confluence.overallBias} (${mtfAnalysis.confluence.alignment}% timeframes agree)
+• Bull Probability: ${probabilities.bullProb}%
+• Bear Probability: ${probabilities.bearProb}%
+• Pattern Analysis: ${allPatterns.length} patterns found → ${patternBias} leaning
+${signalConflicts >= 2 ? `⚠️ Warning: Some signals conflict — trade with caution` : signalConfirmations >= 3 ? `✓ Strong: Multiple signals confirm this direction` : ''}
 
-🌊 ELLIOTT WAVE POSITION
-Current Wave: ${elliottWave.wave} (${elliottWave.direction})
-Subwave: ${elliottWave.subwave}
-Target: $${elliottWave.target.toFixed(2)}
-Invalidation: $${elliottWave.invalidation.toFixed(2)}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🏗️ MARKET STRUCTURE
-Trend: ${marketStructure.trend} (Strength: ${marketStructure.strength}%)
-${marketStructure.lastCHoCH ? `CHoCH: ${marketStructure.lastCHoCH} ✓` : 'CHoCH: Awaiting confirmation'}
-${marketStructure.lastBOS ? `BOS: ${marketStructure.lastBOS} ✓` : 'BOS: Awaiting break'}
-Structure: ${marketStructure.higherHighs ? 'HH ' : ''}${marketStructure.higherLows ? 'HL ' : ''}${marketStructure.lowerHighs ? 'LH ' : ''}${marketStructure.lowerLows ? 'LL' : ''}
+🌐 MARKET MOOD
+${sentimentData ? `• Fear & Greed: ${sentimentData.fearGreed.value}/100 (${sentimentData.fearGreed.label}) ${sentimentData.fearGreed.value <= 25 ? '→ Extreme fear = buying opportunity' : sentimentData.fearGreed.value >= 75 ? '→ Extreme greed = be cautious' : ''}
+• Social Sentiment: ${sentimentData.social.overall.label} (${sentimentData.social.overall.score}%)` : '• Sentiment data unavailable'}
+• Whales: ${onChainMetrics.whaleActivity.netFlow}
+• Exchange Flow: ${onChainMetrics.exchangeNetFlow.trend} ${onChainMetrics.exchangeNetFlow.trend === 'OUTFLOW' ? '(bullish — coins leaving exchanges)' : onChainMetrics.exchangeNetFlow.trend === 'INFLOW' ? '(bearish — coins entering exchanges)' : ''}
 
-💧 LIQUIDITY MAP
-${liquidityPools.slice(0, 4).map(p => `${p.type === 'BUYSIDE' ? '🔵' : '🔴'} ${p.type}: $${p.level.toFixed(2)} (Strength: ${p.strength}%)${p.swept ? ' [SWEPT]' : ''}`).join('\n')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+⚠️ KEY LEVELS
+Support: $${lowNum.toFixed(2)} → $${(lowNum - range * 0.236).toFixed(2)}
+Resistance: $${highNum.toFixed(2)} → $${(highNum + range * 0.236).toFixed(2)}
 
-🌐 REAL-WORLD SENTIMENT (SPLIT VIEW)
-${sentimentData ? `📊 INDEX-BASED (FEAR & GREED)
-Fear & Greed Index: ${sentimentData.fearGreed.value} (${sentimentData.fearGreed.label}) ${sentimentData.fearGreed.value >= 70 ? '🟢' : sentimentData.fearGreed.value <= 30 ? '🔴' : '⚪'}
-Previous: ${sentimentData.fearGreed.previousValue} (${sentimentData.fearGreed.previousLabel}) ${sentimentData.fearGreed.value > sentimentData.fearGreed.previousValue ? '↑ Improving' : sentimentData.fearGreed.value < sentimentData.fearGreed.previousValue ? '↓ Declining' : '→ Stable'}
-Interpretation: ${sentimentData.fearGreed.value <= 25 ? '⭐ EXTREME FEAR — Historically strong buying opportunity' : sentimentData.fearGreed.value <= 40 ? 'Fear zone — Contrarian opportunities exist' : sentimentData.fearGreed.value >= 75 ? '⚠️ EXTREME GREED — Caution advised' : sentimentData.fearGreed.value >= 60 ? 'Greed zone — Momentum may continue' : 'Neutral — Wait for directional clarity'}
+🚫 DON'T TRADE IF:
+• ${finalBias === 'LONG' ? `Price drops below $${(lowNum - range * 0.1).toFixed(2)}` : finalBias === 'SHORT' ? `Price rises above $${(highNum + range * 0.1).toFixed(2)}` : 'No clear breakout with volume'}
 
-💬 SOCIAL/ON-CHAIN (IMPROVING)
-Social Sentiment: ${sentimentData.social.overall.score}% ${sentimentData.social.overall.label} ${'█'.repeat(Math.round(sentimentData.social.overall.score / 10))}${'░'.repeat(10 - Math.round(sentimentData.social.overall.score / 10))}
-Twitter: ${sentimentData.social.twitter.mentions.toLocaleString()} mentions (${sentimentData.social.twitter.sentiment}% sentiment) ${sentimentData.social.twitter.trending ? '🔥 TRENDING' : ''}
-Reddit: ${sentimentData.social.reddit.mentions.toLocaleString()} mentions | ${sentimentData.social.reddit.activeThreads} active threads
-Telegram: ${sentimentData.social.telegram.mentions.toLocaleString()} mentions
-Trending: ${sentimentData.social.trendingTopics.slice(0, 4).join(', ')}
-Influencers: ${sentimentData.social.influencerMentions.slice(0, 2).map(i => `${i.name}: ${i.sentiment}`).join(' | ')}
-On-Chain Sentiment: ${onChainMetrics.longTermHolders.sentiment} (LTH) | ${onChainMetrics.whaleActivity.netFlow} (Whales)` : 'Sentiment data unavailable — using technical analysis only'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📡 ON-CHAIN METRICS ${onChainMetrics.source === 'estimated' ? '(Estimated from price action)' : '(Live)'}
-Exchange Net Flow: ${onChainMetrics.exchangeNetFlow.trend} ${onChainMetrics.exchangeNetFlow.trend === 'OUTFLOW' ? '🟢' : onChainMetrics.exchangeNetFlow.trend === 'INFLOW' ? '🔴' : '⚪'} (${onChainMetrics.exchangeNetFlow.magnitude})
-${onChainMetrics.exchangeNetFlow.trend === 'OUTFLOW' ? `└─ ${Math.abs(onChainMetrics.exchangeNetFlow.value).toLocaleString()} ${sanitizedCrypto} net off exchanges — bullish (accumulation)` : onChainMetrics.exchangeNetFlow.trend === 'INFLOW' ? `└─ ${onChainMetrics.exchangeNetFlow.value.toLocaleString()} ${sanitizedCrypto} moved to exchanges — potential selling` : '└─ Balanced flows — no strong directional signal'}
-Whale Activity: ${onChainMetrics.whaleActivity.buying.toFixed(0)}% buying vs ${onChainMetrics.whaleActivity.selling.toFixed(0)}% selling → ${onChainMetrics.whaleActivity.netFlow}
-Long-Term Holders: ${onChainMetrics.longTermHolders.sentiment} (${onChainMetrics.longTermHolders.change7d >= 0 ? '+' : ''}${onChainMetrics.longTermHolders.change7d.toFixed(1)}% 7d)
-Short-Term Holders: ${onChainMetrics.shortTermHolders.behavior} (${onChainMetrics.shortTermHolders.profitLoss >= 0 ? '+' : ''}${onChainMetrics.shortTermHolders.profitLoss.toFixed(1)}% P/L)
-Active Addresses: ${onChainMetrics.activeAddresses.current.toLocaleString()} (${onChainMetrics.activeAddresses.change24h >= 0 ? '+' : ''}${onChainMetrics.activeAddresses.change24h.toFixed(1)}% 24h) — ${onChainMetrics.activeAddresses.trend}
+💡 TOP 3 INSIGHTS
+${allInsights.slice(0, 3).map((ins, i) => `${i + 1}. ${ins.replace(/[🔗💎📈📉🌐💬⚡🎯✓⚠️📊📡💼]/g, '').trim()}`).join('\n')}
 
-${etfFlowData ? `💼 ETF FLOW DATA ${etfFlowData.source === 'momentum-estimated' ? '(Momentum-estimated)' : '(Live)'}
-BTC ETF Net Flow: ${etfFlowData.btcNetFlow24h >= 0 ? '+' : ''}$${etfFlowData.btcNetFlow24h.toFixed(0)}M (24h) | ${etfFlowData.btcNetFlow7d >= 0 ? '+' : ''}$${etfFlowData.btcNetFlow7d.toFixed(0)}M (7d)
-${sanitizedCrypto === 'ETH' ? `ETH ETF Net Flow: ${etfFlowData.ethNetFlow24h >= 0 ? '+' : ''}$${etfFlowData.ethNetFlow24h.toFixed(0)}M (24h) | ${etfFlowData.ethNetFlow7d >= 0 ? '+' : ''}$${etfFlowData.ethNetFlow7d.toFixed(0)}M (7d)` : ''}
-Institutional Trend: ${etfFlowData.trend} ${etfFlowData.trend === 'ACCUMULATING' ? '🟢' : etfFlowData.trend === 'DISTRIBUTING' ? '🔴' : '⚪'}
-Top Buyers: ${etfFlowData.topBuyers.length > 0 ? etfFlowData.topBuyers.join(', ') : 'N/A'}
-${etfFlowData.topSellers.length > 0 ? `Notable Sellers: ${etfFlowData.topSellers.join(', ')}` : ''}
-Institutional Sentiment: ${etfFlowData.institutionalSentiment}` : `💼 ETF DATA: Not applicable for ${sanitizedCrypto} (BTC/ETH only)`}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🏛️ INSTITUTIONAL VS RETAIL ANALYSIS
-Institutional Bias: ${institutionalVsRetail.institutionalBias} (${institutionalVsRetail.institutionalConfidence}% confidence) ${institutionalVsRetail.institutionalBias === 'BULLISH' ? '🟢' : institutionalVsRetail.institutionalBias === 'BEARISH' ? '🔴' : '⚪'}
-Retail Bias: ${institutionalVsRetail.retailBias} (${institutionalVsRetail.retailConfidence}% confidence) ${institutionalVsRetail.retailBias === 'BULLISH' ? '🟢' : institutionalVsRetail.retailBias === 'BEARISH' ? '🔴' : '⚪'}
-${institutionalVsRetail.divergence ? `⚡ DIVERGENCE DETECTED: ${institutionalVsRetail.divergenceNote}` : institutionalVsRetail.divergenceNote ? `✓ ALIGNED: ${institutionalVsRetail.divergenceNote}` : '— No significant divergence detected'}
+⚠️ REMEMBER
+• Only risk 1-2% of your capital per trade
+• Always use a stop loss
+• Crypto is volatile — this is analysis, not financial advice
 
-📅 MACRO CATALYST WATCH
-${macroCatalysts.slice(0, 3).map(c => `${c.impact === 'HIGH' ? '🔴' : c.impact === 'MEDIUM' ? '🟡' : '🟢'} ${c.event} (${c.date})
-   └─ Impact: ${c.impact} | Expected: ${c.expectedEffect}
-   └─ ${c.description}`).join('\n')}
-
-🔀 IF-THEN SCENARIOS (Invalidation & Confirmation)
-${ifThenScenarios.map(s => `${s.outcome.includes('INVALIDATED') ? '❌' : s.outcome.includes('CONFIRMED') ? '✅' : '⏳'} ${s.condition}
-   └─ Outcome: ${s.outcome}
-   └─ Action: ${s.action}`).join('\n')}
-
-🌐 MARKET INTELLIGENCE
-Correlations: ${correlationInfo}
-Cycle: ${cycleInfo}
-${cryptoInfo ? `Volatility: ${cryptoInfo.volatilityProfile}` : ''}
-${cryptoInfo ? `Institutional: ${cryptoInfo.institutionalBehavior}` : ''}
-
-📈 TECHNICAL STRUCTURE
-Market Phase: ${marketPhase}
-Range Position: ${rangePercent.toFixed(1)}% ${rangePercent > 80 ? '[DEEP PREMIUM ⚠️]' : rangePercent > 60 ? '[PREMIUM]' : rangePercent < 20 ? '[DEEP DISCOUNT 🎯]' : rangePercent < 40 ? '[DISCOUNT]' : '[EQUILIBRIUM]'}
-RSI Estimate: ${rsiEstimate.toFixed(0)} ${rsiEstimate > 75 ? '[EXTREME OB ⚠️]' : rsiEstimate > 65 ? '[OVERBOUGHT]' : rsiEstimate < 25 ? '[EXTREME OS 🎯]' : rsiEstimate < 35 ? '[OVERSOLD]' : '[NEUTRAL]'}
-Volume: ${volumeStrength} ${volumeStrength === 'HIGH' ? '— Strong institutional activity' : volumeStrength === 'MODERATE' ? '— Developing interest' : '— Low participation, caution'}
-Session: ${sessionContext}
-
-📐 SMART MONEY LEVELS
-Order Block (Bull): $${obBullishLow.toFixed(2)} - $${obBullishHigh.toFixed(2)}
-Order Block (Bear): $${obBearishLow.toFixed(2)} - $${obBearishHigh.toFixed(2)}
-Fair Value Gap: ${finalBias === 'LONG' ? fvgBullishZone : fvgBearishZone}
-OTE Zone (61.8-78.6%): ${finalBias === 'LONG' ? oteZoneBullish : oteZoneBearish}
-Equilibrium: $${equilibrium.toFixed(2)}
-
-🟢 BULL CASE ${finalBias === 'LONG' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
-Probability: ${probabilities.bullProb}% | Confidence: ${finalBias === 'LONG' ? finalConfidence : Math.max(40, finalConfidence - 25)}%
-Entry Zone: $${bullEntry} — OTE/Order Block confluence
-Stop Loss: $${bullStop} — Below structure low
-TP1: $${bullTP1} (+${((Number(bullTP1) - priceNum) / priceNum * 100).toFixed(1)}%) — First resistance
-TP2: $${bullTP2} (+${((Number(bullTP2) - priceNum) / priceNum * 100).toFixed(1)}%) — Golden ratio
-TP3: $${bullTP3} (+${((Number(bullTP3) - priceNum) / priceNum * 100).toFixed(1)}%) — Range extension
-TP4: $${bullTP4} (+${((Number(bullTP4) - priceNum) / priceNum * 100).toFixed(1)}%) — 1.618 extension
-R:R = 1:${bullRR} ${Number(bullRR) >= 3 ? '✓ Excellent' : Number(bullRR) >= 2 ? '◐ Good' : '⚠️ Consider'}
-
-🔴 BEAR CASE ${finalBias === 'SHORT' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
-Probability: ${probabilities.bearProb}% | Confidence: ${finalBias === 'SHORT' ? finalConfidence : Math.max(40, finalConfidence - 25)}%
-Entry Zone: $${bearEntry} — Premium zone rejection
-Stop Loss: $${bearStop} — Above structure high
-TP1: $${bearTarget1.toFixed(2)} | TP2: $${bearTarget2.toFixed(2)} | TP3: $${bearTarget3.toFixed(2)} | TP4: $${bearTarget4.toFixed(2)}
-R:R = 1:${bearRR} ${Number(bearRR) >= 3 ? '✓ Excellent' : Number(bearRR) >= 2 ? '◐ Good' : '⚠️ Consider'}
-
-⚠️ KEY LEVELS TO WATCH
-Support: $${lowNum.toFixed(2)} → $${(lowNum - range * 0.236).toFixed(2)} → $${(lowNum - range * 0.382).toFixed(2)}
-Resistance: $${highNum.toFixed(2)} → $${(highNum + range * 0.236).toFixed(2)} → $${(highNum + range * 0.382).toFixed(2)}
-Psychological: ${cryptoInfo ? cryptoInfo.keyLevels.psychological.filter(l => Math.abs(l - priceNum) < priceNum * 0.15).map(l => `$${l.toLocaleString()}`).join(', ') || 'None nearby' : 'N/A'}
-
-🔄 INVALIDATION LEVELS
-Bull Invalid: Close below $${(lowNum - range * 0.1).toFixed(2)} — Structure break
-Bear Invalid: Close above $${(highNum + range * 0.1).toFixed(2)} — Structure break
-
-⚠️ RISK FACTORS
-${rsiEstimate > 70 ? `• RSI at ${rsiEstimate.toFixed(0)} — OVERBOUGHT warning, pullback risk elevated\n` : rsiEstimate < 30 ? `• RSI at ${rsiEstimate.toFixed(0)} — OVERSOLD condition, bounce possible\n` : ''}${rangePercent > 80 ? '• Price in DEEP PREMIUM — unfavorable risk/reward for longs\n' : rangePercent < 20 ? '• Price in DEEP DISCOUNT — caution on shorts\n' : ''}${volumeStrength === 'LOW' ? '• LOW VOLUME — moves may lack conviction, false breakouts likely\n' : ''}${mtfAnalysis.confluence.alignment < 50 ? '• MIXED MTF SIGNALS — reduced conviction, consider smaller position\n' : ''}${Math.abs(validatedChange) > 8 ? '• EXTREME DAILY MOVE — volatility elevated, widen stops\n' : ''}${learningAccuracy < 50 && totalFeedback >= 5 ? `• Historical accuracy at ${learningAccuracy}% — model adapting, exercise caution\n` : ''}${institutionalVsRetail.divergence && institutionalVsRetail.retailBias === 'BULLISH' ? '• RETAIL FOMO detected while institutions distribute — potential trap\n' : ''}${macroCatalysts.some(c => c.impact === 'HIGH' && c.date !== 'Ongoing') ? '• HIGH-IMPACT macro event pending — expect volatility\n' : ''}• Crypto markets are 24/7 and highly volatile — never risk more than you can afford to lose
-• Always use stop losses and proper position sizing (1-2% risk per trade recommended)
-
-💡 AI INSIGHTS (${allInsights.length})
-${allInsights.slice(0, 7).map((ins, i) => `${i + 1}. ${ins}`).join('\n')}
-
-🎯 EXECUTIVE SUMMARY
-${alignedPrecisionEntry.timing === 'NOW' ? `⏱️ 15M PRECISION ENTRY ACTIVE: ${finalBias === 'LONG' ? 'BUY' : finalBias === 'SHORT' ? 'SELL' : 'WAIT'} — ${alignedPrecisionEntry.zone}` : ''}
-${finalBias === 'LONG' ? 
-  `BULLISH BIAS — BUY setup with ${finalConfidence}% confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports longs.' : 'Developing setup.'} ${wyckoffPhase.phase === 'ACCUMULATION' ? 'Wyckoff accumulation active.' : ''} ${marketStructure.lastCHoCH === 'BULLISH' ? 'CHoCH confirms reversal.' : ''} Entry: $${bullEntry}, Target: $${bullTP2}, Stop: $${bullStop}. Position size: Risk 1-2% of capital.` :
-  finalBias === 'SHORT' ?
-  `BEARISH BIAS — SELL setup with ${finalConfidence}% confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports shorts.' : 'Developing setup.'} ${wyckoffPhase.phase === 'DISTRIBUTION' ? 'Wyckoff distribution active.' : ''} ${marketStructure.lastCHoCH === 'BEARISH' ? 'CHoCH confirms reversal.' : ''} Entry: $${bearEntry}, Target: $${bearTarget2.toFixed(2)}, Stop: $${bearStop}. Position size: Risk 1-2% of capital.` :
-  `NEUTRAL — No clear edge. Do not force a trade. ${adaptiveLearning.currentScenario?.expectedOutcome === 'NEUTRAL' ? 'Scenario confirms caution.' : ''} Wait for ${rangePercent < 40 ? 'support confirmation' : rangePercent > 60 ? 'resistance rejection' : 'directional break'} with volume expansion. Patience is a trade.`}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 Analysis Complete | Patterns: ${allPatterns.length} | Confidence: ${finalConfidence}%${signalConflicts >= 2 ? ' | ⚠️ Mixed Signals' : signalConfirmations >= 3 ? ' | ✓ Aligned' : ''}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${finalBias === 'LONG' ? '🟢' : finalBias === 'SHORT' ? '🔴' : '⚪'} ${finalBias} BIAS | ${finalConfidence}% Confidence | ${allPatterns.length} Patterns
 🎓 Your feedback helps improve future predictions!`;
 
     // Stream the analysis with proper cancellation handling
