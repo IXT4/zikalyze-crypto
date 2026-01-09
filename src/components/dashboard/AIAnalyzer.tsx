@@ -724,6 +724,55 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
             </div>
           )}
         </div>
+        
+        {/* Inline Feedback Prompt */}
+        {hasAnalyzed && !selectedHistory && fullAnalysis && charIndexRef.current >= fullAnalysis.length && (
+          <div className="mt-3 p-3 rounded-xl bg-gradient-to-r from-primary/5 to-chart-cyan/5 border border-primary/20 animate-fade-in">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">Help improve AI accuracy</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Was this analysis helpful?</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    // Save with positive feedback
+                    if (history.length > 0) {
+                      const latestRecord = history[0];
+                      if (latestRecord.was_correct === null) {
+                        handleFeedback(latestRecord.id, true);
+                      }
+                    }
+                  }}
+                  className="h-7 px-2 text-xs text-success hover:text-success hover:bg-success/10"
+                >
+                  <ThumbsUp className="h-3 w-3 mr-1" />
+                  Yes
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    // Save with negative feedback
+                    if (history.length > 0) {
+                      const latestRecord = history[0];
+                      if (latestRecord.was_correct === null) {
+                        handleFeedback(latestRecord.id, false);
+                      }
+                    }
+                  }}
+                  className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <ThumbsDown className="h-3 w-3 mr-1" />
+                  No
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </div>
