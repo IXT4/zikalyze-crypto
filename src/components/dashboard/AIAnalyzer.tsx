@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, Radio, Wifi } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -321,30 +321,25 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">v9.0</span>
                 {/* Live Price Indicator */}
                 <div className={cn(
-                  "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium",
+                  "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium transition-all",
                   livePrice.isLive 
                     ? "bg-success/20 text-success" 
+                    : livePrice.isConnecting
+                    ? "bg-warning/20 text-warning"
                     : "bg-muted text-muted-foreground"
                 )}>
                   {livePrice.isLive ? (
                     <>
-                      <Radio className="h-3 w-3 animate-pulse" />
+                      <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
                       <span>LIVE</span>
                     </>
-                  ) : livePrice.source === 'cached' ? (
+                  ) : livePrice.isConnecting ? (
                     <>
-                      <Activity className="h-3 w-3" />
-                      <span>CACHED</span>
-                    </>
-                  ) : livePrice.source.includes('reconnecting') ? (
-                    <>
-                      <Wifi className="h-3 w-3 animate-pulse" />
-                      <span>RECONNECTING</span>
+                      <span className="h-2 w-2 rounded-full bg-warning animate-pulse" />
                     </>
                   ) : (
                     <>
-                      <Wifi className="h-3 w-3" />
-                      <span>CONNECTING</span>
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground" />
                     </>
                   )}
                 </div>
@@ -353,9 +348,6 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                 <span className="text-xs text-muted-foreground">{displayedAccuracy.toFixed(0)}% Accuracy</span>
                 {learningStats && learningStats.total_feedback > 0 && (
                   <span className="text-xs text-primary/70">• {learningStats.total_feedback} feedback</span>
-                )}
-                {livePrice.isLive && livePrice.exchange && (
-                  <span className="text-xs text-success/70">• {livePrice.exchange}</span>
                 )}
               </div>
             </div>

@@ -8,8 +8,7 @@ interface LivePriceData {
   volume: number;
   lastUpdate: number;
   isLive: boolean;
-  source: string;
-  exchange: string;
+  isConnecting: boolean;
 }
 
 // Multi-exchange WebSocket configuration
@@ -98,10 +97,10 @@ const EXCHANGES = {
 type ExchangeKey = keyof typeof EXCHANGES;
 const EXCHANGE_ORDER: ExchangeKey[] = ["binance", "coinbase", "kraken"];
 
-const MAX_ATTEMPTS_PER_EXCHANGE = 2;
-const CONNECTION_TIMEOUT = 8000;
-const RECONNECT_DELAY = 2000;
-const FALLBACK_RETRY_DELAY = 60000;
+const MAX_ATTEMPTS_PER_EXCHANGE = 3;
+const CONNECTION_TIMEOUT = 10000;
+const RECONNECT_DELAY = 1500;
+const FALLBACK_RETRY_DELAY = 30000;
 
 export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fallbackChange?: number) => {
   const [liveData, setLiveData] = useState<LivePriceData>({
@@ -112,8 +111,7 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
     volume: 0,
     lastUpdate: Date.now(),
     isLive: false,
-    source: "initializing",
-    exchange: "",
+    isConnecting: true,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -203,12 +201,10 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
         attemptsOnCurrentExchangeRef.current = 0;
         hasConnectedRef.current = true;
         
-        console.log(`✅ ${exchange.name} live feed connected for ${symbol.toUpperCase()}`);
         setLiveData(prev => ({ 
           ...prev, 
           isLive: true, 
-          source: "Live Feed",
-          exchange: exchange.name,
+          isConnecting: false,
         }));
       };
 
@@ -228,8 +224,7 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
               volume: parsed.volume,
               lastUpdate: Date.now(),
               isLive: true,
-              source: "Live Feed",
-              exchange: exchange.name,
+              isConnecting: false,
             });
           }
         } catch {
@@ -256,8 +251,7 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
           setLiveData(prev => ({ 
             ...prev, 
             isLive: false, 
-            source: `reconnecting ${exchange.name}`,
-            exchange: exchange.name,
+            isConnecting: true,
           }));
           
           reconnectTimeoutRef.current = setTimeout(() => {
@@ -268,14 +262,10 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
         
         // Move to next exchange
         if (moveToNextExchange()) {
-          const nextExchange = EXCHANGES[EXCHANGE_ORDER[currentExchangeIndexRef.current]];
-          console.log(`🔄 Trying ${nextExchange.name} for ${symbol.toUpperCase()}...`);
-          
           setLiveData(prev => ({ 
             ...prev, 
             isLive: false, 
-            source: `trying ${nextExchange.name}`,
-            exchange: "",
+            isConnecting: true,
           }));
           
           reconnectTimeoutRef.current = setTimeout(() => {
@@ -283,12 +273,10 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
           }, RECONNECT_DELAY);
         } else {
           // All exchanges exhausted - use cached data
-          console.log(`📡 Using cached data for ${symbol.toUpperCase()}`);
           setLiveData(prev => ({ 
             ...prev, 
             isLive: false, 
-            source: "cached",
-            exchange: "",
+            isConnecting: false,
             price: fallbackPrice || prev.price,
             change24h: fallbackChange || prev.change24h,
           }));
@@ -305,14 +293,16 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
         }
       };
     } catch {
-      // Failed to create WebSocket
+      // Failed to create WebSocket - silently retry
       setLiveData(prev => ({ 
         ...prev, 
         isLive: false, 
-        source: "cached",
-        exchange: "",
-        price: fallbackPrice || prev.price,
+        isConnecting: true,
       }));
+      
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) connect();
+      }, RECONNECT_DELAY);
     }
   }, [symbol, fallbackPrice, fallbackChange, cleanup, moveToNextExchange]);
 
