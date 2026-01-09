@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { alertSound } from "@/lib/alertSound";
 import { isSoundEnabled } from "@/hooks/useSettings";
 import { useAuth } from "@/hooks/useAuth";
+import { useSmartNotifications } from "@/hooks/useSmartNotifications";
 
 export interface PriceAlert {
   id: string;
@@ -23,6 +24,7 @@ export const usePriceAlerts = () => {
   const [loading, setLoading] = useState(true);
   const notificationPermission = useRef<NotificationPermission>("default");
   const { user } = useAuth();
+  const { sendPriceAlertNotification, checkPriceMovement } = useSmartNotifications();
 
   // Request notification permission on mount
   useEffect(() => {
@@ -158,8 +160,22 @@ export const usePriceAlerts = () => {
 
   // Check prices and trigger alerts
   const checkAlerts = useCallback(
-    async (prices: { symbol: string; current_price: number }[]) => {
-      if (alerts.length === 0 || prices.length === 0) return;
+    async (prices: { symbol: string; current_price: number; price_change_percentage_24h?: number; total_volume?: number }[]) => {
+      if (prices.length === 0) return;
+
+      // Check for significant price movements on all tracked cryptos
+      for (const crypto of prices) {
+        if (crypto.current_price && crypto.price_change_percentage_24h !== undefined) {
+          await checkPriceMovement(
+            crypto.symbol.toUpperCase(),
+            crypto.current_price,
+            crypto.price_change_percentage_24h,
+            crypto.total_volume || 0
+          );
+        }
+      }
+
+      if (alerts.length === 0) return;
 
       const triggeredAlerts: PriceAlert[] = [];
 
@@ -198,16 +214,25 @@ export const usePriceAlerts = () => {
             console.error("Error playing alert sound:", err);
           }
 
+          // Send professional push notification
+          await sendPriceAlertNotification(
+            alert.symbol,
+            alert.target_price,
+            currentPrice,
+            alert.condition
+          );
+
           // Show browser notification
           if (
             "Notification" in window &&
             notificationPermission.current === "granted"
           ) {
             try {
-              new Notification(`🚨 ${alert.symbol} Price Alert!`, {
-                body: `${alert.symbol} is now ${alert.condition === "above" ? "above" : "below"} $${alert.target_price.toLocaleString()}. Current price: $${currentPrice.toLocaleString()}`,
-                icon: "/favicon.ico",
+              new Notification(`🎯 ${alert.symbol} Price Alert Triggered!`, {
+                body: `${alert.symbol} is now ${alert.condition === "above" ? "above" : "below"} $${alert.target_price.toLocaleString()} • Current: $${currentPrice.toLocaleString()}`,
+                icon: "/pwa-192x192.png",
                 tag: alert.id,
+                requireInteraction: true,
               });
             } catch (err) {
               console.error("Error showing notification:", err);
@@ -216,7 +241,7 @@ export const usePriceAlerts = () => {
 
           // Show toast notification
           toast.success(
-            `🚨 ${alert.symbol} hit $${currentPrice.toLocaleString()} (target: ${alert.condition} $${alert.target_price.toLocaleString()})`,
+            `🎯 ${alert.symbol} hit $${currentPrice.toLocaleString()} (target: ${alert.condition} $${alert.target_price.toLocaleString()})`,
             {
               duration: 10000,
             }
@@ -244,7 +269,7 @@ export const usePriceAlerts = () => {
         );
       }
     },
-    [alerts]
+    [alerts, sendPriceAlertNotification, checkPriceMovement]
   );
 
   return {

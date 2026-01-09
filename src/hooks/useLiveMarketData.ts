@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useBinanceLivePrice } from "./useBinanceLivePrice";
 import { supabase } from "@/integrations/supabase/client";
+import { useSmartNotifications } from "./useSmartNotifications";
 
 export interface LiveOnChainData {
   exchangeNetFlow: { value: number; trend: 'OUTFLOW' | 'INFLOW' | 'NEUTRAL'; magnitude: string };
@@ -57,6 +58,9 @@ export function useLiveMarketData(
   // Live price from WebSocket
   const livePrice = useBinanceLivePrice(crypto, fallbackPrice, fallbackChange);
   
+  // Smart notifications
+  const { checkSentimentShift, checkWhaleActivity } = useSmartNotifications();
+  
   // On-chain metrics state
   const [onChainData, setOnChainData] = useState<LiveOnChainData | null>(null);
   const [sentimentData, setSentimentData] = useState<LiveSentimentData | null>(null);
@@ -64,6 +68,8 @@ export function useLiveMarketData(
   const lastSentimentFetchRef = useRef<number>(0);
   const isMountedRef = useRef(true);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevSentimentRef = useRef<{ fearGreed: number; sentiment: string } | null>(null);
+  const prevWhaleRef = useRef<{ netFlow: number; txCount: number } | null>(null);
 
   // Fetch on-chain metrics
   const fetchOnChainData = useCallback(async () => {
@@ -144,11 +150,32 @@ export function useLiveMarketData(
 
       if (isMountedRef.current) {
         setOnChainData(onChain);
+        
+        // Check for significant whale activity changes and send notifications
+        const whaleNetFlowValue = onChain.exchangeNetFlow.value;
+        const whaleNetFlowAbs = Math.abs(whaleNetFlowValue);
+        const prevWhale = prevWhaleRef.current;
+        
+        // Only notify if there's a significant change from previous state
+        if (onChain.isLive && whaleNetFlowAbs > 10000) {
+          if (!prevWhale || Math.abs(whaleNetFlowValue - prevWhale.netFlow) > 5000) {
+            await checkWhaleActivity(
+              crypto.toUpperCase(),
+              whaleNetFlowValue * 1000, // Convert to dollar value estimate
+              onChain.whaleActivity.largeTxCount24h
+            );
+          }
+        }
+        
+        prevWhaleRef.current = {
+          netFlow: whaleNetFlowValue,
+          txCount: onChain.whaleActivity.largeTxCount24h
+        };
       }
     } catch (e) {
       console.warn('[LiveMarketData] On-chain fetch error:', e);
     }
-  }, [crypto, livePrice.isLive, livePrice.change24h, fallbackChange]);
+  }, [crypto, livePrice.isLive, livePrice.change24h, fallbackChange, checkWhaleActivity]);
 
   // Fetch sentiment data (cached, less frequent)
   const fetchSentimentData = useCallback(async () => {
@@ -183,11 +210,31 @@ export function useLiveMarketData(
 
       if (isMountedRef.current) {
         setSentimentData(sentiment);
+        
+        // Check for sentiment shifts and send notifications
+        const prevSentiment = prevSentimentRef.current;
+        if (sentiment.isLive && sentiment.fearGreedValue) {
+          if (prevSentiment) {
+            const shift = Math.abs(sentiment.fearGreedValue - prevSentiment.fearGreed);
+            if (shift >= 10) { // Significant shift
+              await checkSentimentShift(
+                crypto.toUpperCase(),
+                sentiment.fearGreedValue,
+                sentiment.overallSentiment
+              );
+            }
+          }
+        }
+        
+        prevSentimentRef.current = {
+          fearGreed: sentiment.fearGreedValue,
+          sentiment: sentiment.overallSentiment
+        };
       }
     } catch (e) {
       console.warn('[LiveMarketData] Sentiment fetch error:', e);
     }
-  }, [crypto, livePrice.isLive, livePrice.price, livePrice.change24h, fallbackPrice, fallbackChange]);
+  }, [crypto, livePrice.isLive, livePrice.price, livePrice.change24h, fallbackPrice, fallbackChange, checkSentimentShift]);
 
   // Initial fetch
   useEffect(() => {
