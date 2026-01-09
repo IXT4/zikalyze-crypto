@@ -164,21 +164,30 @@ export const useCryptoPrices = () => {
     
     setPrices(prev => prev.map(coin => {
       if (coin.symbol === normalizedSymbol) {
-        // Smart volume handling: only update if WebSocket volume is reasonable
-        // Prevent volume from dropping dramatically (WebSocket gives single-exchange volume)
+        // Smart volume handling: WebSocket gives single-exchange volume which is always lower
+        // than CoinGecko's aggregated multi-exchange volume
         let finalUpdates = { ...updates };
+        
         if (updates.total_volume !== undefined && coin.total_volume > 0) {
-          // Only update volume if new value is at least 10% of current (prevents drops to near-zero)
-          // Or if new value is higher (accumulating from multiple exchanges)
-          if (updates.total_volume < coin.total_volume * 0.1) {
-            // Keep existing volume - WebSocket value too low
+          const volumeRatio = updates.total_volume / coin.total_volume;
+          
+          // Case 1: WebSocket volume is unreasonably low (< 5% of current) - ignore it
+          if (volumeRatio < 0.05) {
             delete finalUpdates.total_volume;
-          } else if (updates.total_volume > coin.total_volume) {
-            // New volume is higher - use it
+          }
+          // Case 2: WebSocket volume is significantly higher (> 120%) - could be a spike, use it
+          else if (volumeRatio > 1.2) {
             finalUpdates.total_volume = updates.total_volume;
-          } else {
-            // Blend: weight towards CoinGecko's aggregated value but allow some real-time movement
-            finalUpdates.total_volume = coin.total_volume * 0.7 + updates.total_volume * 0.3;
+          }
+          // Case 3: WebSocket volume is between 5% and 50% of current - blend conservatively
+          // This handles single-exchange vs multi-exchange discrepancy
+          else if (volumeRatio < 0.5) {
+            // Keep mostly the CoinGecko value, slight movement for realism
+            finalUpdates.total_volume = coin.total_volume * 0.95 + updates.total_volume * 0.05;
+          }
+          // Case 4: WebSocket volume is between 50% and 120% - normal range, blend moderately
+          else {
+            finalUpdates.total_volume = coin.total_volume * 0.8 + updates.total_volume * 0.2;
           }
         }
         
