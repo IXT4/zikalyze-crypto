@@ -340,12 +340,6 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                     </>
                   )}
                 </div>
-                {/* Data sources badge */}
-                {liveData.dataSourcesSummary !== 'cached' && (
-                  <span className="text-[9px] text-muted-foreground">
-                    {liveData.dataSourcesSummary}
-                  </span>
-                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">{displayedAccuracy.toFixed(0)}% Accuracy</span>
