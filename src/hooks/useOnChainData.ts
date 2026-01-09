@@ -558,15 +558,16 @@ export function useOnChainData(
     }
   }, [streamStatus, crypto, initBTCWebSockets]);
 
-  // Auto-recovery: if polling status for non-BTC, ensure always connected
+  // Auto-recovery: if disconnected for non-BTC, restore connected state
   useEffect(() => {
     if (crypto.toUpperCase() !== 'BTC' && streamStatus === 'disconnected' && isMountedRef.current) {
-      setStreamStatus('connecting');
-      setTimeout(() => {
+      // Use ref to prevent loop - only recover once per disconnect
+      const timeoutId = setTimeout(() => {
         if (isMountedRef.current) {
           setStreamStatus('connected');
         }
       }, 500);
+      return () => clearTimeout(timeoutId);
     }
   }, [streamStatus, crypto]);
 
