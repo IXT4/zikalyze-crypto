@@ -595,7 +595,14 @@ function generateInfluencerMentions(
   sentimentScore: number, 
   trendingTopics: string[] = [],
   priceChange24h: number = 0,
-  marketConditions?: { fearGreed: number; volume: string; priceNearATH: boolean }
+  marketConditions?: { 
+    fearGreed: number; 
+    volume: string; 
+    priceNearATH: boolean;
+    currentPrice?: number;
+    high24h?: number;
+    low24h?: number;
+  }
 ): Array<{
   name: string;
   followers: string;
@@ -658,6 +665,11 @@ function generateInfluencerMentions(
     // AI & Infrastructure
     { name: 'Fetch.ai', followers: '480K', handle: 'Fetch_ai', coins: ['FET'], topics: ['AI', 'Agents', 'Machine Learning'], style: 'official' },
     { name: 'Render Network', followers: '380K', handle: 'RenderToken', coins: ['RENDER'], topics: ['GPU', 'Rendering', 'AI'], style: 'official' },
+    
+    // Additional coverage
+    { name: 'Avalanche', followers: '850K', handle: 'avaborofficial', coins: ['AVAX'], topics: ['Avalanche', 'Subnets', 'DeFi'], style: 'official' },
+    { name: 'Cosmos', followers: '420K', handle: 'cosmos', coins: ['ATOM'], topics: ['Cosmos', 'IBC', 'Interoperability'], style: 'official' },
+    { name: 'Injective', followers: '380K', handle: 'Injective_', coins: ['INJ'], topics: ['DeFi', 'Derivatives', 'Layer 1'], style: 'official' },
   ];
 
   // Score influencers by relevance
@@ -717,84 +729,237 @@ function generateInfluencerMentions(
     return 'Bearish';
   };
 
-  // Generate dynamic, context-specific commentary based on market conditions
+  // Helper to format price for display
+  const formatPrice = (p: number): string => {
+    if (p >= 1000) return `$${(p / 1000).toFixed(1)}K`;
+    if (p >= 1) return `$${p.toFixed(2)}`;
+    if (p >= 0.01) return `$${p.toFixed(4)}`;
+    return `$${p.toFixed(6)}`;
+  };
+
+  // Generate dynamic, context-specific commentary based on market conditions WITH SPECIFIC PRICES
   const generateCommentary = (inf: typeof selected[0], sentiment: string, index: number): string => {
     const fg = marketConditions?.fearGreed ?? 50;
     const vol = marketConditions?.volume ?? 'MODERATE';
     const nearATH = marketConditions?.priceNearATH ?? false;
+    const currentPrice = marketConditions?.currentPrice ?? 0;
+    const high24h = marketConditions?.high24h ?? currentPrice * 1.02;
+    const low24h = marketConditions?.low24h ?? currentPrice * 0.98;
     const isBullish = priceChange24h > 2;
     const isBearish = priceChange24h < -2;
     const isVolatile = Math.abs(priceChange24h) > 5;
+    
+    // Calculate key levels
+    const support = low24h * 0.995;
+    const resistance = high24h * 1.005;
+    const midPoint = (high24h + low24h) / 2;
+    const changeStr = priceChange24h >= 0 ? `+${priceChange24h.toFixed(1)}%` : `${priceChange24h.toFixed(1)}%`;
 
-    // Style-specific commentary templates
+    // Style-specific commentary templates WITH PRICE DATA
     const commentaryTemplates: Record<string, string[]> = {
       institutional: isBullish 
-        ? [`Institutional accumulation continues`, `Smart money positioning for next leg up`, `Treasury-grade asset at current levels`]
+        ? [
+            `Accumulating below ${formatPrice(resistance)}, target ${formatPrice(currentPrice * 1.15)}`,
+            `${changeStr} today, institutions adding at ${formatPrice(currentPrice)}`,
+            `Strong hands accumulating, watching ${formatPrice(support)} support`
+          ]
         : isBearish 
-        ? [`Institutions using this dip to accumulate`, `Long-term thesis unchanged`, `Volatility creates opportunity`]
-        : [`Watching for clear direction`, `Macro setup developing`, `Patience over FOMO`],
+        ? [
+            `Using ${changeStr} dip to add at ${formatPrice(currentPrice)}`,
+            `Support at ${formatPrice(support)}, long-term thesis intact`,
+            `Volatility is opportunity, buying below ${formatPrice(midPoint)}`
+          ]
+        : [
+            `Watching ${formatPrice(resistance)} breakout, support at ${formatPrice(support)}`,
+            `Range-bound around ${formatPrice(currentPrice)}, patience`,
+            `Macro setup developing at these levels`
+          ],
       
       quantitative: nearATH
-        ? [`Model targets within reach`, `On-chain metrics support continuation`, `S2F tracking expected path`]
+        ? [
+            `Model target ${formatPrice(currentPrice * 1.25)} in play`,
+            `On-chain supports move above ${formatPrice(high24h)}`,
+            `S2F tracking, next level ${formatPrice(currentPrice * 1.2)}`
+          ]
         : isBearish
-        ? [`Deviation from model, mean reversion expected`, `Accumulation zone per historical data`, `Cyclical correction, not trend change`]
-        : [`Consolidation phase, accumulate`, `Metrics neutral, watching volume`, `Model suggests patience`],
+        ? [
+            `${changeStr} deviation, mean reversion to ${formatPrice(midPoint)}`,
+            `Accumulation zone ${formatPrice(support)}-${formatPrice(low24h)}`,
+            `Cyclical low near ${formatPrice(low24h * 0.95)}`
+          ]
+        : [
+            `Fair value around ${formatPrice(midPoint)}, accumulate`,
+            `Metrics neutral at ${formatPrice(currentPrice)}`,
+            `Model suggests hold above ${formatPrice(support)}`
+          ],
       
       analytical: isVolatile
-        ? [`High volatility, manage position size`, `Key levels being tested`, `Watch for confirmation candle`]
+        ? [
+            `${changeStr} move, watching ${formatPrice(support)} and ${formatPrice(resistance)}`,
+            `Key level ${formatPrice(midPoint)} being tested`,
+            `Confirmation needed above ${formatPrice(high24h)}`
+          ]
         : isBullish
-        ? [`On-chain supports bullish thesis`, `Network activity increasing`, `Holder behavior constructive`]
-        : [`Data mixed, wait for clarity`, `Some distribution noted`, `Not chasing here`],
+        ? [
+            `Bullish above ${formatPrice(support)}, target ${formatPrice(resistance)}`,
+            `Network activity up, holding above ${formatPrice(low24h)}`,
+            `Constructive at ${formatPrice(currentPrice)}, ${changeStr} today`
+          ]
+        : [
+            `Mixed signals at ${formatPrice(currentPrice)}, wait`,
+            `Distribution noted near ${formatPrice(high24h)}`,
+            `Not chasing above ${formatPrice(midPoint)}`
+          ],
       
       technical: isBullish
-        ? [`Structure bullish, HTF intact`, `Looking for pullback entry`, `Momentum indicators supportive`]
+        ? [
+            `Structure bullish above ${formatPrice(support)}, TP ${formatPrice(resistance)}`,
+            `Looking for pullback to ${formatPrice(midPoint)} for entry`,
+            `Momentum strong at ${formatPrice(currentPrice)}, ${changeStr}`
+          ]
         : isBearish
-        ? [`Testing critical support`, `Bearish until structure reclaims`, `Watching for CHoCH`]
-        : [`Range-bound, trade the levels`, `Waiting for breakout direction`, `No clear edge currently`],
+        ? [
+            `Testing support at ${formatPrice(support)}, ${changeStr}`,
+            `Bearish until reclaim of ${formatPrice(midPoint)}`,
+            `CHoCH below ${formatPrice(low24h)} confirms down`
+          ]
+        : [
+            `Range ${formatPrice(low24h)}-${formatPrice(high24h)}, trade edges`,
+            `Waiting for break of ${formatPrice(resistance)}`,
+            `No clear edge at ${formatPrice(currentPrice)}`
+          ],
       
       trading: isVolatile
-        ? [`Elevated volatility, tighten stops`, `Scalping opportunities`, `Risk management critical`]
+        ? [
+            `${changeStr} move, stops tight below ${formatPrice(support)}`,
+            `Scalping ${formatPrice(low24h)}-${formatPrice(high24h)} range`,
+            `Risk management critical at ${formatPrice(currentPrice)}`
+          ]
         : isBullish
-        ? [`Long bias, trailing stops`, `Buying dips into support`, `Trend is your friend`]
+        ? [
+            `Long bias above ${formatPrice(support)}, trail stops`,
+            `Buying dips to ${formatPrice(midPoint)}, ${changeStr} today`,
+            `Target ${formatPrice(resistance)}, stop ${formatPrice(support)}`
+          ]
         : isBearish
-        ? [`Short bias, selling rallies`, `Lower highs pattern`, `Cash is a position`]
-        : [`Choppy conditions, reduced size`, `Waiting for clean setup`, `Overtrading kills accounts`],
+        ? [
+            `Short bias below ${formatPrice(resistance)}, ${changeStr}`,
+            `Selling rallies to ${formatPrice(midPoint)}`,
+            `Cash until ${formatPrice(support)} holds`
+          ]
+        : [
+            `Choppy at ${formatPrice(currentPrice)}, reduced size`,
+            `Clean setup above ${formatPrice(resistance)} or below ${formatPrice(support)}`,
+            `Patience pays at these levels`
+          ],
       
       macro: fg >= 70
-        ? [`Euphoria creeping in, stay disciplined`, `Bull market, but manage risk`, `Don't ignore F&G at ${fg}`]
+        ? [
+            `F&G at ${fg}, caution above ${formatPrice(currentPrice)}`,
+            `Bull market but ${formatPrice(resistance)} is key`,
+            `Euphoria zone, protect profits above ${formatPrice(midPoint)}`
+          ]
         : fg <= 30
-        ? [`Fear = opportunity historically`, `Contrarian setup developing`, `F&G at ${fg}, accumulation zone`]
-        : [`Macro neutral, follow structure`, `Watching Fed and DXY`, `Crypto decorrelating from equities`],
+        ? [
+            `F&G at ${fg}, accumulation at ${formatPrice(currentPrice)}`,
+            `Fear = opportunity, support ${formatPrice(support)}`,
+            `Contrarian long setup at ${formatPrice(low24h)}`
+          ]
+        : [
+            `Macro neutral at ${formatPrice(currentPrice)}, F&G ${fg}`,
+            `Watching ${formatPrice(resistance)} for direction`,
+            `Hold above ${formatPrice(support)}`
+          ],
       
       community: isBullish
-        ? [`Community sentiment strong`, `Engagement metrics up`, `Building through price action`]
-        : [`Community staying resilient`, `Long-term holders not selling`, `Diamond hands holding strong`],
+        ? [
+            `Community strong, ${changeStr} and holding ${formatPrice(currentPrice)}`,
+            `Engagement up, defending ${formatPrice(support)}`,
+            `Building momentum above ${formatPrice(midPoint)}`
+          ]
+        : [
+            `Holding the line at ${formatPrice(support)}`,
+            `${changeStr} but long-term conviction unchanged`,
+            `Diamond hands at ${formatPrice(currentPrice)}`
+          ],
       
       contrarian: isBullish
-        ? [`Getting cautious up here`, `Everyone bullish = time for caution`, `Taking some profits`]
+        ? [
+            `Getting cautious at ${formatPrice(currentPrice)}, ${changeStr} extended`,
+            `Everyone bullish at ${formatPrice(high24h)}, taking profits`,
+            `Reducing above ${formatPrice(midPoint)}`
+          ]
         : isBearish
-        ? [`Blood in streets, time to look`, `Panic selling = smart money buying`, `Contrarian long setup forming`]
-        : [`Against the crowd as always`, `Fading retail sentiment`, `Opposite of consensus`],
+        ? [
+            `Blood at ${formatPrice(currentPrice)}, looking to add`,
+            `Panic at ${changeStr}, smart money buying ${formatPrice(support)}`,
+            `Contrarian long at ${formatPrice(low24h)}`
+          ]
+        : [
+            `Fading crowd at ${formatPrice(currentPrice)}`,
+            `Opposite of consensus, watching ${formatPrice(support)}`,
+            `Against the herd as always`
+          ],
       
-      educational: [`DYOR, not financial advice`, `Understanding the fundamentals`, `Focus on learning over trading`],
+      educational: [
+        `Current: ${formatPrice(currentPrice)} (${changeStr}), DYOR`,
+        `Key levels: S ${formatPrice(support)}, R ${formatPrice(resistance)}`,
+        `Learning moment at ${formatPrice(currentPrice)}`
+      ],
       
       news: isVolatile
-        ? [`Breaking: Major move underway`, `Market reacting to news`, `Stay tuned for updates`]
-        : [`Market consolidating`, `Watching for catalysts`, `News flow quiet today`],
+        ? [
+            `Breaking: ${changeStr} move to ${formatPrice(currentPrice)}`,
+            `Market reacting, ${formatPrice(support)} in focus`,
+            `Major volatility, stay tuned`
+          ]
+        : [
+            `Consolidating at ${formatPrice(currentPrice)}, ${changeStr}`,
+            `Watching for catalyst above ${formatPrice(resistance)}`,
+            `Quiet at ${formatPrice(currentPrice)}, range-bound`
+          ],
       
-      official: [`Development on track`, `Ecosystem growing`, `Community updates coming`],
+      official: [
+        `Trading at ${formatPrice(currentPrice)}, development on track`,
+        `${changeStr} today, ecosystem growing`,
+        `Community updates, price at ${formatPrice(currentPrice)}`
+      ],
       
       mining: vol === 'HIGH'
-        ? [`Hash rate strong`, `Miners holding`, `Network security robust`]
-        : [`Mining profitability stable`, `Block production normal`, `Infrastructure expanding`],
+        ? [
+            `Strong activity at ${formatPrice(currentPrice)}, hash rate healthy`,
+            `Miners holding above ${formatPrice(support)}`,
+            `Network robust, ${changeStr} today`
+          ]
+        : [
+            `Stable at ${formatPrice(currentPrice)}, mining profitable`,
+            `Block production normal, support ${formatPrice(support)}`,
+            `Infrastructure expanding at these levels`
+          ],
       
       meme: isBullish
-        ? [`To the moon 🚀`, `Much wow`, `Community vibes strong`]
-        : [`Hold the line`, `Dips are for buying`, `Diamond hands 💎🙌`],
+        ? [
+            `${changeStr} to ${formatPrice(currentPrice)} 🚀🚀`,
+            `Much wow at ${formatPrice(currentPrice)}`,
+            `Vibes strong above ${formatPrice(support)} 💎`
+          ]
+        : [
+            `HODL at ${formatPrice(currentPrice)}, ${changeStr}`,
+            `Dip to ${formatPrice(currentPrice)} = buying 💎🙌`,
+            `Diamond hands at ${formatPrice(support)}`
+          ],
       
-      regulatory: [`Watching regulatory developments`, `Clarity improving`, `Compliance is key`],
+      regulatory: [
+        `Watching developments at ${formatPrice(currentPrice)}`,
+        `Clarity improving, ${changeStr} today`,
+        `Compliance focus, support ${formatPrice(support)}`
+      ],
       
-      developer: [`Shipping code`, `Technical improvements live`, `Ecosystem expanding`]
+      developer: [
+        `Shipping code, price ${formatPrice(currentPrice)}`,
+        `Technical improvements, ${changeStr} reaction`,
+        `Ecosystem expanding at ${formatPrice(currentPrice)}`
+      ]
     };
 
     const style = inf.style || 'analytical';
@@ -876,7 +1041,7 @@ serve(async (req) => {
       ? realNews 
       : generateRealNewsHeadlines(crypto, marketData, fearGreed);
 
-    // Generate influencer mentions based on crypto, trending topics, and REAL market conditions
+    // Generate influencer mentions based on crypto, trending topics, and REAL market conditions with PRICE DATA
     const influencerMentions = generateInfluencerMentions(
       crypto, 
       socialData.overall.score, 
@@ -885,7 +1050,10 @@ serve(async (req) => {
       {
         fearGreed: fearGreed.value,
         volume: marketData.volumeChange24h > 0 ? 'HIGH' : 'MODERATE',
-        priceNearATH: marketData.athChangePercent > -20
+        priceNearATH: marketData.athChangePercent > -20,
+        currentPrice: price,
+        high24h: marketData.high24h || price * 1.02,
+        low24h: marketData.low24h || price * 0.98
       }
     );
 
