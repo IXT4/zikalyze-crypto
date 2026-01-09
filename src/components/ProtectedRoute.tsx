@@ -44,7 +44,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
           alt="Loading"
           width={64}
           height={64}
-          className="h-16 w-16 animate-pulse opacity-80"
+          className="h-16 w-16 animate-spin opacity-80"
         />
       </div>
     );
