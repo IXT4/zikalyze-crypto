@@ -3052,6 +3052,10 @@ serve(async (req) => {
     let finalBias = bias;
     let biasSource = 'price_action';
     
+    // Track conflict count for confidence adjustment
+    let signalConflicts = 0;
+    let signalConfirmations = 0;
+    
     // 1. Start with probability-based bias (foundation)
     if (probabilities.bullProb > probabilities.bearProb + 15) {
       finalBias = 'LONG';
@@ -3068,8 +3072,10 @@ serve(async (req) => {
         if (probabilities.bearProb <= probabilities.bullProb + 10) {
           finalBias = 'LONG';
           biasSource = 'mtf_confluence';
+          signalConfirmations++;
           allInsights.push(`🎯 ${mtfAnalysis.confluence.alignment}% multi-timeframe bullish alignment`);
         } else {
+          signalConflicts++;
           allInsights.push(`⚠️ MTF bullish but probability matrix bearish — conflicting signals`);
         }
       } else if (mtfAnalysis.confluence.overallBias === 'BEARISH') {
@@ -3077,20 +3083,54 @@ serve(async (req) => {
         if (probabilities.bullProb <= probabilities.bearProb + 10) {
           finalBias = 'SHORT';
           biasSource = 'mtf_confluence';
+          signalConfirmations++;
           allInsights.push(`🎯 ${mtfAnalysis.confluence.alignment}% multi-timeframe bearish alignment`);
         } else {
+          signalConflicts++;
           allInsights.push(`⚠️ MTF bearish but probability matrix bullish — conflicting signals`);
         }
       }
     }
     
-    // 3. Scenario-based bias (only reinforces, doesn't contradict established bias)
+    // 3. Pattern bias integration — adjust probabilities if patterns conflict with matrix
+    if (patternBias !== 'NEUTRAL' && patternAlignment >= 40) {
+      const matrixBullish = probabilities.bullProb > probabilities.bearProb;
+      const patternBullish = patternBias === 'BULLISH';
+      const patternBearish = patternBias === 'BEARISH';
+      
+      // Check for conflict between pattern bias and probability matrix
+      if ((patternBullish && !matrixBullish) || (patternBearish && matrixBullish)) {
+        signalConflicts++;
+        // Patterns conflict with matrix — don't force a bias, but note the divergence
+        if (patternAlignment >= 60) {
+          allInsights.push(`⚠️ Divergence: ${bullishPatternCount} bullish vs ${bearishPatternCount} bearish patterns conflict with probability matrix`);
+          // If pattern signal is very strong and matrix is weak, consider adjustment
+          if (patternAlignment >= 70 && Math.abs(probabilities.bullProb - probabilities.bearProb) < 10) {
+            // Weak matrix signal + strong pattern = lean towards patterns
+            if (patternBullish && finalBias !== 'LONG') {
+              allInsights.push(`📊 Strong bullish pattern confluence (${patternAlignment}%) — mixed signals, reduced conviction`);
+            } else if (patternBearish && finalBias !== 'SHORT') {
+              allInsights.push(`📊 Strong bearish pattern confluence (${patternAlignment}%) — mixed signals, reduced conviction`);
+            }
+          }
+        }
+      } else if ((patternBullish && matrixBullish) || (patternBearish && !matrixBullish)) {
+        signalConfirmations++;
+        // Patterns align with matrix — boost confidence
+        if (patternAlignment >= 60) {
+          allInsights.push(`✓ Pattern bias (${patternBias}, ${patternAlignment}% alignment) confirms probability matrix`);
+        }
+      }
+    }
+    
+    // 4. Scenario-based bias (only reinforces, doesn't contradict established bias)
     if (adaptiveLearning.currentScenario && adaptiveLearning.scenarioConfidence >= 70) {
       const scenarioOutcome = adaptiveLearning.currentScenario.expectedOutcome;
       if (scenarioOutcome !== 'NEUTRAL') {
         // Check if scenario aligns with current bias
         if ((scenarioOutcome === 'LONG' && finalBias === 'LONG') || 
             (scenarioOutcome === 'SHORT' && finalBias === 'SHORT')) {
+          signalConfirmations++;
           allInsights.push(`🎯 Scenario confirms bias: ${adaptiveLearning.currentScenario.name}`);
         } else if (finalBias === 'NEUTRAL') {
           // Only override NEUTRAL bias
@@ -3099,20 +3139,23 @@ serve(async (req) => {
           allInsights.push(`🎯 Matched scenario: ${adaptiveLearning.currentScenario.name}`);
         } else {
           // Conflict between scenario and established bias
+          signalConflicts++;
           allInsights.push(`⚠️ Scenario suggests ${scenarioOutcome} but ${biasSource} indicates ${finalBias}`);
         }
       }
     }
     
-    // 4. Real chart data reinforcement (validates, doesn't override unless strong confirmation)
+    // 5. Real chart data reinforcement (validates, doesn't override unless strong confirmation)
     if (realChartData) {
       const trendStrength = realChartData.trendAnalysis.strength;
       const volumeConfirms = realChartData.volumeProfile.currentVsAvg > 100;
       
       if (realChartData.trendAnalysis.direction === 'BULLISH' && trendStrength >= 65) {
         if (finalBias === 'LONG' && volumeConfirms && trendStrength >= 80) {
+          signalConfirmations++;
           allInsights.push('High-conviction bullish setup — all signals aligned');
         } else if (finalBias === 'SHORT') {
+          signalConflicts++;
           allInsights.push(`⚠️ Chart trend bullish (${trendStrength}%) conflicts with ${finalBias} bias`);
         } else if (finalBias === 'NEUTRAL') {
           finalBias = 'LONG';
@@ -3120,8 +3163,10 @@ serve(async (req) => {
         }
       } else if (realChartData.trendAnalysis.direction === 'BEARISH' && trendStrength >= 65) {
         if (finalBias === 'SHORT' && volumeConfirms && trendStrength >= 80) {
+          signalConfirmations++;
           allInsights.push('High-conviction bearish setup — all signals aligned');
         } else if (finalBias === 'LONG') {
+          signalConflicts++;
           allInsights.push(`⚠️ Chart trend bearish (${trendStrength}%) conflicts with ${finalBias} bias`);
         } else if (finalBias === 'NEUTRAL') {
           finalBias = 'SHORT';
@@ -3147,7 +3192,7 @@ serve(async (req) => {
       }
     }
     
-    // 5. Pattern bias alignment check — detect conflicts with MTF
+    // 6. MTF vs Pattern conflict check — final warning
     if (patternBias !== 'NEUTRAL' && patternAlignment >= 50) {
       const mtfBullish = mtfAnalysis.confluence.overallBias === 'BULLISH';
       const mtfBearish = mtfAnalysis.confluence.overallBias === 'BEARISH';
@@ -3155,17 +3200,39 @@ serve(async (req) => {
       const patternBearish = patternBias === 'BEARISH';
       
       if ((patternBullish && mtfBearish) || (patternBearish && mtfBullish)) {
-        allInsights.push(`⚠️ Pattern bias (${patternBias}) conflicts with MTF confluence (${mtfAnalysis.confluence.overallBias})`);
+        // Already counted in step 3, just add explicit MTF/pattern note
+        if (!allInsights.some(i => i.includes('Pattern bias') && i.includes('MTF'))) {
+          allInsights.push(`⚠️ Pattern bias (${patternBias}) conflicts with MTF confluence (${mtfAnalysis.confluence.overallBias})`);
+        }
       } else if ((patternBullish && mtfBullish) || (patternBearish && mtfBearish)) {
-        allInsights.push(`✓ Pattern bias (${patternBias}) aligns with MTF confluence`);
+        if (!allInsights.some(i => i.includes('Pattern bias') && i.includes('aligns'))) {
+          allInsights.push(`✓ Pattern bias (${patternBias}) aligns with MTF confluence`);
+        }
       }
     }
+    
+    // 7. Adjust final confidence based on signal alignment
+    // More conflicts = lower confidence, more confirmations = higher confidence
+    const conflictPenalty = signalConflicts * 4;
+    const confirmationBonus = Math.min(8, signalConfirmations * 2);
     
     // Pattern success rate adjustments
     for (const [pattern, stats] of Object.entries(adaptiveLearning.patternSuccessRates)) {
       if (patterns.some(p => p.includes(pattern)) && stats.accuracy >= 75 && (stats.wins + stats.losses) >= 3) {
         allInsights.push(`${pattern} historically ${stats.accuracy}% accurate — high confidence signal`);
       }
+    }
+    
+    // Final confidence with signal alignment adjustment
+    // conflictPenalty and confirmationBonus calculated above
+    const finalConfidence = Math.min(78, Math.max(40, adjustedConfidence - conflictPenalty + confirmationBonus));
+    
+    // Log conflict summary if significant
+    if (signalConflicts >= 2) {
+      console.log(`⚠️ Multiple signal conflicts detected (${signalConflicts}) — confidence reduced by ${conflictPenalty}%`);
+    }
+    if (signalConfirmations >= 3) {
+      console.log(`✓ Strong signal confirmation (${signalConfirmations}) — confidence boosted by ${confirmationBonus}%`);
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -3322,7 +3389,7 @@ Bull Probability: ${probabilities.bullProb}% ${'█'.repeat(Math.round(probabili
 Bear Probability: ${probabilities.bearProb}% ${'█'.repeat(Math.round(probabilities.bearProb / 5))}${'░'.repeat(20 - Math.round(probabilities.bearProb / 5))}
 Neutral Zone: ${probabilities.neutralProb}%
 Primary Bias: ${finalBias === 'LONG' ? 'BULLISH 🟢' : finalBias === 'SHORT' ? 'BEARISH 🔴' : 'NEUTRAL ⚪'} (Source: ${biasSource.replace(/_/g, ' ')})
-Predictive Confidence: ${adjustedConfidence}%
+Predictive Confidence: ${finalConfidence}%${signalConflicts >= 2 ? ` (⚠️ ${signalConflicts} conflicting signals detected)` : signalConfirmations >= 3 ? ` (✓ ${signalConfirmations} confirming signals)` : ''}
 ⚠️ Note: Crypto markets are highly volatile. These probabilities are based on current data and can shift rapidly.
 
 🔮 PREDICTIVE MEMORY (PAST → FUTURE)
@@ -3391,7 +3458,7 @@ OTE Zone (61.8-78.6%): ${finalBias === 'LONG' ? oteZoneBullish : oteZoneBearish}
 Equilibrium: $${equilibrium.toFixed(2)}
 
 🟢 BULL CASE ${finalBias === 'LONG' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
-Probability: ${probabilities.bullProb}% | Confidence: ${finalBias === 'LONG' ? adjustedConfidence : Math.max(40, adjustedConfidence - 25)}%
+Probability: ${probabilities.bullProb}% | Confidence: ${finalBias === 'LONG' ? finalConfidence : Math.max(40, finalConfidence - 25)}%
 Entry Zone: $${bullEntry} — OTE/Order Block confluence
 Stop Loss: $${bullStop} — Below structure low
 TP1: $${bullTP1} (+${((Number(bullTP1) - priceNum) / priceNum * 100).toFixed(1)}%) — First resistance
@@ -3401,7 +3468,7 @@ TP4: $${bullTP4} (+${((Number(bullTP4) - priceNum) / priceNum * 100).toFixed(1)}
 R:R = 1:${bullRR} ${Number(bullRR) >= 3 ? '✓ Excellent' : Number(bullRR) >= 2 ? '◐ Good' : '⚠️ Consider'}
 
 🔴 BEAR CASE ${finalBias === 'SHORT' ? '(PRIMARY SCENARIO)' : '(ALTERNATIVE)'}
-Probability: ${probabilities.bearProb}% | Confidence: ${finalBias === 'SHORT' ? adjustedConfidence : Math.max(40, adjustedConfidence - 25)}%
+Probability: ${probabilities.bearProb}% | Confidence: ${finalBias === 'SHORT' ? finalConfidence : Math.max(40, finalConfidence - 25)}%
 Entry Zone: $${bearEntry} — Premium zone rejection
 Stop Loss: $${bearStop} — Above structure high
 TP1: $${bearTarget1.toFixed(2)} | TP2: $${bearTarget2.toFixed(2)} | TP3: $${bearTarget3.toFixed(2)} | TP4: $${bearTarget4.toFixed(2)}
@@ -3426,13 +3493,13 @@ ${allInsights.slice(0, 7).map((ins, i) => `${i + 1}. ${ins}`).join('\n')}
 🎯 EXECUTIVE SUMMARY
 ${alignedPrecisionEntry.timing === 'NOW' ? `⏱️ 15M PRECISION ENTRY ACTIVE: ${finalBias === 'LONG' ? 'BUY' : finalBias === 'SHORT' ? 'SELL' : 'WAIT'} — ${alignedPrecisionEntry.zone}` : ''}
 ${finalBias === 'LONG' ? 
-  `BULLISH BIAS — BUY setup with ${adjustedConfidence}% confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports longs.' : 'Developing setup.'} ${wyckoffPhase.phase === 'ACCUMULATION' ? 'Wyckoff accumulation active.' : ''} ${marketStructure.lastCHoCH === 'BULLISH' ? 'CHoCH confirms reversal.' : ''} Entry: $${bullEntry}, Target: $${bullTP2}, Stop: $${bullStop}. Position size: Risk 1-2% of capital.` :
+  `BULLISH BIAS — BUY setup with ${finalConfidence}% confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports longs.' : 'Developing setup.'} ${wyckoffPhase.phase === 'ACCUMULATION' ? 'Wyckoff accumulation active.' : ''} ${marketStructure.lastCHoCH === 'BULLISH' ? 'CHoCH confirms reversal.' : ''} Entry: $${bullEntry}, Target: $${bullTP2}, Stop: $${bullStop}. Position size: Risk 1-2% of capital.` :
   finalBias === 'SHORT' ?
-  `BEARISH BIAS — SELL setup with ${adjustedConfidence}% confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports shorts.' : 'Developing setup.'} ${wyckoffPhase.phase === 'DISTRIBUTION' ? 'Wyckoff distribution active.' : ''} ${marketStructure.lastCHoCH === 'BEARISH' ? 'CHoCH confirms reversal.' : ''} Entry: $${bearEntry}, Target: $${bearTarget2.toFixed(2)}, Stop: $${bearStop}. Position size: Risk 1-2% of capital.` :
+  `BEARISH BIAS — SELL setup with ${finalConfidence}% confidence (via ${biasSource.replace(/_/g, ' ')}). ${adaptiveLearning.currentScenario ? `Scenario: ${adaptiveLearning.currentScenario.name}.` : ''} ${allPatterns.length >= 3 ? 'Strong pattern confluence supports shorts.' : 'Developing setup.'} ${wyckoffPhase.phase === 'DISTRIBUTION' ? 'Wyckoff distribution active.' : ''} ${marketStructure.lastCHoCH === 'BEARISH' ? 'CHoCH confirms reversal.' : ''} Entry: $${bearEntry}, Target: $${bearTarget2.toFixed(2)}, Stop: $${bearStop}. Position size: Risk 1-2% of capital.` :
   `NEUTRAL — No clear edge. Do not force a trade. ${adaptiveLearning.currentScenario?.expectedOutcome === 'NEUTRAL' ? 'Scenario confirms caution.' : ''} Wait for ${rangePercent < 40 ? 'support confirmation' : rangePercent > 60 ? 'resistance rejection' : 'directional break'} with volume expansion. Patience is a trade.`}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 Analysis Complete | Patterns: ${allPatterns.length} | Confidence: ${adjustedConfidence}%
+📊 Analysis Complete | Patterns: ${allPatterns.length} | Confidence: ${finalConfidence}%${signalConflicts >= 2 ? ' | ⚠️ Mixed Signals' : signalConfirmations >= 3 ? ' | ✓ Aligned' : ''}
 🎓 Your feedback helps improve future predictions!`;
 
     // Stream the analysis with proper cancellation handling
