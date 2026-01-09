@@ -15,6 +15,7 @@ const VolumeChart = lazy(() => import("@/components/dashboard/VolumeChart"));
 const AIMetrics = lazy(() => import("@/components/dashboard/AIMetrics"));
 const AIAnalyzer = lazy(() => import("@/components/dashboard/AIAnalyzer"));
 const Top100CryptoList = lazy(() => import("@/components/dashboard/Top100CryptoList"));
+const OnChainMetrics = lazy(() => import("@/components/dashboard/OnChainMetrics"));
 
 // Skeleton loaders for lazy components
 const ChartSkeleton = () => (
@@ -160,6 +161,15 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
+
+          {/* Live On-Chain Data */}
+          <Suspense fallback={<MetricsSkeleton />}>
+            <OnChainMetrics
+              crypto={selectedCrypto}
+              price={selected.price}
+              change={selected.change}
+            />
+          </Suspense>
 
           {/* AI Analyzer */}
           <Suspense fallback={<ChartSkeleton />}>
