@@ -8,6 +8,7 @@ import { useCryptoPrices } from "@/hooks/useCryptoPrices";
 import AIAnalyzer from "@/components/dashboard/AIAnalyzer";
 import CryptoTicker from "@/components/dashboard/CryptoTicker";
 import SentimentAnalysis from "@/components/dashboard/SentimentAnalysis";
+import OnChainMetrics from "@/components/dashboard/OnChainMetrics";
 const Analyzer = () => {
   const [selectedCrypto, setSelectedCrypto] = useState("BTC");
   const { getPriceBySymbol, loading } = useCryptoPrices();
@@ -99,12 +100,23 @@ const Analyzer = () => {
             </div>
           </div>
 
+          {/* Live On-Chain Data */}
+          <OnChainMetrics
+            crypto={selectedCrypto}
+            price={selected.price}
+            change={selected.change}
+          />
+
           {/* AI Analyzer & Sentiment Analysis Grid */}
           <div className="grid lg:grid-cols-2 gap-6">
             <AIAnalyzer 
               crypto={selectedCrypto} 
               price={selected.price} 
-              change={selected.change} 
+              change={selected.change}
+              high24h={getPriceBySymbol(selectedCrypto)?.high_24h}
+              low24h={getPriceBySymbol(selectedCrypto)?.low_24h}
+              volume={getPriceBySymbol(selectedCrypto)?.total_volume}
+              marketCap={getPriceBySymbol(selectedCrypto)?.market_cap}
             />
             <SentimentAnalysis
               crypto={selectedCrypto}
