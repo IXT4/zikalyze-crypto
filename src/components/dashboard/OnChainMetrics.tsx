@@ -279,16 +279,13 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
             Avg Block: <span className="text-foreground font-medium">{metrics.avgBlockTime.toFixed(1)}m</span>
           </div>
         )}
-        <div className="flex items-center gap-1 text-muted-foreground justify-end md:col-span-1 col-span-2 md:justify-start">
-          <Hash className="h-3 w-3" />
-          <span>{metrics.source}</span>
-          {isConnected && (
-            <span className="text-success text-[10px] flex items-center gap-0.5">
-              <Radio className="h-2.5 w-2.5" />
-              WS
-            </span>
-          )}
-        </div>
+        {/* Source info hidden - data is live */}
+        {isConnected && (
+          <div className="flex items-center gap-1 text-success justify-end md:col-span-1 col-span-2 md:justify-start text-[10px]">
+            <Radio className="h-2.5 w-2.5" />
+            LIVE
+          </div>
+        )}
       </div>
 
       {/* CSS for shimmer effect */}
