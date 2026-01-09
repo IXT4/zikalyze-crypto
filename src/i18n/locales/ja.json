@@ -1,0 +1,71 @@
+{
+  "common": {
+    "loading": "読み込み中...",
+    "error": "エラー",
+    "success": "成功！",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "delete": "削除",
+    "edit": "編集",
+    "back": "戻る",
+    "next": "次へ",
+    "submit": "送信",
+    "live": "ライブ",
+    "signOut": "ログアウト"
+  },
+  "auth": {
+    "signIn": "ログイン",
+    "signUp": "新規登録",
+    "email": "メール",
+    "password": "パスワード",
+    "forgotPassword": "パスワードをお忘れですか？",
+    "resetPassword": "パスワードをリセット",
+    "noAccount": "アカウントをお持ちでないですか？",
+    "hasAccount": "すでにアカウントをお持ちですか？",
+    "loginSuccess": "ログイン成功！",
+    "loginError": "ログインに失敗しました"
+  },
+  "dashboard": {
+    "title": "ダッシュボード",
+    "searchPlaceholder": "暗号通貨を検索...",
+    "change24h": "24時間変動",
+    "high24h": "24時間高値",
+    "low24h": "24時間安値",
+    "volume24h": "24時間出来高",
+    "marketCap": "時価総額"
+  },
+  "settings": {
+    "title": "設定",
+    "language": "言語",
+    "currency": "通貨",
+    "notifications": "通知",
+    "sound": "サウンド",
+    "theme": "テーマ",
+    "security": "セキュリティ",
+    "account": "アカウント",
+    "saveSuccess": "設定を保存しました！",
+    "saveError": "設定の保存に失敗しました"
+  },
+  "analyzer": {
+    "connecting": "AIに接続中...",
+    "fetching": "データ取得中...",
+    "analyzing": "パターン分析中...",
+    "generating": "インサイト生成中...",
+    "runAnalysis": "分析を実行",
+    "copyAnalysis": "分析をコピー"
+  },
+  "alerts": {
+    "title": "価格アラート",
+    "createAlert": "アラートを作成",
+    "noAlerts": "アラートはまだありません",
+    "alertTriggered": "アラートがトリガーされました！"
+  },
+  "nav": {
+    "dashboard": "ダッシュボード",
+    "analytics": "アナリティクス",
+    "analyzer": "アナライザー",
+    "alerts": "アラート",
+    "portfolio": "ポートフォリオ",
+    "settings": "設定"
+  }
+}

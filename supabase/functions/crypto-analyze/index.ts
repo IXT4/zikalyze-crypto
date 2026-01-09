@@ -3043,7 +3043,7 @@ serve(async (req) => {
     const { crypto, price, change, high24h, low24h, volume, marketCap, language } = body;
     
     // Validate and set language (default to English)
-    const validLanguages = ['en', 'es', 'fr', 'de', 'zh', 'pt', 'ja', 'ko'];
+    const validLanguages = ['en', 'es', 'fr', 'de', 'zh', 'pt', 'ja', 'ko', 'pcm'];
     const langString = typeof language === 'string' ? language : 'en';
     const userLanguage = validLanguages.includes(langString) ? langString : 'en';
     
@@ -3600,6 +3600,70 @@ serve(async (req) => {
         bias: '편향',
         patterns: '패턴',
         feedbackHelps: '피드백이 미래 예측 개선에 도움이 됩니다!'
+      },
+      pcm: {
+        quickAnalysis: 'QUICK ANALYSIS',
+        price: 'PRICE',
+        range24h: '24 Hours Range',
+        verdict: 'WETIN WE SEE',
+        bullish: 'E DEY GO UP — Look for BUY chance',
+        bearish: 'E DEY FALL — Look for SELL chance',
+        neutral: 'E NO CLEAR — Make you wait first',
+        confidence: 'How Sure We Be',
+        whatToDo: 'WETIN YOU GO DO NOW',
+        timing: 'TIME',
+        goodEntry: 'Good time to enter don reach',
+        waitEntry: 'Wait make better time come',
+        action: 'Action',
+        buy: 'BUY',
+        sell: 'SELL',
+        wait: 'WAIT',
+        zone: 'Zone',
+        stopIf: 'Stop If',
+        lookingFor: 'Wetin we dey find',
+        targetZone: 'Target Zone',
+        buySetup: 'BUY SETUP',
+        sellSetup: 'SELL SETUP',
+        noTrade: 'NO TRADE — Wait make clear signal show',
+        entry: 'Entry',
+        stopLoss: 'Stop Loss',
+        target: 'Target',
+        riskReward: 'Risk/Reward',
+        risk: 'risk',
+        whyBias: 'WHY WE THINK SAY NA DIS DIRECTION?',
+        trend: 'Trend',
+        timeframesAgree: 'timeframes gree together',
+        bullProb: 'Chance say e go up',
+        bearProb: 'Chance say e go fall',
+        patternAnalysis: 'Pattern Analysis',
+        patternsFound: 'patterns wey we see',
+        leaning: 'leaning',
+        warning: 'Warning: Some signals dey fight — trade with care o',
+        strong: 'Strong: Plenty signals dey confirm this direction',
+        marketMood: 'HOW MARKET DEY FEEL',
+        fearGreed: 'Fear and Greed',
+        extremeFear: 'Serious fear = chance to buy',
+        extremeGreed: 'Serious greed = take am easy',
+        socialSentiment: 'Social Sentiment',
+        whales: 'Whales (Big Boys)',
+        exchangeFlow: 'Exchange Flow',
+        bullishFlow: 'bullish — coins dey comot from exchange',
+        bearishFlow: 'bearish — coins dey enter exchange',
+        keyLevels: 'KEY LEVELS',
+        support: 'Support',
+        resistance: 'Resistance',
+        dontTrade: 'NO TRADE IF',
+        priceDrops: 'Price fall below',
+        priceRises: 'Price climb pass',
+        noBreakout: 'No clear breakout with volume',
+        topInsights: 'TOP 3 THINGS WEY YOU NEED KNOW',
+        remember: 'REMEMBER',
+        riskAdvice: 'Only risk 1-2% of your money per trade',
+        stopLossAdvice: 'Always use stop loss',
+        volatileAdvice: 'Crypto dey shake well well — na analysis be this, no be financial advice',
+        bias: 'BIAS',
+        patterns: 'Patterns',
+        feedbackHelps: 'Your feedback go help us improve!'
       }
     };
     

@@ -5,6 +5,8 @@ import es from "./locales/es.json";
 import fr from "./locales/fr.json";
 import de from "./locales/de.json";
 import zh from "./locales/zh.json";
+import ja from "./locales/ja.json";
+import pcm from "./locales/pcm.json";
 
 const STORAGE_KEY = "zikalyze_settings";
 
@@ -21,6 +23,8 @@ const getSavedLanguage = (): string => {
         French: "fr",
         German: "de",
         Chinese: "zh",
+        Japanese: "ja",
+        Pidgin: "pcm",
       };
       return langMap[parsed.language] || "en";
     }
@@ -37,6 +41,8 @@ i18n.use(initReactI18next).init({
     fr: { translation: fr },
     de: { translation: de },
     zh: { translation: zh },
+    ja: { translation: ja },
+    pcm: { translation: pcm },
   },
   lng: getSavedLanguage(),
   fallbackLng: "en",
@@ -54,6 +60,8 @@ export const languageNames: Record<string, string> = {
   fr: "French",
   de: "German",
   zh: "Chinese",
+  ja: "Japanese",
+  pcm: "Pidgin",
 };
 
 // Name to code mapping
@@ -63,4 +71,6 @@ export const languageCodes: Record<string, string> = {
   French: "fr",
   German: "de",
   Chinese: "zh",
+  Japanese: "ja",
+  Pidgin: "pcm",
 };

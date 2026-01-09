@@ -1,0 +1,71 @@
+{
+  "common": {
+    "loading": "E dey load...",
+    "error": "Error",
+    "success": "E don work!",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Go Back",
+    "next": "Next",
+    "submit": "Submit",
+    "live": "Live",
+    "signOut": "Sign Out"
+  },
+  "auth": {
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "You forget password?",
+    "resetPassword": "Reset Password",
+    "noAccount": "You no get account?",
+    "hasAccount": "You don get account?",
+    "loginSuccess": "Login don work!",
+    "loginError": "Login no work"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "searchPlaceholder": "Search crypto...",
+    "change24h": "24h Change",
+    "high24h": "24h High",
+    "low24h": "24h Low",
+    "volume24h": "24h Volume",
+    "marketCap": "Market Cap"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "currency": "Currency",
+    "notifications": "Notifications",
+    "sound": "Sound",
+    "theme": "Theme",
+    "security": "Security",
+    "account": "Account",
+    "saveSuccess": "Settings don save!",
+    "saveError": "Settings no save"
+  },
+  "analyzer": {
+    "connecting": "E dey connect to AI...",
+    "fetching": "E dey fetch data...",
+    "analyzing": "E dey analyze patterns...",
+    "generating": "E dey generate insights...",
+    "runAnalysis": "Run Analysis",
+    "copyAnalysis": "Copy Analysis"
+  },
+  "alerts": {
+    "title": "Price Alerts",
+    "createAlert": "Create Alert",
+    "noAlerts": "No alerts yet",
+    "alertTriggered": "Alert don trigger!"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "analytics": "Analytics",
+    "analyzer": "Analyzer",
+    "alerts": "Alerts",
+    "portfolio": "Portfolio",
+    "settings": "Settings"
+  }
+}
