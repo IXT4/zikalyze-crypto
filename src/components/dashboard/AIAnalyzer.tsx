@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAnalysisHistory, AnalysisRecord } from "@/hooks/useAnalysisHistory";
 import { useLiveMarketData } from "@/hooks/useLiveMarketData";
 import { useAnalysisCache } from "@/hooks/useAnalysisCache";
+import { runClientSideAnalysis } from "@/lib/zikalyze-brain";
 import { format } from "date-fns";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -137,24 +138,44 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     }, 600);
 
     try {
-      // Check if offline - use cached analysis if available
-      if (isOffline) {
-        clearInterval(stepInterval);
-        const cached = useCachedAnalysis();
-        if (cached) {
-          setFullAnalysis(cached.analysis);
-          setDisplayedText(cached.analysis);
-          charIndexRef.current = cached.analysis.length;
-          setHasAnalyzed(true);
-          toast.info(`Offline mode: Showing cached analysis from ${getCacheAge()}`);
-          setIsAnalyzing(false);
-          return;
-        } else {
-          toast.error("You're offline and no cached analysis is available.");
-          setIsAnalyzing(false);
-          return;
-        }
+      // 🧠 CLIENT-SIDE WASM MODE — Runs 100% in browser, zero server dependency
+      const analysisPrice = currentPrice;
+      const analysisChange = currentChange;
+      const analysisHigh = currentHigh;
+      const analysisLow = currentLow;
+      const analysisVolume = currentVolume;
+
+      // Run analysis entirely client-side
+      const result = runClientSideAnalysis({
+        crypto,
+        price: analysisPrice,
+        change: analysisChange,
+        high24h: analysisHigh,
+        low24h: analysisLow,
+        volume: analysisVolume,
+        marketCap,
+        language: currentLanguage,
+        onChainData: liveData.onChain,
+        sentimentData: liveData.sentiment
+      });
+
+      clearInterval(stepInterval);
+      setProcessingStep(processingSteps.length - 1);
+      markFreshData();
+
+      // Typewriter effect for the analysis
+      setFullAnalysis(result.analysis);
+      setHasAnalyzed(true);
+
+      // Cache and save
+      if (result.analysis.length > 100) {
+        cacheAnalysis(result.analysis, analysisPrice, analysisChange);
+        saveAnalysis(result.analysis, analysisPrice, analysisChange, result.confidence, result.bias);
       }
+
+      toast.success("Analysis complete — 100% client-side, zero server calls");
+      setIsAnalyzing(false);
+      return;
 
       // Use live Binance data when available
       const analysisPrice = currentPrice;
