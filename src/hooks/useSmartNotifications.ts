@@ -1,6 +1,7 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useSettings, NotificationAlertSettings } from '@/hooks/useSettings';
 
 interface NotificationData {
   type: 'price_alert' | 'price_surge' | 'price_drop' | 'sentiment_shift' | 'whale_activity' | 'volume_spike';
@@ -34,19 +35,41 @@ const COOLDOWNS = {
   volume_spike: 10 * 60 * 1000,
 };
 
-// Thresholds for triggering notifications
-const THRESHOLDS = {
-  priceChange: 5, // 5% price change
-  volumeSpike: 50, // 50% volume increase
-  sentimentShift: 15, // 15 point shift in fear/greed
-  whaleTransaction: 1000000, // $1M+ transaction
-};
+// Get thresholds from settings
+function getThresholds(alertSettings: NotificationAlertSettings) {
+  return {
+    priceChange: alertSettings.priceChangeThreshold,
+    volumeSpike: alertSettings.volumeSpikeThreshold,
+    sentimentShift: alertSettings.sentimentShiftThreshold,
+    whaleTransaction: alertSettings.whaleTransactionThreshold * 1000000, // Convert to dollars
+  };
+}
+
+// Check if notification type is enabled
+function isNotificationEnabled(type: NotificationData['type'], alertSettings: NotificationAlertSettings): boolean {
+  const typeMap: Record<NotificationData['type'], keyof NotificationAlertSettings> = {
+    'price_alert': 'priceAlerts',
+    'price_surge': 'priceSurges',
+    'price_drop': 'priceDrops',
+    'sentiment_shift': 'sentimentShifts',
+    'whale_activity': 'whaleActivity',
+    'volume_spike': 'volumeSpikes',
+  };
+  return !!alertSettings[typeMap[type]];
+}
 
 export function useSmartNotifications() {
   const { user } = useAuth();
+  const { settings } = useSettings();
   const lastNotifications = useRef<Record<string, number>>({});
   const priceSnapshots = useRef<Record<string, PriceSnapshot>>({});
   const sentimentSnapshot = useRef<SentimentSnapshot | null>(null);
+
+  // Memoize thresholds from settings
+  const thresholds = useMemo(() => 
+    getThresholds(settings.notificationAlerts), 
+    [settings.notificationAlerts]
+  );
 
   // Check if we can send a notification (respects cooldowns)
   const canSendNotification = useCallback((type: string, symbol: string): boolean => {
@@ -59,6 +82,18 @@ export function useSmartNotifications() {
   // Send push notification via edge function
   const sendPushNotification = useCallback(async (notification: NotificationData): Promise<boolean> => {
     if (!user?.id) return false;
+    
+    // Check if this notification type is enabled in settings
+    if (!isNotificationEnabled(notification.type, settings.notificationAlerts)) {
+      console.log(`[SmartNotify] Skipping ${notification.type} for ${notification.symbol} (disabled in settings)`);
+      return false;
+    }
+
+    // Check if push notifications are enabled globally
+    if (!settings.notifications) {
+      console.log(`[SmartNotify] Skipping ${notification.type} (push notifications disabled)`);
+      return false;
+    }
 
     const key = `${notification.type}_${notification.symbol}`;
     
@@ -94,7 +129,7 @@ export function useSmartNotifications() {
       console.error('[SmartNotify] Error:', err);
       return false;
     }
-  }, [user?.id, canSendNotification]);
+  }, [user?.id, canSendNotification, settings.notificationAlerts, settings.notifications]);
 
   // Check for significant price movements
   const checkPriceMovement = useCallback(async (
@@ -125,7 +160,7 @@ export function useSmartNotifications() {
     const volumeChangePercent = ((volume - snapshot.volume) / snapshot.volume) * 100;
 
     // Check for price surge
-    if (priceChangePercent >= THRESHOLDS.priceChange) {
+    if (priceChangePercent >= thresholds.priceChange) {
       await sendPushNotification({
         type: 'price_surge',
         symbol,
@@ -137,7 +172,7 @@ export function useSmartNotifications() {
     }
 
     // Check for price drop
-    if (priceChangePercent <= -THRESHOLDS.priceChange) {
+    if (priceChangePercent <= -thresholds.priceChange) {
       await sendPushNotification({
         type: 'price_drop',
         symbol,
@@ -149,7 +184,7 @@ export function useSmartNotifications() {
     }
 
     // Check for volume spike
-    if (volumeChangePercent >= THRESHOLDS.volumeSpike && canSendNotification('volume_spike', symbol)) {
+    if (volumeChangePercent >= thresholds.volumeSpike && canSendNotification('volume_spike', symbol)) {
       await sendPushNotification({
         type: 'volume_spike',
         symbol,
@@ -167,7 +202,7 @@ export function useSmartNotifications() {
       volume,
       timestamp: now
     };
-  }, [sendPushNotification, canSendNotification]);
+  }, [sendPushNotification, canSendNotification, thresholds]);
 
   // Check for sentiment shifts
   const checkSentimentShift = useCallback(async (
@@ -195,7 +230,7 @@ export function useSmartNotifications() {
     const shift = fearGreedIndex - snapshot.fearGreed;
     const absShift = Math.abs(shift);
 
-    if (absShift >= THRESHOLDS.sentimentShift) {
+    if (absShift >= thresholds.sentimentShift) {
       const direction = shift > 0 ? 'bullish' : 'bearish';
       const emoji = shift > 0 ? '📈' : '📉';
       
@@ -215,7 +250,7 @@ export function useSmartNotifications() {
       overallSentiment,
       timestamp: now
     };
-  }, [sendPushNotification]);
+  }, [sendPushNotification, thresholds]);
 
   // Check for whale activity
   const checkWhaleActivity = useCallback(async (
@@ -225,7 +260,7 @@ export function useSmartNotifications() {
   ): Promise<void> => {
     const absFlow = Math.abs(whaleNetFlow);
     
-    if (absFlow >= THRESHOLDS.whaleTransaction && largeTransactionCount > 0) {
+    if (absFlow >= thresholds.whaleTransaction && largeTransactionCount > 0) {
       const direction = whaleNetFlow > 0 ? 'buying' : 'selling';
       const emoji = whaleNetFlow > 0 ? '🐋💰' : '🐋📤';
       
@@ -238,7 +273,7 @@ export function useSmartNotifications() {
         data: { netFlow: whaleNetFlow, transactions: largeTransactionCount }
       });
     }
-  }, [sendPushNotification]);
+  }, [sendPushNotification, thresholds]);
 
   // Send price alert notification (for triggered alerts)
   const sendPriceAlertNotification = useCallback(async (

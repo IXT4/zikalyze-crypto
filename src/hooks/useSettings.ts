@@ -2,6 +2,22 @@ import { useState, useEffect, useCallback } from "react";
 
 export type SoundType = "chime" | "beep" | "bell";
 
+export interface NotificationAlertSettings {
+  // Alert types enabled
+  priceAlerts: boolean;
+  priceSurges: boolean;
+  priceDrops: boolean;
+  sentimentShifts: boolean;
+  whaleActivity: boolean;
+  volumeSpikes: boolean;
+  
+  // Thresholds
+  priceChangeThreshold: number; // percentage
+  volumeSpikeThreshold: number; // percentage
+  sentimentShiftThreshold: number; // points
+  whaleTransactionThreshold: number; // in millions USD
+}
+
 export interface AppSettings {
   soundEnabled: boolean;
   soundVolume: number;
@@ -12,7 +28,23 @@ export interface AppSettings {
   language: string;
   currency: string;
   twoFactorAuth: boolean;
+  
+  // Advanced notification settings
+  notificationAlerts: NotificationAlertSettings;
 }
+
+const DEFAULT_NOTIFICATION_ALERTS: NotificationAlertSettings = {
+  priceAlerts: true,
+  priceSurges: true,
+  priceDrops: true,
+  sentimentShifts: true,
+  whaleActivity: true,
+  volumeSpikes: true,
+  priceChangeThreshold: 5,
+  volumeSpikeThreshold: 50,
+  sentimentShiftThreshold: 15,
+  whaleTransactionThreshold: 1,
+};
 
 const DEFAULT_SETTINGS: AppSettings = {
   soundEnabled: true,
@@ -24,6 +56,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   language: "English",
   currency: "USD",
   twoFactorAuth: false,
+  notificationAlerts: DEFAULT_NOTIFICATION_ALERTS,
 };
 
 const STORAGE_KEY = "zikalyze_settings";

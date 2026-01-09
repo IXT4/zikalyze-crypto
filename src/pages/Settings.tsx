@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
 import TwoFactorAuth from "@/components/settings/TwoFactorAuth";
 import { SessionManagement } from "@/components/settings/SessionManagement";
+import NotificationSettings from "@/components/settings/NotificationSettings";
 import { languageCodes } from "@/i18n/config";
 
 const emailSchema = z.string().email("Please enter a valid email address");
@@ -440,6 +441,7 @@ const Settings = () => {
                 <div className="space-y-6">
                   <h3 className="text-lg font-semibold text-foreground mb-4">Notification Preferences</h3>
                   
+                  {/* Basic Toggles */}
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
                       <div className="flex items-center gap-3">
@@ -450,7 +452,7 @@ const Settings = () => {
                         )}
                         <div>
                           <div className="font-medium text-foreground">Alert Sounds</div>
-                          <div className="text-sm text-muted-foreground">Play sound when price alerts trigger</div>
+                          <div className="text-sm text-muted-foreground">Play sound when alerts trigger</div>
                         </div>
                       </div>
                       <Switch 
@@ -462,24 +464,18 @@ const Settings = () => {
                     <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
                       <div>
                         <div className="font-medium text-foreground">Push Notifications</div>
-                        <div className="text-sm text-muted-foreground">Receive push notifications for updates</div>
+                        <div className="text-sm text-muted-foreground">Receive push notifications even when browser is closed</div>
                       </div>
                       <Switch 
                         checked={settings.notifications}
                         onCheckedChange={(checked) => saveSettings({ notifications: checked })}
                       />
                     </div>
+                  </div>
 
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
-                      <div>
-                        <div className="font-medium text-foreground">Price Alerts</div>
-                        <div className="text-sm text-muted-foreground">Get notified when prices hit targets</div>
-                      </div>
-                      <Switch 
-                        checked={settings.priceAlerts}
-                        onCheckedChange={(checked) => saveSettings({ priceAlerts: checked })}
-                      />
-                    </div>
+                  {/* Divider */}
+                  <div className="border-t border-border pt-6">
+                    <NotificationSettings />
                   </div>
                 </div>
               )}
