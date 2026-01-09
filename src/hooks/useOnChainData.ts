@@ -365,11 +365,15 @@ export function useOnChainData(
 
       setError(null);
     } catch (e) {
-      console.error('[OnChain] Fetch error:', e);
-      consecutiveSuccessRef.current = 0;
+      console.warn('[OnChain] Fetch error:', e);
+      // Keep last good data and avoid UI "reconnecting" flicker.
+      // Only show an error if we have never successfully loaded.
       if (isMountedRef.current) {
-        setError('Failed to fetch on-chain data');
-        setStreamStatus('polling');
+        if (!metrics) {
+          setError('Failed to fetch on-chain data');
+          setStreamStatus('connecting');
+        }
+        // If metrics already exist, stay in connected mode.
       }
     } finally {
       if (isMountedRef.current) {
@@ -389,8 +393,9 @@ export function useOnChainData(
     // Initial fetch
     fetchOnChainData();
 
-    // Stable polling interval
+    // Stable polling interval (pauses when tab is hidden to avoid network churn)
     pollIntervalRef.current = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
       fetchOnChainData();
     }, POLL_INTERVAL);
 
