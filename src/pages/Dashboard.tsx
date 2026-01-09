@@ -178,7 +178,7 @@ const Dashboard = () => {
           <div className="grid gap-4 md:gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-4 md:space-y-6">
               <Suspense fallback={<ChartSkeleton />}>
-                <PriceChart crypto={selectedCrypto} coinGeckoId={liveData?.id} />
+                <PriceChart crypto={selectedCrypto} coinGeckoId={liveData?.id} change24h={selected.change} />
               </Suspense>
               <Suspense fallback={<ChartSkeleton />}>
                 <VolumeChart crypto={selectedCrypto} coinGeckoId={liveData?.id} />
