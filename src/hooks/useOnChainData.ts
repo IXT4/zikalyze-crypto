@@ -116,19 +116,12 @@ export function useOnChainData(
   const lastWhaleAlertRef = useRef<{ txHash: string; timestamp: number } | null>(null);
   const whaleAlertCooldownRef = useRef<number>(0);
 
-  // Keep refs in sync
+  // Keep refs in sync - consolidated to single effect to avoid hook ordering issues
   useEffect(() => {
     metricsRef.current = metrics;
-  }, [metrics]);
-
-  useEffect(() => {
     loadingRef.current = loading;
-  }, [loading]);
-
-  // Keep streamStatusRef in sync
-  useEffect(() => {
     streamStatusRef.current = streamStatus;
-  }, [streamStatus]);
+  }, [metrics, loading, streamStatus]);
 
   // Initialize WebSocket for BTC live data
   const initBTCWebSockets = useCallback(() => {
