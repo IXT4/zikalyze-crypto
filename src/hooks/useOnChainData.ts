@@ -30,26 +30,16 @@ interface WebSocketState {
   reconnectTimeout: ReturnType<typeof setTimeout> | null;
 }
 
-const POLL_INTERVAL = 10000;
+const POLL_INTERVAL = 15000;
 const API_TIMEOUT = 8000;
-const MAX_RECONNECT_ATTEMPTS = 5;
-const BASE_RECONNECT_DELAY = 1000;
+const MAX_RECONNECT_ATTEMPTS = 3;
+const BASE_RECONNECT_DELAY = 2000;
+const CACHE_DURATION = 30000;
 
-// WebSocket endpoints for live streaming
-const WS_ENDPOINTS: Record<string, { url: string; type: 'mempool' | 'eth' | 'kaspa' }> = {
-  BTC: { url: 'wss://mempool.space/api/v1/ws', type: 'mempool' },
-  ETH: { url: 'wss://ethereum-rpc.publicnode.com', type: 'eth' },
-  KAS: { url: 'wss://api.kaspa.org/ws', type: 'kaspa' },
-};
+// Only BTC has reliable public WebSocket
+const BTC_WS_URL = 'wss://mempool.space/api/v1/ws';
 
-// Fallback ETH WebSocket endpoints
-const ETH_WS_FALLBACKS = [
-  'wss://ethereum-rpc.publicnode.com',
-  'wss://eth.drpc.org',
-  'wss://ethereum.callstaticrpc.com',
-];
-
-// Live whale tracking thresholds per chain (in USD)
+// Whale thresholds in USD
 const WHALE_THRESHOLDS: Record<string, number> = {
   'BTC': 500000, 'ETH': 250000, 'SOL': 100000, 'XRP': 500000, 'ADA': 50000,
   'DOGE': 100000, 'AVAX': 50000, 'DOT': 50000, 'MATIC': 50000, 'LINK': 50000,
@@ -57,23 +47,41 @@ const WHALE_THRESHOLDS: Record<string, number> = {
   'ARB': 50000, 'KAS': 25000, 'DEFAULT': 100000
 };
 
-const blockchairCoinMap: Record<string, string> = {
-  'BTC': 'bitcoin', 'ETH': 'ethereum', 'LTC': 'litecoin', 'DOGE': 'dogecoin',
-  'BCH': 'bitcoin-cash', 'XRP': 'ripple', 'XLM': 'stellar', 'ADA': 'cardano',
-  'DOT': 'polkadot', 'AVAX': 'avalanche', 'MATIC': 'polygon', 'SOL': 'solana',
-  'ATOM': 'cosmos', 'NEAR': 'near', 'FTM': 'fantom', 'TRX': 'tron',
+// TPS estimates for chains
+const CHAIN_TPS: Record<string, number> = {
+  'SOL': 3000, 'AVAX': 4500, 'MATIC': 2000, 'KAS': 100, 'ETH': 15, 'BTC': 7, 'DEFAULT': 50
 };
 
-async function safeFetch<T>(url: string, fallback: T): Promise<T> {
+// API cache to prevent rate limiting
+const apiCache: Record<string, { data: any; timestamp: number }> = {};
+
+async function cachedFetch<T>(url: string, fallback: T): Promise<T> {
+  const now = Date.now();
+  
+  if (apiCache[url] && (now - apiCache[url].timestamp) < CACHE_DURATION) {
+    return apiCache[url].data as T;
+  }
+  
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
     const response = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
     clearTimeout(timeoutId);
-    if (!response.ok) return fallback;
+    
+    if (!response.ok) {
+      if (response.status === 429 && apiCache[url]) {
+        apiCache[url].timestamp = now;
+        return apiCache[url].data as T;
+      }
+      return fallback;
+    }
+    
     const contentType = response.headers.get('content-type');
-    return contentType?.includes('application/json') ? await response.json() : await response.text() as T;
+    const data = contentType?.includes('application/json') ? await response.json() : await response.text();
+    apiCache[url] = { data, timestamp: now };
+    return data as T;
   } catch {
+    if (apiCache[url]) return apiCache[url].data as T;
     return fallback;
   }
 }
@@ -84,7 +92,7 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
   const [error, setError] = useState<string | null>(null);
   const [streamStatus, setStreamStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'polling'>('connecting');
 
-  // Stable refs for values and state
+  // Stable refs
   const cryptoRef = useRef(crypto);
   const priceRef = useRef(price);
   const changeRef = useRef(change);
@@ -94,12 +102,9 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
   const lastFetchRef = useRef<number>(0);
   const isLoadingRef = useRef(false);
   const whaleAlertCooldownRef = useRef<number>(0);
-  
-  // WebSocket state
   const wsStateRef = useRef<WebSocketState>({ socket: null, reconnectAttempts: 0, reconnectTimeout: null });
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Sync refs with prop changes
   useEffect(() => {
     cryptoRef.current = crypto;
     priceRef.current = price;
@@ -107,12 +112,11 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     cryptoInfoRef.current = cryptoInfo;
   }, [crypto, price, change, cryptoInfo]);
 
-  // Whale alert sender
   const sendWhaleAlert = useCallback(async (
     symbol: string, whaleTx: { value: number; type: 'IN' | 'OUT'; timestamp: Date }, currentPrice: number
   ) => {
     const now = Date.now();
-    if (now - whaleAlertCooldownRef.current < 300000) return; // 5min cooldown
+    if (now - whaleAlertCooldownRef.current < 300000) return;
     
     const valueUSD = whaleTx.value * currentPrice;
     const threshold = WHALE_THRESHOLDS[symbol] || WHALE_THRESHOLDS['DEFAULT'];
@@ -139,7 +143,6 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     }
   }, []);
 
-  // Update metrics helper
   const updateMetrics = useCallback((partial: Partial<OnChainMetrics>) => {
     if (!isMountedRef.current) return;
     
@@ -165,7 +168,7 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     setMetrics(newMetrics);
   }, []);
 
-  // REST API fetch (fallback/supplement)
+  // Fetch chain-specific data via REST APIs
   const fetchRestData = useCallback(async () => {
     const now = Date.now();
     if (isLoadingRef.current || (now - lastFetchRef.current < 5000)) return;
@@ -178,22 +181,23 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     const currentPrice = priceRef.current;
     const currentChange = changeRef.current;
     const currentInfo = cryptoInfoRef.current;
-    const isBTC = currentCrypto === 'BTC';
 
     try {
       let mempoolData = { unconfirmedTxs: 0, avgFeeRate: 0, fastestFee: 0, minimumFee: 0 };
-      let hashRate = 0, transactionVolume = { value: 0, change24h: 0, tps: 0 };
+      let hashRate = 0, transactionVolume = { value: 0, change24h: currentChange, tps: CHAIN_TPS[currentCrypto] || CHAIN_TPS['DEFAULT'] };
       let blockHeight = 0, difficulty = 0, avgBlockTime = 0;
-      let activeAddressesCurrent = 0, activeAddressChange24h = 0, largeTxCount24h = 0;
-      let source = 'rest-api';
+      let activeAddressesCurrent = 0, activeAddressChange24h = currentChange * 0.6;
+      let largeTxCount24h = 20;
+      let source = 'derived';
 
-      if (isBTC) {
+      // BTC - mempool.space REST
+      if (currentCrypto === 'BTC') {
         const [fees, blocks, stats, diffAdj, tipHeight] = await Promise.all([
-          safeFetch<any>('https://mempool.space/api/v1/fees/recommended', null),
-          safeFetch<any>('https://mempool.space/api/v1/fees/mempool-blocks', null),
-          safeFetch<any>('https://mempool.space/api/v1/mining/hashrate/1d', null),
-          safeFetch<any>('https://mempool.space/api/v1/difficulty-adjustment', null),
-          safeFetch<number>('https://mempool.space/api/blocks/tip/height', 0),
+          cachedFetch<any>('https://mempool.space/api/v1/fees/recommended', null),
+          cachedFetch<any>('https://mempool.space/api/v1/fees/mempool-blocks', null),
+          cachedFetch<any>('https://mempool.space/api/v1/mining/hashrate/1d', null),
+          cachedFetch<any>('https://mempool.space/api/v1/difficulty-adjustment', null),
+          cachedFetch<number>('https://mempool.space/api/blocks/tip/height', 0),
         ]);
 
         if (fees) {
@@ -205,34 +209,70 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         if (stats?.currentHashrate) hashRate = stats.currentHashrate;
         if (diffAdj) { difficulty = diffAdj.progressPercent || 0; avgBlockTime = diffAdj.timeAvg ? diffAdj.timeAvg / 60000 : 10; }
         blockHeight = tipHeight || 0;
-        activeAddressesCurrent = Math.max(Math.round((currentInfo?.volume || 0) / currentPrice * 0.1), 500000);
-        activeAddressChange24h = currentChange * 0.7;
-        largeTxCount24h = Math.max(Math.round(mempoolData.unconfirmedTxs * 0.02), 50);
         transactionVolume = { value: mempoolData.unconfirmedTxs * 100, change24h: currentChange, tps: Math.round(mempoolData.unconfirmedTxs / 600) };
-        source = 'mempool-rest';
-      } else {
-        const blockchairCoin = blockchairCoinMap[currentCrypto];
-        if (blockchairCoin) {
-          const data = await safeFetch<any>(`https://api.blockchair.com/${blockchairCoin}/stats`, null);
-          if (data?.data) {
-            transactionVolume.value = data.data.transactions_24h || 0;
-            mempoolData.unconfirmedTxs = data.data.mempool_transactions || 0;
-            activeAddressesCurrent = data.data.hodling_addresses || 0;
-            blockHeight = data.data.blocks || 0;
-            hashRate = data.data.hashrate_24h || 0;
-            difficulty = data.data.difficulty || 0;
-            source = 'blockchair';
-          }
-        }
-        if (!activeAddressesCurrent && currentInfo?.volume) {
-          activeAddressesCurrent = Math.max(Math.round(currentInfo.volume / currentPrice * 0.15), 50000);
-        }
-        activeAddressChange24h = currentChange * 0.6 + (Math.random() - 0.5) * 2;
-        largeTxCount24h = Math.max(Math.round(transactionVolume.value * 0.005), 20);
-        if (!transactionVolume.tps) {
-          transactionVolume.tps = currentCrypto === 'SOL' ? 3000 : currentCrypto === 'AVAX' ? 4500 : currentCrypto === 'MATIC' ? 2000 : 100;
-        }
+        largeTxCount24h = Math.max(Math.round(mempoolData.unconfirmedTxs * 0.02), 50);
+        source = 'mempool-live';
       }
+      // ETH - public APIs
+      else if (currentCrypto === 'ETH') {
+        const [gasData, blockData] = await Promise.all([
+          cachedFetch<any>('https://api.blocknative.com/gasprices/blockprices', null),
+          cachedFetch<any>('https://api.etherscan.io/api?module=proxy&action=eth_blockNumber', null),
+        ]);
+
+        if (gasData?.blockPrices?.[0]) {
+          const bp = gasData.blockPrices[0];
+          mempoolData = {
+            unconfirmedTxs: bp.estimatedTransactionCount || 150,
+            avgFeeRate: Math.round(bp.baseFeePerGas || 20),
+            fastestFee: Math.round(bp.estimatedPrices?.[0]?.maxFeePerGas || 30),
+            minimumFee: Math.round(bp.estimatedPrices?.[3]?.maxFeePerGas || 15),
+          };
+        }
+        if (blockData?.result) {
+          blockHeight = parseInt(blockData.result, 16) || 0;
+        }
+        avgBlockTime = 12;
+        transactionVolume.tps = 15;
+        source = 'eth-api';
+      }
+      // KAS - Kaspa API
+      else if (currentCrypto === 'KAS') {
+        const [networkInfo, blockInfo] = await Promise.all([
+          cachedFetch<any>('https://api.kaspa.org/info/network', null),
+          cachedFetch<any>('https://api.kaspa.org/info/virtual-chain-blue-score', null),
+        ]);
+
+        if (networkInfo) {
+          hashRate = networkInfo.hashrate || 0;
+          difficulty = networkInfo.difficulty || 0;
+        }
+        if (blockInfo?.blueScore) {
+          blockHeight = blockInfo.blueScore;
+        }
+        avgBlockTime = 1; // Kaspa 1 second blocks
+        transactionVolume.tps = 100;
+        source = 'kaspa-api';
+      }
+      // SOL - Solana public RPC
+      else if (currentCrypto === 'SOL') {
+        const slotData = await cachedFetch<any>('https://api.mainnet-beta.solana.com', null);
+        // Solana RPC needs POST, use derived data
+        avgBlockTime = 0.4;
+        transactionVolume.tps = 3000;
+        source = 'solana-derived';
+      }
+      // Other chains - derive from price action
+      else {
+        transactionVolume.tps = CHAIN_TPS[currentCrypto] || CHAIN_TPS['DEFAULT'];
+        source = 'derived';
+      }
+
+      // Derive metrics from market data
+      if (!activeAddressesCurrent && currentInfo?.volume) {
+        activeAddressesCurrent = Math.max(Math.round(currentInfo.volume / currentPrice * 0.1), 50000);
+      }
+      activeAddressChange24h = currentChange * 0.6 + (Math.random() - 0.5) * 2;
 
       // Derive exchange flow from price action
       const isStrongBullish = currentChange > 5;
@@ -265,10 +305,12 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         sendWhaleAlert(currentCrypto, { value: Math.abs(exchangeNetFlow.value) / currentPrice, type: exchangeNetFlow.value > 0 ? 'IN' : 'OUT', timestamp: new Date() }, currentPrice);
       }
 
+      const hasWebSocket = wsStateRef.current.socket?.readyState === WebSocket.OPEN;
+      
       updateMetrics({
         exchangeNetFlow, whaleActivity, mempoolData, transactionVolume, hashRate,
         activeAddresses, blockHeight, difficulty, avgBlockTime, source,
-        streamStatus: wsStateRef.current.socket?.readyState === WebSocket.OPEN ? 'connected' : 'polling'
+        streamStatus: hasWebSocket ? 'connected' : 'polling'
       });
       setError(null);
     } catch (e) {
@@ -280,63 +322,42 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     }
   }, [sendWhaleAlert, updateMetrics]);
 
-  // WebSocket connection manager with multi-chain support
-  const connectWebSocket = useCallback((fallbackIndex = 0) => {
+  // BTC WebSocket connection (only reliable public WS)
+  const connectWebSocket = useCallback(() => {
     const cryptoUpper = cryptoRef.current.toUpperCase();
-    const wsConfig = WS_ENDPOINTS[cryptoUpper];
     
-    // Check if WebSocket is supported for this chain
-    if (!wsConfig) {
-      console.log(`[OnChain] No WebSocket for ${cryptoUpper}, using polling`);
+    // Only BTC has reliable public WebSocket
+    if (cryptoUpper !== 'BTC') {
+      console.log(`[OnChain] ${cryptoUpper} using REST polling`);
       setStreamStatus('polling');
       return;
     }
 
-    // Cleanup existing connection
+    // Cleanup existing
     if (wsStateRef.current.socket) {
       wsStateRef.current.socket.close();
       wsStateRef.current.socket = null;
     }
-
     if (wsStateRef.current.reconnectTimeout) {
       clearTimeout(wsStateRef.current.reconnectTimeout);
       wsStateRef.current.reconnectTimeout = null;
     }
 
     setStreamStatus('connecting');
-    
-    // Use fallback endpoints for ETH
-    let wsUrl = wsConfig.url;
-    if (cryptoUpper === 'ETH' && fallbackIndex > 0 && fallbackIndex < ETH_WS_FALLBACKS.length) {
-      wsUrl = ETH_WS_FALLBACKS[fallbackIndex];
-    }
-    
-    console.log(`[OnChain] Connecting WebSocket for ${cryptoUpper} (${wsConfig.type})...`);
+    console.log(`[OnChain] Connecting BTC WebSocket...`);
 
     try {
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(BTC_WS_URL);
       wsStateRef.current.socket = ws;
 
       ws.onopen = () => {
         if (!isMountedRef.current) return;
-        console.log(`[OnChain] WebSocket connected for ${cryptoUpper}`);
+        console.log(`[OnChain] BTC WebSocket connected`);
         wsStateRef.current.reconnectAttempts = 0;
         setStreamStatus('connected');
-
-        // Subscribe based on chain type
-        if (wsConfig.type === 'mempool') {
-          // BTC mempool.space
-          ws.send(JSON.stringify({ action: 'init' }));
-          ws.send(JSON.stringify({ action: 'want', data: ['blocks', 'mempool-blocks', 'stats'] }));
-        } else if (wsConfig.type === 'eth') {
-          // ETH JSON-RPC subscription for pending transactions and new blocks
-          ws.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_subscribe', params: ['newHeads'] }));
-          ws.send(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'eth_subscribe', params: ['newPendingTransactions'] }));
-        } else if (wsConfig.type === 'kaspa') {
-          // Kaspa WebSocket subscription
-          ws.send(JSON.stringify({ command: 'subscribe', topic: 'blocks' }));
-          ws.send(JSON.stringify({ command: 'subscribe', topic: 'transactions' }));
-        }
+        
+        ws.send(JSON.stringify({ action: 'init' }));
+        ws.send(JSON.stringify({ action: 'want', data: ['blocks', 'mempool-blocks', 'stats'] }));
       };
 
       ws.onmessage = (event) => {
@@ -345,207 +366,94 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         try {
           const data = JSON.parse(event.data);
           
-          // Handle BTC mempool.space messages
-          if (wsConfig.type === 'mempool') {
-            if (data.mempoolInfo) {
-              updateMetrics({
-                mempoolData: {
-                  unconfirmedTxs: data.mempoolInfo.size || 0,
-                  avgFeeRate: data.mempoolInfo.vsize ? Math.round(data.mempoolInfo.vsize / 1000) : 0,
-                  fastestFee: metricsRef.current?.mempoolData?.fastestFee,
-                  minimumFee: metricsRef.current?.mempoolData?.minimumFee,
-                },
-                source: 'mempool-ws',
-                streamStatus: 'connected'
-              });
-            }
-
-            if (data.block) {
-              updateMetrics({
-                blockHeight: data.block.height || metricsRef.current?.blockHeight || 0,
-                source: 'mempool-ws',
-                streamStatus: 'connected'
-              });
-              console.log(`[OnChain] BTC New block: ${data.block.height}`);
-            }
-
-            if (data['mempool-blocks']) {
-              const blocks = data['mempool-blocks'];
-              const totalTxs = blocks.reduce((acc: number, b: any) => acc + (b.nTx || 0), 0);
-              const avgFee = blocks[0]?.medianFee || 0;
-              
-              updateMetrics({
-                mempoolData: {
-                  unconfirmedTxs: totalTxs,
-                  avgFeeRate: avgFee,
-                  fastestFee: blocks[0]?.feeRange?.[blocks[0].feeRange.length - 1] || avgFee,
-                  minimumFee: blocks[blocks.length - 1]?.feeRange?.[0] || 1,
-                },
-                source: 'mempool-ws',
-                streamStatus: 'connected'
-              });
-            }
-
-            if (data.fees) {
-              updateMetrics({
-                mempoolData: {
-                  unconfirmedTxs: metricsRef.current?.mempoolData?.unconfirmedTxs || 0,
-                  avgFeeRate: data.fees.halfHourFee || data.fees.hourFee || 0,
-                  fastestFee: data.fees.fastestFee,
-                  minimumFee: data.fees.minimumFee,
-                },
-                source: 'mempool-ws',
-                streamStatus: 'connected'
-              });
-            }
+          if (data.mempoolInfo) {
+            updateMetrics({
+              mempoolData: {
+                unconfirmedTxs: data.mempoolInfo.size || 0,
+                avgFeeRate: metricsRef.current?.mempoolData?.avgFeeRate || 0,
+                fastestFee: metricsRef.current?.mempoolData?.fastestFee,
+                minimumFee: metricsRef.current?.mempoolData?.minimumFee,
+              },
+              source: 'mempool-ws',
+              streamStatus: 'connected'
+            });
           }
-          
-          // Handle ETH JSON-RPC messages
-          if (wsConfig.type === 'eth') {
-            // New block header
-            if (data.params?.result?.number) {
-              const blockNumber = parseInt(data.params.result.number, 16);
-              const gasUsed = parseInt(data.params.result.gasUsed || '0', 16);
-              const gasLimit = parseInt(data.params.result.gasLimit || '0', 16);
-              const baseFeePerGas = data.params.result.baseFeePerGas 
-                ? parseInt(data.params.result.baseFeePerGas, 16) / 1e9 
-                : 0;
-              
-              updateMetrics({
-                blockHeight: blockNumber,
-                mempoolData: {
-                  unconfirmedTxs: metricsRef.current?.mempoolData?.unconfirmedTxs || 0,
-                  avgFeeRate: Math.round(baseFeePerGas),
-                  fastestFee: Math.round(baseFeePerGas * 1.5),
-                  minimumFee: Math.round(baseFeePerGas * 0.8),
-                },
-                avgBlockTime: 12,
-                source: 'eth-ws',
-                streamStatus: 'connected'
-              });
-              console.log(`[OnChain] ETH New block: ${blockNumber}, baseFee: ${baseFeePerGas.toFixed(2)} Gwei`);
-            }
+
+          if (data.block) {
+            updateMetrics({
+              blockHeight: data.block.height || metricsRef.current?.blockHeight || 0,
+              source: 'mempool-ws',
+              streamStatus: 'connected'
+            });
+            console.log(`[OnChain] BTC New block: ${data.block.height}`);
+          }
+
+          if (data['mempool-blocks']) {
+            const blocks = data['mempool-blocks'];
+            const totalTxs = blocks.reduce((acc: number, b: any) => acc + (b.nTx || 0), 0);
+            const avgFee = blocks[0]?.medianFee || 0;
             
-            // Pending transaction (increment count)
-            if (data.params?.result && typeof data.params.result === 'string' && data.params.result.startsWith('0x')) {
-              // This is a pending tx hash
-              const currentPending = metricsRef.current?.mempoolData?.unconfirmedTxs || 0;
-              updateMetrics({
-                mempoolData: {
-                  ...metricsRef.current?.mempoolData,
-                  unconfirmedTxs: currentPending + 1,
-                  avgFeeRate: metricsRef.current?.mempoolData?.avgFeeRate || 0,
-                },
-                source: 'eth-ws',
-                streamStatus: 'connected'
-              });
-            }
-          }
-          
-          // Handle Kaspa messages
-          if (wsConfig.type === 'kaspa') {
-            // New block
-            if (data.type === 'block' || data.block) {
-              const block = data.block || data;
-              updateMetrics({
-                blockHeight: block.header?.daaScore || block.blueScore || metricsRef.current?.blockHeight || 0,
-                difficulty: block.header?.difficulty || metricsRef.current?.difficulty || 0,
-                source: 'kaspa-ws',
-                streamStatus: 'connected'
-              });
-              console.log(`[OnChain] KAS New block: ${block.header?.daaScore || block.blueScore}`);
-            }
-            
-            // Transaction
-            if (data.type === 'transaction' || data.transaction) {
-              const tx = data.transaction || data;
-              const currentPending = metricsRef.current?.mempoolData?.unconfirmedTxs || 0;
-              
-              // Check for whale transaction
-              if (tx.outputs) {
-                const totalValue = tx.outputs.reduce((sum: number, out: any) => sum + (out.amount || 0), 0) / 1e8;
-                if (totalValue > 100000) { // 100K KAS
-                  sendWhaleAlert('KAS', { value: totalValue, type: 'OUT', timestamp: new Date() }, priceRef.current);
-                }
-              }
-              
-              updateMetrics({
-                mempoolData: {
-                  ...metricsRef.current?.mempoolData,
-                  unconfirmedTxs: currentPending + 1,
-                  avgFeeRate: metricsRef.current?.mempoolData?.avgFeeRate || 0,
-                },
-                source: 'kaspa-ws',
-                streamStatus: 'connected'
-              });
-            }
-            
-            // Stats update
-            if (data.type === 'stats' || data.hashrate || data.tps) {
-              updateMetrics({
-                hashRate: data.hashrate || metricsRef.current?.hashRate || 0,
-                transactionVolume: {
-                  value: metricsRef.current?.transactionVolume?.value || 0,
-                  change24h: metricsRef.current?.transactionVolume?.change24h || 0,
-                  tps: data.tps || metricsRef.current?.transactionVolume?.tps || 0,
-                },
-                source: 'kaspa-ws',
-                streamStatus: 'connected'
-              });
-            }
+            updateMetrics({
+              mempoolData: {
+                unconfirmedTxs: totalTxs,
+                avgFeeRate: avgFee,
+                fastestFee: blocks[0]?.feeRange?.[blocks[0].feeRange.length - 1] || avgFee,
+                minimumFee: blocks[blocks.length - 1]?.feeRange?.[0] || 1,
+              },
+              source: 'mempool-ws',
+              streamStatus: 'connected'
+            });
           }
 
-          // Large transaction detection (BTC)
-          if (data.transactions && Array.isArray(data.transactions)) {
-            const largeTxs = data.transactions.filter((tx: any) => tx.value > 10);
-            if (largeTxs.length > 0) {
-              const largest = largeTxs.reduce((a: any, b: any) => (a.value > b.value ? a : b));
-              sendWhaleAlert(cryptoUpper, { value: largest.value, type: largest.value > 0 ? 'IN' : 'OUT', timestamp: new Date() }, priceRef.current);
-            }
+          if (data.fees) {
+            updateMetrics({
+              mempoolData: {
+                unconfirmedTxs: metricsRef.current?.mempoolData?.unconfirmedTxs || 0,
+                avgFeeRate: data.fees.halfHourFee || data.fees.hourFee || 0,
+                fastestFee: data.fees.fastestFee,
+                minimumFee: data.fees.minimumFee,
+              },
+              source: 'mempool-ws',
+              streamStatus: 'connected'
+            });
           }
-        } catch (e) {
-          // Ignore parse errors for non-JSON messages
+        } catch {
+          // Ignore parse errors
         }
       };
 
-      ws.onerror = (error) => {
-        console.warn(`[OnChain] WebSocket error for ${cryptoUpper}:`, error);
+      ws.onerror = () => {
+        console.warn(`[OnChain] BTC WebSocket error`);
         setStreamStatus('disconnected');
       };
 
       ws.onclose = (event) => {
-        console.log(`[OnChain] WebSocket closed for ${cryptoUpper}: ${event.code}`);
+        console.log(`[OnChain] BTC WebSocket closed: ${event.code}`);
         wsStateRef.current.socket = null;
         
         if (!isMountedRef.current) return;
-        
         setStreamStatus('disconnected');
 
-        // Reconnect with exponential backoff
         if (wsStateRef.current.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           const delay = BASE_RECONNECT_DELAY * Math.pow(2, wsStateRef.current.reconnectAttempts);
-          
-          // For ETH, try fallback endpoints
-          const nextFallback = cryptoUpper === 'ETH' ? (fallbackIndex + 1) % ETH_WS_FALLBACKS.length : 0;
-          
-          console.log(`[OnChain] Reconnecting ${cryptoUpper} in ${delay}ms (attempt ${wsStateRef.current.reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+          console.log(`[OnChain] Reconnecting BTC in ${delay}ms (attempt ${wsStateRef.current.reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
           
           wsStateRef.current.reconnectAttempts++;
           wsStateRef.current.reconnectTimeout = setTimeout(() => {
-            if (isMountedRef.current) connectWebSocket(nextFallback);
+            if (isMountedRef.current) connectWebSocket();
           }, delay);
         } else {
-          console.log(`[OnChain] Max reconnection attempts for ${cryptoUpper}, falling back to polling`);
+          console.log('[OnChain] BTC WebSocket max attempts, using polling');
           setStreamStatus('polling');
         }
       };
     } catch (e) {
-      console.error(`[OnChain] WebSocket creation error for ${cryptoUpper}:`, e);
+      console.error('[OnChain] BTC WebSocket error:', e);
       setStreamStatus('polling');
     }
-  }, [updateMetrics, sendWhaleAlert]);
+  }, [updateMetrics]);
 
-  // Main effect - setup and cleanup
+  // Main effect
   useEffect(() => {
     isMountedRef.current = true;
     metricsRef.current = null;
@@ -556,17 +464,15 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     setMetrics(null);
     setStreamStatus('connecting');
 
-    // Initial REST fetch for complete data
+    // Initial fetch
     fetchRestData();
 
-    // Connect WebSocket for supported chains
+    // Connect WebSocket for BTC
     connectWebSocket();
 
-    // Setup polling as fallback/supplement
+    // Polling fallback
     pollIntervalRef.current = setInterval(() => {
-      if (isMountedRef.current) {
-        fetchRestData();
-      }
+      if (isMountedRef.current) fetchRestData();
     }, POLL_INTERVAL);
 
     return () => {
@@ -576,24 +482,16 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         wsStateRef.current.socket.close();
         wsStateRef.current.socket = null;
       }
-      
       if (wsStateRef.current.reconnectTimeout) {
         clearTimeout(wsStateRef.current.reconnectTimeout);
         wsStateRef.current.reconnectTimeout = null;
       }
-      
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
       }
     };
-  }, [crypto]); // Only re-run when crypto changes
+  }, [crypto]);
 
-  return { 
-    metrics, 
-    loading, 
-    error, 
-    streamStatus,
-    refresh: fetchRestData 
-  };
+  return { metrics, loading, error, streamStatus, refresh: fetchRestData };
 }
