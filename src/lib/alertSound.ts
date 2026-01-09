@@ -1,4 +1,5 @@
 // Audio utility for playing notification sounds
+import { getSoundVolume } from "@/hooks/useSettings";
 
 class AlertSoundPlayer {
   private audioContext: AudioContext | null = null;
@@ -73,8 +74,9 @@ class AlertSoundPlayer {
         const startTime = now + index * 0.08;
         const duration = 0.3;
 
+        const volume = getSoundVolume();
         gainNode.gain.setValueAtTime(0, startTime);
-        gainNode.gain.linearRampToValueAtTime(0.7, startTime + 0.02);
+        gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.02);
         gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
 
         oscillator.start(startTime);
@@ -115,8 +117,9 @@ class AlertSoundPlayer {
         const startTime = now + index * 0.06;
         const duration = 0.4;
 
+        const volume = getSoundVolume();
         gainNode.gain.setValueAtTime(0, startTime);
-        gainNode.gain.linearRampToValueAtTime(0.6, startTime + 0.02);
+        gainNode.gain.linearRampToValueAtTime(volume * 0.85, startTime + 0.02);
         gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
 
         oscillator.start(startTime);
@@ -148,7 +151,8 @@ class AlertSoundPlayer {
       oscillator.type = "sine";
       oscillator.frequency.setValueAtTime(440, ctx.currentTime); // A4
 
-      gainNode.gain.setValueAtTime(0.7, ctx.currentTime);
+      const volume = getSoundVolume();
+      gainNode.gain.setValueAtTime(volume, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
 
       oscillator.start();

@@ -4,10 +4,12 @@ import Sidebar from "@/components/dashboard/Sidebar";
 import { Search, User, Bell, BellRing, Trash2, Clock, CheckCircle, AlertCircle, Volume2, BellOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useCurrency } from "@/hooks/useCurrency";
+import { useSettings } from "@/hooks/useSettings";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { alertSound } from "@/lib/alertSound";
@@ -28,10 +30,15 @@ const Alerts = () => {
   const { prices, getPriceBySymbol } = useCryptoPrices();
   const { isSupported, isSubscribed, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
   const { formatPrice } = useCurrency();
+  const { settings, saveSettings } = useSettings();
   const [activeTab, setActiveTab] = useState<"active" | "history">("active");
   const [triggeredAlerts, setTriggeredAlerts] = useState<TriggeredAlert[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const { t } = useTranslation();
+
+  const handleVolumeChange = (value: number[]) => {
+    saveSettings({ soundVolume: value[0] });
+  };
 
   // Fetch triggered alerts history
   useEffect(() => {
@@ -202,7 +209,20 @@ const Alerts = () => {
                 {t("alerts.alertHistory")}
               </button>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-4">
+              {/* Volume Slider */}
+              <div className="flex items-center gap-2 bg-secondary/50 rounded-lg px-3 py-1.5">
+                <Volume2 className="h-4 w-4 text-muted-foreground" />
+                <Slider
+                  value={[settings.soundVolume]}
+                  onValueChange={handleVolumeChange}
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  className="w-24"
+                />
+                <span className="text-xs text-muted-foreground w-8">{Math.round(settings.soundVolume * 100)}%</span>
+              </div>
               <Button variant="outline" size="sm" onClick={handleTestSound} className="gap-2">
                 <Volume2 className="h-4 w-4" />
                 {t("alerts.testSound")}
