@@ -225,8 +225,8 @@ All colors MUST be HSL.
   }
   
   .animate-spin-slow {
-    animation: spin 8s linear infinite;
-    -webkit-animation: spin 8s linear infinite;
+    animation: spin 2.5s linear infinite;
+    -webkit-animation: spin 2.5s linear infinite;
     will-change: transform;
   }
   
