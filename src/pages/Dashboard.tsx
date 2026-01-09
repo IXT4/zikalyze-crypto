@@ -168,6 +168,9 @@ const Dashboard = () => {
               crypto={selectedCrypto}
               price={selected.price}
               change={selected.change}
+              volume={liveData?.total_volume}
+              marketCap={liveData?.market_cap}
+              coinGeckoId={liveData?.id}
             />
           </Suspense>
 

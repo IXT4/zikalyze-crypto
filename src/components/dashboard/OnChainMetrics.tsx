@@ -19,10 +19,17 @@ interface OnChainMetricsProps {
   crypto: string;
   price: number;
   change: number;
+  volume?: number;
+  marketCap?: number;
+  coinGeckoId?: string;
 }
 
-const OnChainMetrics = ({ crypto, price, change }: OnChainMetricsProps) => {
-  const { metrics, loading, countdown, refresh } = useOnChainData(crypto, price, change);
+const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId }: OnChainMetricsProps) => {
+  const { metrics, loading, countdown, refresh } = useOnChainData(crypto, price, change, {
+    volume,
+    marketCap,
+    coinGeckoId
+  });
 
   if (!metrics && loading) {
     return (
