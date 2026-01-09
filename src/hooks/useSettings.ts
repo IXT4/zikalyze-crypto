@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 
 export interface AppSettings {
   soundEnabled: boolean;
+  soundVolume: number;
   notifications: boolean;
   emailAlerts: boolean;
   priceAlerts: boolean;
@@ -12,6 +13,7 @@ export interface AppSettings {
 
 const DEFAULT_SETTINGS: AppSettings = {
   soundEnabled: true,
+  soundVolume: 0.7,
   notifications: true,
   emailAlerts: true,
   priceAlerts: true,
@@ -87,4 +89,18 @@ export const isSoundEnabled = (): boolean => {
     console.error("Error reading sound setting:", error);
   }
   return true; // Default to enabled
+};
+
+// Standalone function to get sound volume (for use outside React components)
+export const getSoundVolume = (): number => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return typeof parsed.soundVolume === "number" ? parsed.soundVolume : 0.7;
+    }
+  } catch (error) {
+    console.error("Error reading volume setting:", error);
+  }
+  return 0.7; // Default volume
 };
