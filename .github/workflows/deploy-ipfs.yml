@@ -1,0 +1,114 @@
+name: Deploy to IPFS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Pin to IPFS via Pinata
+        id: pinata
+        env:
+          PINATA_API_KEY: ${{ secrets.PINATA_API_KEY }}
+          PINATA_SECRET_KEY: ${{ secrets.PINATA_SECRET_KEY }}
+        run: |
+          # Install pinata SDK
+          npm install -g @pinata/sdk
+          
+          # Create upload script
+          cat << 'EOF' > upload.mjs
+          import axios from 'axios';
+          import FormData from 'form-data';
+          import fs from 'fs';
+          import path from 'path';
+          
+          const PINATA_API_KEY = process.env.PINATA_API_KEY;
+          const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY;
+          
+          async function getAllFiles(dirPath, arrayOfFiles = []) {
+            const files = fs.readdirSync(dirPath);
+            for (const file of files) {
+              const filePath = path.join(dirPath, file);
+              if (fs.statSync(filePath).isDirectory()) {
+                await getAllFiles(filePath, arrayOfFiles);
+              } else {
+                arrayOfFiles.push(filePath);
+              }
+            }
+            return arrayOfFiles;
+          }
+          
+          async function uploadToPinata() {
+            const distPath = './dist';
+            const files = await getAllFiles(distPath);
+            
+            const formData = new FormData();
+            
+            for (const filePath of files) {
+              const relativePath = path.relative(distPath, filePath);
+              formData.append('file', fs.createReadStream(filePath), {
+                filepath: `zikalyze/${relativePath}`
+              });
+            }
+            
+            formData.append('pinataMetadata', JSON.stringify({
+              name: `Zikalyze-${new Date().toISOString()}`
+            }));
+            
+            formData.append('pinataOptions', JSON.stringify({
+              cidVersion: 1,
+              wrapWithDirectory: true
+            }));
+            
+            const response = await axios.post(
+              'https://api.pinata.cloud/pinning/pinFileToIPFS',
+              formData,
+              {
+                maxBodyLength: Infinity,
+                headers: {
+                  ...formData.getHeaders(),
+                  'pinata_api_key': PINATA_API_KEY,
+                  'pinata_secret_api_key': PINATA_SECRET_KEY
+                }
+              }
+            );
+            
+            console.log(`IPFS_HASH=${response.data.IpfsHash}`);
+            console.log(`Gateway URL: https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}/zikalyze/`);
+          }
+          
+          uploadToPinata().catch(console.error);
+          EOF
+          
+          node upload.mjs
+
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 IPFS Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Your Zikalyze app has been pinned to IPFS!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Access URLs:" >> $GITHUB_STEP_SUMMARY
+          echo "- Pinata Gateway: Check the workflow logs for the IPFS hash" >> $GITHUB_STEP_SUMMARY
+          echo "- IPFS.io: \`https://ipfs.io/ipfs/<HASH>/zikalyze/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- DWeb: \`https://<HASH>.ipfs.dweb.link/zikalyze/\`" >> $GITHUB_STEP_SUMMARY
