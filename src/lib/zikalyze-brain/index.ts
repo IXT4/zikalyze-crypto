@@ -33,7 +33,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     precisionEntry: '15-Minute Precision Entry',
     keyInsights: 'Key Insights',
     scenarios: 'If-Then Scenarios',
-    poweredBy: 'Powered by Zikalyze AI v10.0 — 100% Client-Side • Zero Server Dependency'
+    poweredBy: 'Powered by Zikalyze AI v10.0'
   },
   es: {
     quickAnalysis: 'Análisis Rápido',
@@ -48,7 +48,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     precisionEntry: 'Entrada de Precisión 15M',
     keyInsights: 'Ideas Clave',
     scenarios: 'Escenarios Si-Entonces',
-    poweredBy: 'Potenciado por Zikalyze AI v10.0 — 100% Cliente • Sin Servidor'
+    poweredBy: 'Potenciado por Zikalyze AI v10.0'
   },
   // Add more languages as needed
 };
