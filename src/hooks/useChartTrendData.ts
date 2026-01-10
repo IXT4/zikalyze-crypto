@@ -54,23 +54,7 @@ const BINANCE_SYMBOL_MAP: Record<string, string> = {
   CFX: 'CFXUSDT', QNT: 'QNTUSDT', WLD: 'WLDUSDT', JUP: 'JUPUSDT',
 };
 
-// CoinCap ID mapping (BROWSER-FRIENDLY - no CORS issues)
-const COINCAP_ID_MAP: Record<string, string> = {
-  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'xrp', DOGE: 'dogecoin',
-  BNB: 'binance-coin', ADA: 'cardano', AVAX: 'avalanche', DOT: 'polkadot',
-  MATIC: 'polygon', LINK: 'chainlink', UNI: 'uniswap', ATOM: 'cosmos',
-  LTC: 'litecoin', BCH: 'bitcoin-cash', NEAR: 'near-protocol', APT: 'aptos',
-  FIL: 'filecoin', ARB: 'arbitrum', OP: 'optimism', INJ: 'injective-protocol',
-  SUI: 'sui', TIA: 'celestia', SEI: 'sei-network', PEPE: 'pepe', SHIB: 'shiba-inu',
-  TON: 'the-open-network', KAS: 'kaspa', TAO: 'bittensor', RENDER: 'render-token',
-  TRX: 'tron', XLM: 'stellar', HBAR: 'hedera-hashgraph', VET: 'vechain',
-  ALGO: 'algorand', ICP: 'internet-computer', FTM: 'fantom', ETC: 'ethereum-classic',
-  AAVE: 'aave', MKR: 'maker', GRT: 'the-graph', RUNE: 'thorchain',
-  STX: 'stacks', MINA: 'mina', FLOW: 'flow', XTZ: 'tezos', EOS: 'eos',
-  NEO: 'neo', THETA: 'theta', EGLD: 'elrond-erd-2', ROSE: 'oasis-network',
-  ZEC: 'zcash', KAVA: 'kava', XMR: 'monero', SAND: 'the-sandbox',
-  MANA: 'decentraland', ENJ: 'enjin-coin', CHZ: 'chiliz', BAT: 'basic-attention-token',
-};
+// CryptoCompare supports most major symbols directly (SMOOTH - reliable OHLCV data)
 
 // Calculate EMA
 const calculateEMA = (prices: number[], period: number): number => {
@@ -246,40 +230,32 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
     }
   }, [symbol]);
   
-  // Fetch from CoinCap (BROWSER-FRIENDLY - no CORS issues)
-  const fetchFromCoinCap = useCallback(async (): Promise<CandleData[] | null> => {
-    const coinCapId = COINCAP_ID_MAP[symbol.toUpperCase()];
-    if (!coinCapId) return null;
-    
+  // Fetch from CryptoCompare (RELIABLE - proper OHLCV data, no CORS issues)
+  const fetchFromCryptoCompare = useCallback(async (): Promise<CandleData[] | null> => {
     try {
-      const end = Date.now();
-      const start = end - 24 * 60 * 60 * 1000; // 24 hours ago
+      // CryptoCompare uses standard symbols
+      const cryptoCompareSymbol = symbol.toUpperCase();
       
       const response = await safeFetch(
-        `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=h1&start=${start}&end=${end}`,
+        `https://min-api.cryptocompare.com/data/v2/histohour?fsym=${cryptoCompareSymbol}&tsym=USD&limit=24`,
         { timeoutMs: 12000, maxRetries: 3 }
       );
       
       if (!response?.ok) return null;
       
       const result = await response.json();
-      if (!result.data || result.data.length < 5) return null;
+      if (result.Response !== 'Success' || !result.Data?.Data || result.Data.Data.length < 5) {
+        return null;
+      }
       
-      // Convert to candle format (CoinCap provides price points, simulate OHLC)
-      const candles: CandleData[] = result.data.map((point: any, index: number, arr: any[]) => {
-        const price = parseFloat(point.priceUsd);
-        const prevPrice = index > 0 ? parseFloat(arr[index - 1].priceUsd) : price;
-        const volatilityFactor = 0.002;
-        
-        return {
-          timestamp: new Date(point.time).getTime(),
-          open: prevPrice,
-          high: Math.max(price, prevPrice) * (1 + volatilityFactor),
-          low: Math.min(price, prevPrice) * (1 - volatilityFactor),
-          close: price,
-          volume: parseFloat(point.circulatingSupply || '0') * price * 0.005,
-        };
-      });
+      const candles: CandleData[] = result.Data.Data.map((point: any) => ({
+        timestamp: point.time * 1000,
+        open: point.open,
+        high: point.high,
+        low: point.low,
+        close: point.close,
+        volume: point.volumeto, // Volume in USD
+      }));
       
       return candles;
     } catch {
@@ -297,12 +273,12 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
       source = 'Server 24h';
     }
     
-    // 2. Fallback to CoinCap (browser-friendly, no CORS)
+    // 2. Fallback to CryptoCompare (reliable OHLCV data)
     if (!candles || candles.length < 5) {
-      candles = await fetchFromCoinCap();
+      candles = await fetchFromCryptoCompare();
       if (candles && candles.length >= 5) {
-        source = 'CoinCap 24h';
-        console.log(`[ChartTrend] ${symbol} loaded from CoinCap fallback: ${candles.length} candles`);
+        source = 'CryptoCompare';
+        console.log(`[ChartTrend] ${symbol} loaded from CryptoCompare fallback: ${candles.length} candles`);
       }
     }
     
@@ -337,7 +313,7 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
     });
     
     setIsLoading(false);
-  }, [symbol, fetchFromEdgeFunction, fetchFromCoinCap]);
+  }, [symbol, fetchFromEdgeFunction, fetchFromCryptoCompare]);
   
   useEffect(() => {
     mountedRef.current = true;
