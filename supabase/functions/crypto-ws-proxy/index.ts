@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📊 crypto-ws-proxy — WebSocket Proxy for Binance Real-time Price Data
+// 📊 crypto-ws-proxy — Multi-Symbol WebSocket Proxy for Binance Real-time Prices
 // ═══════════════════════════════════════════════════════════════════════════════
-// Provides reliable WebSocket connection to Binance through server-side proxy
+// Supports subscribing to multiple symbols in a single connection
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -32,6 +32,11 @@ const BINANCE_SYMBOLS: Record<string, string> = {
   XMR: 'xmrusdt', RNDR: 'rndrusdt', FET: 'fetusdt', IOTA: 'iotausdt',
 };
 
+// Reverse mapping for symbol lookup
+const BINANCE_TO_SYMBOL: Record<string, string> = Object.fromEntries(
+  Object.entries(BINANCE_SYMBOLS).map(([k, v]) => [v.replace('usdt', '').toUpperCase(), k])
+);
+
 serve(async (req) => {
   const { headers } = req;
   const upgradeHeader = headers.get("upgrade") || "";
@@ -49,12 +54,18 @@ serve(async (req) => {
     });
   }
 
-  // Get symbol from URL query params
+  // Get symbols from URL query params (comma-separated or single)
   const url = new URL(req.url);
-  const symbol = url.searchParams.get("symbol")?.toUpperCase() || "BTC";
-  const binanceSymbol = BINANCE_SYMBOLS[symbol] || `${symbol.toLowerCase()}usdt`;
+  const symbolParam = url.searchParams.get("symbols") || url.searchParams.get("symbol") || "BTC";
+  const symbols = symbolParam.toUpperCase().split(",").map(s => s.trim()).filter(Boolean);
   
-  console.log(`[crypto-ws-proxy] Connecting for ${symbol} (${binanceSymbol})`);
+  // Convert to Binance stream names
+  const streams = symbols.map(s => {
+    const binanceSymbol = BINANCE_SYMBOLS[s] || `${s.toLowerCase()}usdt`;
+    return `${binanceSymbol}@ticker`;
+  });
+  
+  console.log(`[crypto-ws-proxy] Subscribing to ${symbols.length} symbols: ${symbols.join(', ')}`);
 
   // Upgrade the client connection
   const { socket: clientSocket, response } = Deno.upgradeWebSocket(req);
@@ -69,14 +80,18 @@ serve(async (req) => {
       return;
     }
 
-    const binanceUrl = `wss://stream.binance.com:9443/ws/${binanceSymbol}@ticker`;
+    // Use combined streams endpoint for multiple symbols
+    const binanceUrl = streams.length === 1 
+      ? `wss://stream.binance.com:9443/ws/${streams[0]}`
+      : `wss://stream.binance.com:9443/stream?streams=${streams.join('/')}`;
+    
     console.log(`[crypto-ws-proxy] Connecting to Binance: ${binanceUrl}`);
     
     try {
       binanceSocket = new WebSocket(binanceUrl);
 
       binanceSocket.onopen = () => {
-        console.log(`[crypto-ws-proxy] Binance connected for ${symbol}`);
+        console.log(`[crypto-ws-proxy] Binance connected for ${symbols.length} symbols`);
         reconnectAttempts = 0;
         
         // Notify client of connection
@@ -84,7 +99,8 @@ serve(async (req) => {
           clientSocket.send(JSON.stringify({
             type: 'connected',
             source: 'binance',
-            symbol: symbol
+            symbols: symbols,
+            streamCount: streams.length
           }));
         }
       };
@@ -92,13 +108,31 @@ serve(async (req) => {
       binanceSocket.onmessage = (event) => {
         if (clientSocket.readyState === WebSocket.OPEN) {
           try {
-            const data = JSON.parse(event.data);
+            const rawData = JSON.parse(event.data);
+            
+            // Handle combined stream format vs single stream format
+            const data = rawData.data || rawData;
+            
+            // Extract symbol from stream name (e.g., "btcusdt@ticker" -> "BTC")
+            let symbolName = '';
+            if (rawData.stream) {
+              // Combined stream format
+              const streamSymbol = rawData.stream.replace('@ticker', '').replace('usdt', '').toUpperCase();
+              symbolName = BINANCE_TO_SYMBOL[streamSymbol] || streamSymbol;
+            } else if (data.s) {
+              // Single stream format - extract from symbol field
+              symbolName = data.s.replace('USDT', '').toUpperCase();
+              symbolName = BINANCE_TO_SYMBOL[symbolName] || symbolName;
+            } else {
+              // Fallback to first symbol if single stream
+              symbolName = symbols[0];
+            }
             
             // Transform Binance ticker data to our format
             const transformed = {
               type: 'ticker',
               source: 'binance',
-              symbol: symbol,
+              symbol: symbolName,
               price: parseFloat(data.c),
               change24h: parseFloat(data.P),
               high24h: parseFloat(data.h),
@@ -109,18 +143,17 @@ serve(async (req) => {
             
             clientSocket.send(JSON.stringify(transformed));
           } catch (e) {
-            // Forward raw data if parsing fails
-            clientSocket.send(event.data);
+            console.log(`[crypto-ws-proxy] Parse error:`, e);
           }
         }
       };
 
       binanceSocket.onerror = (error) => {
-        console.log(`[crypto-ws-proxy] Binance error for ${symbol}:`, error);
+        console.log(`[crypto-ws-proxy] Binance error:`, error);
       };
 
       binanceSocket.onclose = () => {
-        console.log(`[crypto-ws-proxy] Binance disconnected for ${symbol}`);
+        console.log(`[crypto-ws-proxy] Binance disconnected`);
         
         if (isClientConnected && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttempts++;
@@ -140,16 +173,51 @@ serve(async (req) => {
 
   // Client socket handlers
   clientSocket.onopen = () => {
-    console.log(`[crypto-ws-proxy] Client connected for ${symbol}`);
+    console.log(`[crypto-ws-proxy] Client connected for ${symbols.length} symbols`);
     connectToBinance();
   };
 
   clientSocket.onmessage = (event) => {
-    // Handle client messages (e.g., change symbol)
     try {
       const data = JSON.parse(event.data);
+      
       if (data.type === 'ping') {
         clientSocket.send(JSON.stringify({ type: 'pong' }));
+      }
+      
+      // Handle dynamic subscription changes
+      if (data.type === 'subscribe' && data.symbols && binanceSocket?.readyState === WebSocket.OPEN) {
+        const newSymbols = data.symbols.map((s: string) => s.toUpperCase());
+        const newStreams = newSymbols.map((s: string) => {
+          const binanceSymbol = BINANCE_SYMBOLS[s] || `${s.toLowerCase()}usdt`;
+          return `${binanceSymbol}@ticker`;
+        });
+        
+        // Send subscription message to Binance
+        binanceSocket.send(JSON.stringify({
+          method: 'SUBSCRIBE',
+          params: newStreams,
+          id: Date.now()
+        }));
+        
+        console.log(`[crypto-ws-proxy] Added subscriptions: ${newSymbols.join(', ')}`);
+      }
+      
+      if (data.type === 'unsubscribe' && data.symbols && binanceSocket?.readyState === WebSocket.OPEN) {
+        const removeSymbols = data.symbols.map((s: string) => s.toUpperCase());
+        const removeStreams = removeSymbols.map((s: string) => {
+          const binanceSymbol = BINANCE_SYMBOLS[s] || `${s.toLowerCase()}usdt`;
+          return `${binanceSymbol}@ticker`;
+        });
+        
+        // Send unsubscription message to Binance
+        binanceSocket.send(JSON.stringify({
+          method: 'UNSUBSCRIBE',
+          params: removeStreams,
+          id: Date.now()
+        }));
+        
+        console.log(`[crypto-ws-proxy] Removed subscriptions: ${removeSymbols.join(', ')}`);
       }
     } catch {
       // Ignore invalid messages
@@ -161,7 +229,7 @@ serve(async (req) => {
   };
 
   clientSocket.onclose = () => {
-    console.log(`[crypto-ws-proxy] Client disconnected for ${symbol}`);
+    console.log(`[crypto-ws-proxy] Client disconnected`);
     isClientConnected = false;
     
     // Close Binance connection
