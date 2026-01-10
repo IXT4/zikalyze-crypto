@@ -35,30 +35,35 @@ export interface ChartTrendData {
   source: string;
 }
 
-// CoinCap ID mapping for universal support
-const COINCAP_ID_MAP: Record<string, string> = {
-  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'xrp', DOGE: 'dogecoin',
-  BNB: 'binance-coin', ADA: 'cardano', AVAX: 'avalanche', DOT: 'polkadot',
-  MATIC: 'polygon', LINK: 'chainlink', UNI: 'uniswap', ATOM: 'cosmos',
-  LTC: 'litecoin', BCH: 'bitcoin-cash', NEAR: 'near-protocol', APT: 'aptos',
-  FIL: 'filecoin', ARB: 'arbitrum', OP: 'optimism', INJ: 'injective-protocol',
-  SUI: 'sui', TIA: 'celestia', SEI: 'sei-network', PEPE: 'pepe', SHIB: 'shiba-inu',
-  WIF: 'dogwifcoin', BONK: 'bonk', FLOKI: 'floki-inu', FET: 'fetch-ai',
-  AAVE: 'aave', MKR: 'maker', GRT: 'the-graph', IMX: 'immutable-x',
-  STX: 'stacks', RUNE: 'thorchain', SAND: 'the-sandbox', MANA: 'decentraland',
-  AXS: 'axie-infinity', GALA: 'gala', APE: 'apecoin', CRV: 'curve-dao-token',
-  SNX: 'synthetix-network-token', COMP: 'compound', LDO: 'lido-dao',
-  ALGO: 'algorand', XLM: 'stellar', VET: 'vechain', ICP: 'internet-computer',
-  HBAR: 'hedera-hashgraph', ETC: 'ethereum-classic', FTM: 'fantom', TRX: 'tron',
-  XMR: 'monero', EOS: 'eos', THETA: 'theta', XTZ: 'tezos', NEO: 'neo',
-  KAVA: 'kava', ZEC: 'zcash', DASH: 'dash', EGLD: 'elrond-erd-2',
-  FLOW: 'flow', MINA: 'mina', ROSE: 'oasis-network', ONE: 'harmony',
-  ZIL: 'zilliqa', ENJ: 'enjin-coin', CHZ: 'chiliz', BAT: 'basic-attention-token',
-  TON: 'the-open-network', KAS: 'kaspa', TAO: 'bittensor', PYTH: 'pyth-network',
-  JUP: 'jupiter-exchange-solana', WLD: 'worldcoin-wld', ONDO: 'ondo-finance',
-  RENDER: 'render-token', NOT: 'notcoin', ORDI: 'ordi', BLUR: 'blur',
-  PENDLE: 'pendle', DYDX: 'dydx', STRK: 'starknet-token', USDT: 'tether',
-  USDC: 'usd-coin', LEO: 'unus-sed-leo',
+// Binance symbol mapping (PRIMARY)
+const BINANCE_SYMBOL_MAP: Record<string, string> = {
+  BTC: 'BTCUSDT', ETH: 'ETHUSDT', SOL: 'SOLUSDT', XRP: 'XRPUSDT', DOGE: 'DOGEUSDT',
+  BNB: 'BNBUSDT', ADA: 'ADAUSDT', AVAX: 'AVAXUSDT', DOT: 'DOTUSDT',
+  MATIC: 'MATICUSDT', LINK: 'LINKUSDT', UNI: 'UNIUSDT', ATOM: 'ATOMUSDT',
+  LTC: 'LTCUSDT', BCH: 'BCHUSDT', NEAR: 'NEARUSDT', APT: 'APTUSDT',
+  FIL: 'FILUSDT', ARB: 'ARBUSDT', OP: 'OPUSDT', INJ: 'INJUSDT',
+  SUI: 'SUIUSDT', TIA: 'TIAUSDT', SEI: 'SEIUSDT', PEPE: 'PEPEUSDT', SHIB: 'SHIBUSDT',
+  TON: 'TONUSDT', KAS: 'KASUSDT', TAO: 'TAOUSDT', RENDER: 'RENDERUSDT',
+  TRX: 'TRXUSDT', XLM: 'XLMUSDT', HBAR: 'HBARUSDT', VET: 'VETUSDT',
+  ALGO: 'ALGOUSDT', ICP: 'ICPUSDT', FTM: 'FTMUSDT', ETC: 'ETCUSDT',
+  AAVE: 'AAVEUSDT', MKR: 'MKRUSDT', GRT: 'GRTUSDT', IMX: 'IMXUSDT',
+  RUNE: 'RUNEUSDT', STX: 'STXUSDT', MINA: 'MINAUSDT', FLOW: 'FLOWUSDT',
+  XTZ: 'XTZUSDT', EOS: 'EOSUSDT', NEO: 'NEOUSDT', THETA: 'THETAUSDT',
+  EGLD: 'EGLDUSDT', ROSE: 'ROSEUSDT', ZEC: 'ZECUSDT', KAVA: 'KAVAUSDT',
+  CFX: 'CFXUSDT', QNT: 'QNTUSDT', WLD: 'WLDUSDT', JUP: 'JUPUSDT',
+};
+
+// Kraken symbol mapping (FALLBACK - more reliable than CoinCap)
+const KRAKEN_SYMBOL_MAP: Record<string, string> = {
+  BTC: 'XBTUSD', ETH: 'ETHUSD', SOL: 'SOLUSD', XRP: 'XRPUSD', DOGE: 'DOGEUSD',
+  ADA: 'ADAUSD', DOT: 'DOTUSD', LINK: 'LINKUSD', UNI: 'UNIUSD', ATOM: 'ATOMUSD',
+  LTC: 'LTCUSD', BCH: 'BCHUSD', AVAX: 'AVAXUSD', MATIC: 'MATICUSD',
+  ALGO: 'ALGOUSD', XLM: 'XLMUSD', ETC: 'ETCUSD', FIL: 'FILUSD',
+  AAVE: 'AAVEUSD', MKR: 'MKRUSD', GRT: 'GRTUSD', SNX: 'SNXUSD',
+  COMP: 'COMPUSD', BAT: 'BATUSD', ZEC: 'ZECUSD', DASH: 'DASHUSD',
+  XMR: 'XMRUSD', EOS: 'EOSUSD', XTZ: 'XTZUSD', TRX: 'TRXUSD',
+  MANA: 'MANAUSD', SAND: 'SANDUSD', ENJ: 'ENJUSD', CHZ: 'CHZUSD',
+  CRV: 'CRVUSD', SHIB: 'SHIBUSD', PEPE: 'PEPEUSD', APE: 'APEUSD',
 };
 
 // Calculate EMA
@@ -210,139 +215,132 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
   const [isLoading, setIsLoading] = useState(true);
   const mountedRef = useRef(true);
   const refreshIntervalRef = useRef<number | null>(null);
-  const retryCountRef = useRef(0);
-  const MAX_RETRIES = 3;
   
-  const fetchWithId = useCallback(async (coinCapId: string): Promise<boolean> => {
+  // Fetch from Binance (PRIMARY)
+  const fetchFromBinance = useCallback(async (): Promise<CandleData[] | null> => {
+    const binanceSymbol = BINANCE_SYMBOL_MAP[symbol.toUpperCase()];
+    if (!binanceSymbol) return null;
+    
     try {
-      // Fetch 24h of hourly candles for trend analysis
-      const end = Date.now();
-      const start = end - 24 * 60 * 60 * 1000; // 24 hours ago
+      const endpoints = [
+        `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=1h&limit=24`,
+        `https://api.binance.us/api/v3/klines?symbol=${binanceSymbol}&interval=1h&limit=24`,
+      ];
       
-      const response = await safeFetch(
-        `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=h1&start=${start}&end=${end}`,
-        { timeoutMs: 15000, maxRetries: 4 }
-      );
-      
-      if (!response || !response.ok) {
-        // Silent fail - data will just not update
-        return false;
-      }
-      
-      const result = await response.json();
-      
-      if (!result.data || result.data.length < 5) {
-        return false;
-      }
-      
-      // Convert to candle format (CoinCap provides price points, simulate OHLC)
-      const candles: CandleData[] = result.data.map((point: any, index: number, arr: any[]) => {
-        const price = parseFloat(point.priceUsd);
-        const prevPrice = index > 0 ? parseFloat(arr[index - 1].priceUsd) : price;
-        
-        // Simulate OHLC from price points (open = prev close, high/low = ±0.5% range)
-        const volatilityFactor = 0.005; // 0.5% volatility assumption
-        return {
-          timestamp: new Date(point.time).getTime(),
-          open: prevPrice,
-          high: Math.max(price, prevPrice) * (1 + volatilityFactor * Math.random()),
-          low: Math.min(price, prevPrice) * (1 - volatilityFactor * Math.random()),
-          close: price,
-          volume: parseFloat(point.circulatingSupply || '0') * price * 0.01 // Estimate
-        };
-      });
-      
-      // Also try to get actual volume data (optional - don't fail if this errors)
-      try {
-        const assetRes = await safeFetch(`https://api.coincap.io/v2/assets/${coinCapId}`, { maxRetries: 2, timeoutMs: 8000 });
-        if (assetRes && assetRes.ok) {
-          const assetData = await assetRes.json();
-          const volume24h = parseFloat(assetData.data?.volumeUsd24Hr || '0');
-          
-          // Distribute volume across candles
-          if (volume24h > 0) {
-            const volumePerCandle = volume24h / candles.length;
-            candles.forEach(c => c.volume = volumePerCandle * (0.8 + Math.random() * 0.4));
+      for (const url of endpoints) {
+        const response = await safeFetch(url, { timeoutMs: 8000, maxRetries: 2 });
+        if (response?.ok) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length >= 5) {
+            return data.map((k: any[]) => ({
+              timestamp: k[0],
+              open: parseFloat(k[1]),
+              high: parseFloat(k[2]),
+              low: parseFloat(k[3]),
+              close: parseFloat(k[4]),
+              volume: parseFloat(k[5]),
+            }));
           }
         }
-      } catch {
-        // Volume data is optional, continue without it
       }
-      
-      const closes = candles.map(c => c.close);
-      const swings = detectSwingPoints(candles);
-      
-      if (!mountedRef.current) return true;
-      
-      setData({
-        candles,
-        trend24h: analyzeTrend(candles),
-        trendStrength: calculateTrendStrength(candles),
-        higherHighs: swings.higherHighs,
-        higherLows: swings.higherLows,
-        lowerHighs: swings.lowerHighs,
-        lowerLows: swings.lowerLows,
-        ema9: calculateEMA(closes, 9),
-        ema21: calculateEMA(closes, 21),
-        rsi: calculateRSI(closes, 14),
-        volumeTrend: analyzeVolumeTrend(candles),
-        priceVelocity: calculatePriceVelocity(candles),
-        lastUpdated: Date.now(),
-        isLive: true,
-        source: 'CoinCap 24h'
-      });
-      
-      setIsLoading(false);
-      retryCountRef.current = 0; // Reset on success
-      return true;
-      
+      return null;
     } catch {
-      // Silent fail - network issues are expected
-      return false;
+      return null;
+    }
+  }, [symbol]);
+  
+  // Fetch from Kraken (FALLBACK - more reliable than CoinCap)
+  const fetchFromKraken = useCallback(async (): Promise<CandleData[] | null> => {
+    const krakenSymbol = KRAKEN_SYMBOL_MAP[symbol.toUpperCase()];
+    if (!krakenSymbol) return null;
+    
+    try {
+      // Kraken OHLC endpoint - interval 60 = 1 hour
+      const response = await safeFetch(
+        `https://api.kraken.com/0/public/OHLC?pair=${krakenSymbol}&interval=60`,
+        { timeoutMs: 10000, maxRetries: 2 }
+      );
+      
+      if (!response?.ok) return null;
+      
+      const result = await response.json();
+      if (result.error && result.error.length > 0) return null;
+      
+      // Kraken returns data in format: { result: { PAIR: [[time, open, high, low, close, vwap, volume, count], ...] } }
+      const pairs = Object.keys(result.result).filter(k => k !== 'last');
+      if (pairs.length === 0) return null;
+      
+      const ohlcData = result.result[pairs[0]];
+      if (!Array.isArray(ohlcData) || ohlcData.length < 5) return null;
+      
+      // Take last 24 candles
+      const candles: CandleData[] = ohlcData.slice(-24).map((k: any[]) => ({
+        timestamp: k[0] * 1000, // Kraken uses seconds
+        open: parseFloat(k[1]),
+        high: parseFloat(k[2]),
+        low: parseFloat(k[3]),
+        close: parseFloat(k[4]),
+        volume: parseFloat(k[6]),
+      }));
+      
+      return candles;
+    } catch {
+      return null;
     }
   }, [symbol]);
   
   const fetchData = useCallback(async () => {
-    const upperSymbol = symbol.toUpperCase();
-    let coinCapId = COINCAP_ID_MAP[upperSymbol];
+    let candles: CandleData[] | null = null;
+    let source = 'unknown';
     
-    if (!coinCapId) {
-      // Try dynamic lookup
-      try {
-        const searchRes = await safeFetch(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=1`, { maxRetries: 2 });
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          if (searchData.data?.[0]?.id) {
-            coinCapId = searchData.data[0].id;
-          }
-        }
-      } catch {
-        // Dynamic lookup failed, will use fallback
+    // 1. Try Binance first (most reliable)
+    candles = await fetchFromBinance();
+    if (candles && candles.length >= 5) {
+      source = 'Binance 24h';
+      console.log(`[ChartTrend] ${symbol} loaded from Binance: ${candles.length} candles`);
+    }
+    
+    // 2. Fallback to Kraken (reliable, no rate limits)
+    if (!candles || candles.length < 5) {
+      candles = await fetchFromKraken();
+      if (candles && candles.length >= 5) {
+        source = 'Kraken 24h';
+        console.log(`[ChartTrend] ${symbol} loaded from Kraken: ${candles.length} candles`);
       }
     }
     
-    if (!coinCapId) {
-      console.log(`[ChartTrend] No CoinCap ID found for ${symbol}`);
+    // 3. No data available
+    if (!candles || candles.length < 5) {
+      console.log(`[ChartTrend] No data available for ${symbol}`);
       setIsLoading(false);
       return;
     }
     
-    const success = await fetchWithId(coinCapId);
+    const closes = candles.map(c => c.close);
+    const swings = detectSwingPoints(candles);
     
-    // Retry logic with exponential backoff
-    if (!success && retryCountRef.current < MAX_RETRIES) {
-      retryCountRef.current++;
-      const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 10000);
-      console.log(`[ChartTrend] Retry ${retryCountRef.current}/${MAX_RETRIES} for ${symbol} in ${delay}ms`);
-      setTimeout(() => {
-        if (mountedRef.current) {
-          fetchWithId(coinCapId!);
-        }
-      }, delay);
-    } else if (!success) {
-      setIsLoading(false);
-    }
-  }, [symbol, fetchWithId]);
+    if (!mountedRef.current) return;
+    
+    setData({
+      candles,
+      trend24h: analyzeTrend(candles),
+      trendStrength: calculateTrendStrength(candles),
+      higherHighs: swings.higherHighs,
+      higherLows: swings.higherLows,
+      lowerHighs: swings.lowerHighs,
+      lowerLows: swings.lowerLows,
+      ema9: calculateEMA(closes, 9),
+      ema21: calculateEMA(closes, 21),
+      rsi: calculateRSI(closes, 14),
+      volumeTrend: analyzeVolumeTrend(candles),
+      priceVelocity: calculatePriceVelocity(candles),
+      lastUpdated: Date.now(),
+      isLive: true,
+      source
+    });
+    
+    setIsLoading(false);
+  }, [symbol, fetchFromBinance, fetchFromKraken]);
   
   useEffect(() => {
     mountedRef.current = true;
