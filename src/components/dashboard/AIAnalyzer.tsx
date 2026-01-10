@@ -376,8 +376,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">v10.0</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-chart-cyan/20 text-chart-cyan font-medium">DECENTRALIZED</span>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">v11.0</span>
                 {/* Offline/Live/Cache Indicator */}
                 {isOffline ? (
                   <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-destructive/20 text-destructive">
