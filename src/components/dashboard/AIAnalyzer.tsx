@@ -55,19 +55,28 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   // Comprehensive live market data (prices, on-chain, sentiment)
   const liveData = useLiveMarketData(crypto, price, change, high24h, low24h, volume);
   
-  // Real-time on-chain data with whale tracking
-  const { metrics: onChainMetrics, streamStatus } = useOnChainData(crypto, price, change, {
-    volume,
-    marketCap,
-    coinGeckoId: undefined
-  });
+  // Real-time on-chain data with whale tracking - use live price for accuracy
+  const { metrics: onChainMetrics, streamStatus } = useOnChainData(
+    crypto, 
+    liveData.priceIsLive ? liveData.price : price, 
+    liveData.priceIsLive ? liveData.change24h : change, 
+    {
+      volume: liveData.priceIsLive ? liveData.volume : volume,
+      marketCap,
+      coinGeckoId: undefined
+    }
+  );
   
-  // Use live data when available
-  const currentPrice = liveData.price;
-  const currentChange = liveData.change24h;
-  const currentHigh = liveData.high24h || high24h;
-  const currentLow = liveData.low24h || low24h;
-  const currentVolume = liveData.volume || volume;
+  // ALWAYS prioritize WebSocket live data over prop fallbacks
+  const currentPrice = liveData.priceIsLive ? liveData.price : price;
+  const currentChange = liveData.priceIsLive ? liveData.change24h : change;
+  const currentHigh = liveData.priceIsLive && liveData.high24h > 0 ? liveData.high24h : (high24h || price * 1.02);
+  const currentLow = liveData.priceIsLive && liveData.low24h > 0 ? liveData.low24h : (low24h || price * 0.98);
+  const currentVolume = liveData.priceIsLive && liveData.volume > 0 ? liveData.volume : (volume || 0);
+  
+  // Track data freshness
+  const dataAgeMs = Date.now() - liveData.lastUpdated;
+  const isDataFresh = dataAgeMs < 5000; // Data is fresh if < 5 seconds old
   
   const { history, learningStats, loading: historyLoading, saveAnalysis, submitFeedback, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
   const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
@@ -146,12 +155,23 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     }, 600);
 
     try {
-      // 🧠 CLIENT-SIDE WASM MODE — Runs 100% in browser, zero server dependency
+      // 🧠 CLIENT-SIDE ANALYSIS — Using real-time WebSocket price data
       const analysisPrice = currentPrice;
       const analysisChange = currentChange;
       const analysisHigh = currentHigh;
       const analysisLow = currentLow;
       const analysisVolume = currentVolume;
+      
+      // Log data source for debugging
+      console.log(`[AI Analysis] Using ${liveData.priceIsLive ? 'REAL-TIME WEBSOCKET' : 'CACHED'} data:`, {
+        price: analysisPrice,
+        change: analysisChange,
+        high: analysisHigh,
+        low: analysisLow,
+        volume: analysisVolume,
+        dataAge: `${dataAgeMs}ms`,
+        source: liveData.dataSourcesSummary
+      });
 
       // Use real-time on-chain data from useOnChainData hook (more comprehensive)
       const adaptedOnChainData = onChainMetrics ? {
@@ -217,7 +237,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         } : undefined
       } : undefined;
 
-      // Run analysis entirely client-side
+      // Run analysis entirely client-side with real-time data status
       const result = runClientSideAnalysis({
         crypto,
         price: analysisPrice,
@@ -227,6 +247,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         volume: analysisVolume,
         marketCap,
         language: currentLanguage,
+        isLiveData: liveData.priceIsLive && isDataFresh,
+        dataSource: liveData.dataSourcesSummary,
         onChainData: adaptedOnChainData,
         sentimentData: adaptedSentimentData
       });
@@ -245,7 +267,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         saveAnalysis(result.analysis, analysisPrice, analysisChange, result.confidence, result.bias);
       }
 
-      toast.success("Analysis complete — 100% client-side, zero server calls");
+      const dataSourceMsg = liveData.priceIsLive ? "Real-time WebSocket data" : "Cached market data";
+      toast.success(`Analysis complete — ${dataSourceMsg}`);
     } catch (error) {
       console.error("Analysis error:", error);
       
@@ -424,12 +447,18 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           </div>
         </div>
 
-        {/* Live Price Display */}
+        {/* Live Price Display - Shows real-time WebSocket data */}
         <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-background to-secondary/30 border border-border/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="text-lg font-bold text-foreground">
-                {crypto.toUpperCase()}
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-foreground">{crypto.toUpperCase()}</span>
+                {liveData.priceIsLive && isDataFresh && (
+                  <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-success/20 text-success font-medium">
+                    <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                    REALTIME
+                  </span>
+                )}
               </div>
               <div className={cn(
                 "text-2xl font-bold tabular-nums",
