@@ -209,10 +209,8 @@ const COINGECKO_TO_COINCAP: Record<string, string> = {
   "gomining": "gomining",
 };
 
-// Cache for CoinGecko data to handle rate limits
-let cachedData: CryptoPrice[] | null = null;
-let cacheTimestamp = 0;
-const CACHE_DURATION = 60000; // 1 minute cache for fresher data
+// No caching - always fetch fresh data from WebSocket
+// CoinGecko is only used for initial metadata (images, names)
 
 // Fallback prices are placeholders - will be replaced with live CoinGecko data
 // These are only used for initial render before API data loads
@@ -328,20 +326,6 @@ export const useCryptoPrices = () => {
   }, []);
 
   const fetchPrices = useCallback(async (retryCount = 0) => {
-    // Check cache first
-    const now = Date.now();
-    if (cachedData && (now - cacheTimestamp) < CACHE_DURATION) {
-      setPrices(cachedData);
-      cachedData.forEach(p => pricesRef.current.set(p.symbol, p));
-      cryptoListRef.current = cachedData.map(coin => ({
-        symbol: coin.symbol.toUpperCase(),
-        name: coin.name,
-        id: coin.id
-      }));
-      setLoading(false);
-      return;
-    }
-
     // Initialize with fallback data immediately so UI is responsive
     if (prices.length === 0) {
       const fallbackWithTimestamp = FALLBACK_CRYPTOS.map(c => ({ ...c, lastUpdate: Date.now() }));
@@ -361,7 +345,7 @@ export const useCryptoPrices = () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
-      // Fetch top 150 from CoinGecko to ensure we get 100 after filtering stablecoins
+      // Fetch top 150 from CoinGecko for metadata (images, names, market cap)
       const response = await fetch(
         `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=150&page=1&sparkline=false`,
         { signal: controller.signal }
@@ -370,10 +354,8 @@ export const useCryptoPrices = () => {
       clearTimeout(timeoutId);
       
       if (response.status === 429) {
-        // Rate limited - use cache or fallback
-        if (cachedData) {
-          setPrices(cachedData);
-        }
+        // Rate limited - continue with fallback, WebSocket will update prices
+        console.log('[CoinGecko] Rate limited, using fallback data');
         setLoading(false);
         return;
       }
@@ -421,20 +403,14 @@ export const useCryptoPrices = () => {
         source: "CoinGecko",
       }));
       
-      // Update cache
-      cachedData = cryptoPrices;
-      cacheTimestamp = Date.now();
-      
-      // Initialize price map
+      // Initialize price map - WebSocket will update with real-time prices
       cryptoPrices.forEach(p => pricesRef.current.set(p.symbol, p));
       
       setPrices(cryptoPrices);
       setError(null);
+      console.log('[CoinGecko] ✓ Loaded metadata for', cryptoPrices.length, 'coins');
     } catch (err) {
-      // Silent error - we have fallback data
-      if (cachedData) {
-        setPrices(cachedData);
-      }
+      console.log('[CoinGecko] Fetch failed, using fallback data');
     } finally {
       setLoading(false);
     }
