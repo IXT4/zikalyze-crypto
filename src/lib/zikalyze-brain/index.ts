@@ -111,7 +111,8 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     isLiveData = false,
     dataSource = 'cached',
     onChainData,
-    sentimentData
+    sentimentData,
+    chartTrendData // NEW: Real-time 24h chart data
   } = input;
 
   const t = getTranslations(language);
@@ -176,8 +177,13 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     change
   });
 
-  // Top-down multi-timeframe analysis FIRST
-  const topDownAnalysis = performTopDownAnalysis(price, high24h, low24h, change);
+  // Top-down multi-timeframe analysis FIRST — now with REAL chart data
+  const topDownAnalysis = performTopDownAnalysis(price, high24h, low24h, change, chartTrendData);
+  
+  // Log chart data usage for debugging
+  if (chartTrendData?.isLive) {
+    console.log(`[AI Brain] Using REAL 24h chart data: ${chartTrendData.candles.length} candles, trend=${chartTrendData.trend24h}, EMA9=${chartTrendData.ema9.toFixed(2)}, RSI=${chartTrendData.rsi.toFixed(1)}`);
+  }
 
   // Calculate multi-factor bias
   const { bias: rawBias, confidence: rawConfidence, insights } = calculateFinalBias({

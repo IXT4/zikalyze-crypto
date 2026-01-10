@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { useAnalysisHistory, AnalysisRecord } from "@/hooks/useAnalysisHistory";
 import { useLiveMarketData } from "@/hooks/useLiveMarketData";
 import { useAnalysisCache } from "@/hooks/useAnalysisCache";
 import { useOnChainData } from "@/hooks/useOnChainData";
+import { useChartTrendData } from "@/hooks/useChartTrendData";
 import { runClientSideAnalysis, AnalysisResult } from "@/lib/zikalyze-brain";
 import { format } from "date-fns";
 import { Progress } from "@/components/ui/progress";
@@ -56,6 +57,9 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   
   // Comprehensive live market data (prices, on-chain, sentiment)
   const liveData = useLiveMarketData(crypto, price, change, high24h, low24h, volume);
+  
+  // 📊 Real-time 24h chart data for accurate trend analysis
+  const chartTrendData = useChartTrendData(crypto);
   
   // Real-time on-chain data with whale tracking - use live price for accuracy
   const { metrics: onChainMetrics, streamStatus } = useOnChainData(
@@ -263,7 +267,24 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         isLiveData: isRealTimeData,
         dataSource: actualDataSource,
         onChainData: adaptedOnChainData,
-        sentimentData: adaptedSentimentData
+        sentimentData: adaptedSentimentData,
+        // Pass real 24h chart data for accurate trend analysis
+        chartTrendData: chartTrendData ? {
+          candles: chartTrendData.candles,
+          trend24h: chartTrendData.trend24h,
+          trendStrength: chartTrendData.trendStrength,
+          higherHighs: chartTrendData.higherHighs,
+          higherLows: chartTrendData.higherLows,
+          lowerHighs: chartTrendData.lowerHighs,
+          lowerLows: chartTrendData.lowerLows,
+          ema9: chartTrendData.ema9,
+          ema21: chartTrendData.ema21,
+          rsi: chartTrendData.rsi,
+          volumeTrend: chartTrendData.volumeTrend,
+          priceVelocity: chartTrendData.priceVelocity,
+          isLive: chartTrendData.isLive,
+          source: chartTrendData.source
+        } : undefined
       });
 
       clearInterval(stepInterval);
@@ -418,6 +439,13 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                   <div className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-chart-cyan/20 text-chart-cyan font-medium" title="Live on-chain data connected">
                     <Activity className="h-2.5 w-2.5" />
                     <span>ON-CHAIN</span>
+                  </div>
+                )}
+                {/* Chart Trend Data Status */}
+                {chartTrendData?.isLive && (
+                  <div className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-chart-orange/20 text-chart-orange font-medium" title={`24h chart: ${chartTrendData.candles.length} candles, RSI ${chartTrendData.rsi.toFixed(0)}`}>
+                    <BarChart3 className="h-2.5 w-2.5" />
+                    <span>24H CHART</span>
                   </div>
                 )}
               </div>

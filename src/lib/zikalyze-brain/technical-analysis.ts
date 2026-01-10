@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📊 TECHNICAL ANALYSIS ENGINE v3.0 — Accurate Top-Down Multi-Timeframe Analysis
+// 📊 TECHNICAL ANALYSIS ENGINE v4.0 — Real-Time Chart-Based Analysis
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🎯 TOP-DOWN APPROACH: Trend follows price direction consistently
-// 📈 Confluence = alignment across timeframes + supporting factors
+// 🎯 Uses REAL 24h chart data when available for accurate trend detection
+// 📈 Confluence = alignment across timeframes + EMA/RSI from live data
 // ⚡ No random values — 100% deterministic and reproducible
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { MarketStructure, PrecisionEntry } from './types';
+import { MarketStructure, PrecisionEntry, ChartTrendInput } from './types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🔍 TYPES FOR TOP-DOWN ANALYSIS
@@ -21,7 +21,7 @@ interface TimeframeBias {
   weight: number; // Higher TF = higher weight
 }
 
-interface TopDownAnalysis {
+export interface TopDownAnalysis {
   weekly: TimeframeBias;
   daily: TimeframeBias;
   h4: TimeframeBias;
@@ -131,22 +131,78 @@ function determineTrendFromRealData(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🎯 TOP-DOWN ANALYSIS — Consistent Multi-Timeframe Trend
+// 🎯 TOP-DOWN ANALYSIS — Uses Real Chart Data When Available
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function performTopDownAnalysis(
   price: number,
   high24h: number,
   low24h: number,
-  change: number
+  change: number,
+  chartData?: ChartTrendInput // Real 24h chart data when available
 ): TopDownAnalysis {
   const range = high24h - low24h;
+  const pricePosition = range > 0 ? ((price - low24h) / range) * 100 : 50;
   
-  // Use REAL 24h data for all timeframe analysis
-  // All timeframes derive from actual 24h price action (no simulated multipliers)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📊 USE REAL CHART DATA when available for accurate trend detection
+  // ═══════════════════════════════════════════════════════════════════════════
   
-  // SINGLE SOURCE OF TRUTH: Real 24h trend from actual data
-  const baseTrend = determineTrendFromRealData(price, high24h, low24h, change);
+  let baseTrend: { trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL'; strength: number; structure: 'UPTREND' | 'DOWNTREND' | 'RANGE' };
+  
+  if (chartData && chartData.isLive && chartData.candles.length >= 10) {
+    // USE REAL CHART DATA — Most accurate trend detection
+    console.log(`[TopDown] Using REAL chart data: ${chartData.candles.length} candles, trend: ${chartData.trend24h}`);
+    
+    // EMA crossover for trend direction
+    const emaCross = chartData.ema9 > chartData.ema21 ? 'BULLISH' : 
+                     chartData.ema9 < chartData.ema21 ? 'BEARISH' : 'NEUTRAL';
+    
+    // RSI zones
+    const rsiZone = chartData.rsi > 70 ? 'OVERBOUGHT' :
+                    chartData.rsi < 30 ? 'OVERSOLD' :
+                    chartData.rsi > 55 ? 'BULLISH' :
+                    chartData.rsi < 45 ? 'BEARISH' : 'NEUTRAL';
+    
+    // Combine chart signals
+    let chartTrend: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = chartData.trend24h;
+    let chartStrength = chartData.trendStrength;
+    
+    // Boost strength if EMA confirms trend
+    if (emaCross === chartData.trend24h) {
+      chartStrength = Math.min(95, chartStrength + 8);
+    }
+    
+    // Boost strength if structure confirms (HH/HL or LH/LL)
+    if (chartData.trend24h === 'BULLISH' && (chartData.higherHighs || chartData.higherLows)) {
+      chartStrength = Math.min(95, chartStrength + 5);
+    } else if (chartData.trend24h === 'BEARISH' && (chartData.lowerHighs || chartData.lowerLows)) {
+      chartStrength = Math.min(95, chartStrength + 5);
+    }
+    
+    // Volume confirmation
+    if (chartData.volumeTrend === 'INCREASING') {
+      chartStrength = Math.min(95, chartStrength + 3);
+    }
+    
+    // Determine structure from real data
+    const structure: 'UPTREND' | 'DOWNTREND' | 'RANGE' = 
+      chartData.higherHighs && chartData.higherLows ? 'UPTREND' :
+      chartData.lowerHighs && chartData.lowerLows ? 'DOWNTREND' : 'RANGE';
+    
+    baseTrend = {
+      trend: chartTrend,
+      strength: Math.max(45, Math.min(95, chartStrength)),
+      structure
+    };
+  } else {
+    // FALLBACK: Use price-based analysis
+    baseTrend = determineTrendFromRealData(price, high24h, low24h, change);
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📈 BUILD TIMEFRAME ANALYSIS — Now enhanced with chart data
+  // ═══════════════════════════════════════════════════════════════════════════
   
   // Weekly (weight: 5) — Uses full 24h context, most conservative
   const weekly: TimeframeBias = {
@@ -168,8 +224,16 @@ export function performTopDownAnalysis(
     weight: 4
   };
   
-  // 4H (weight: 3) — Swing trade timeframe, slightly more reactive
-  const h4Trend = determineTrendFromRealData(price, high24h, low24h, change);
+  // 4H (weight: 3) — Can diverge slightly based on recent price action
+  let h4Trend = baseTrend;
+  if (chartData?.isLive && chartData.priceVelocity) {
+    // Use velocity to detect short-term trend changes
+    if (chartData.priceVelocity > 0.2 && baseTrend.trend !== 'BULLISH') {
+      h4Trend = { ...baseTrend, trend: 'NEUTRAL', strength: baseTrend.strength * 0.8 };
+    } else if (chartData.priceVelocity < -0.2 && baseTrend.trend !== 'BEARISH') {
+      h4Trend = { ...baseTrend, trend: 'NEUTRAL', strength: baseTrend.strength * 0.8 };
+    }
+  }
   const h4: TimeframeBias = {
     timeframe: '4H',
     trend: h4Trend.trend,
@@ -179,8 +243,16 @@ export function performTopDownAnalysis(
     weight: 3
   };
   
-  // 1H (weight: 2) — Intraday, uses actual real-time data
-  const h1Trend = determineTrendFromRealData(price, high24h, low24h, change);
+  // 1H (weight: 2) — More reactive to current momentum
+  let h1Trend = baseTrend;
+  if (chartData?.isLive) {
+    // RSI divergence check
+    if (chartData.rsi > 65 && baseTrend.trend === 'BULLISH') {
+      h1Trend = { ...baseTrend, strength: Math.min(95, baseTrend.strength + 5) };
+    } else if (chartData.rsi < 35 && baseTrend.trend === 'BEARISH') {
+      h1Trend = { ...baseTrend, strength: Math.min(95, baseTrend.strength + 5) };
+    }
+  }
   const h1: TimeframeBias = {
     timeframe: '1H',
     trend: h1Trend.trend,
@@ -191,15 +263,22 @@ export function performTopDownAnalysis(
   };
   
   // 15M (weight: 1) — Entry timeframe, most reactive to current price
-  const pricePosition = range > 0 ? ((price - low24h) / range) * 100 : 50;
-  // 15M can diverge if price is at extremes despite 24h trend
-  let m15Trend = determineTrendFromRealData(price, high24h, low24h, change);
+  let m15Trend = baseTrend;
   
-  // 15M override: If price at 24h highs, favor continuation; if at lows, favor reversal potential
-  if (pricePosition >= 85 && change > 0) {
-    m15Trend = { trend: 'BULLISH', strength: Math.min(98, m15Trend.strength + 5), structure: 'UPTREND' };
-  } else if (pricePosition <= 15 && change < 0) {
-    m15Trend = { trend: 'BEARISH', strength: Math.min(98, m15Trend.strength + 5), structure: 'DOWNTREND' };
+  // 15M override based on price position and velocity
+  if (chartData?.isLive && chartData.priceVelocity) {
+    if (chartData.priceVelocity > 0.3) {
+      m15Trend = { trend: 'BULLISH', strength: Math.min(95, baseTrend.strength + 8), structure: 'UPTREND' };
+    } else if (chartData.priceVelocity < -0.3) {
+      m15Trend = { trend: 'BEARISH', strength: Math.min(95, baseTrend.strength + 8), structure: 'DOWNTREND' };
+    }
+  } else {
+    // Fallback: price position override
+    if (pricePosition >= 85 && change > 0) {
+      m15Trend = { trend: 'BULLISH', strength: Math.min(98, baseTrend.strength + 5), structure: 'UPTREND' };
+    } else if (pricePosition <= 15 && change < 0) {
+      m15Trend = { trend: 'BEARISH', strength: Math.min(98, baseTrend.strength + 5), structure: 'DOWNTREND' };
+    }
   }
   
   const m15: TimeframeBias = {
@@ -644,4 +723,4 @@ export function calculateFinalBias(data: {
 }
 
 // Export types
-export type { TopDownAnalysis, TimeframeBias };
+export type { TimeframeBias };
