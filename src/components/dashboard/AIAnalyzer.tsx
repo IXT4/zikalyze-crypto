@@ -278,8 +278,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         saveAnalysis(result.analysis, analysisPrice, analysisChange, result.confidence, result.bias);
       }
 
-      const dataSourceMsg = isRealTimeData ? `Real-time ${actualDataSource}` : "Cached data";
-      toast.success(`Analysis complete — ${dataSourceMsg}`);
+      // Silent completion - no toast notification
     } catch (error) {
       console.error("Analysis error:", error);
       
