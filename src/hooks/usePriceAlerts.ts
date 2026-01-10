@@ -135,13 +135,19 @@ export const usePriceAlerts = () => {
     }
   };
 
-  // Remove an alert
+  // Remove an alert permanently
   const removeAlert = async (alertId: string): Promise<boolean> => {
+    if (!user) {
+      toast.error("Please sign in to remove alerts");
+      return false;
+    }
+
     try {
       const { error } = await supabase
         .from("price_alerts")
         .delete()
-        .eq("id", alertId);
+        .eq("id", alertId)
+        .eq("user_id", user.id);
 
       if (error) {
         console.error("Error removing alert:", error);
@@ -149,7 +155,10 @@ export const usePriceAlerts = () => {
         return false;
       }
 
-      toast.info("Alert removed");
+      // Immediately update local state for instant UI feedback
+      setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+      
+      toast.info("Alert permanently deleted");
       return true;
     } catch (err) {
       console.error("Error in removeAlert:", err);
