@@ -6,6 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
@@ -35,6 +45,9 @@ const Alerts = () => {
   const [activeTab, setActiveTab] = useState<"active" | "history">("active");
   const [triggeredAlerts, setTriggeredAlerts] = useState<TriggeredAlert[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [alertToDelete, setAlertToDelete] = useState<{ id: string; symbol: string } | null>(null);
+  const [clearHistoryDialogOpen, setClearHistoryDialogOpen] = useState(false);
   const { t } = useTranslation();
 
   const handleVolumeChange = (value: number[]) => {
@@ -80,11 +93,28 @@ const Alerts = () => {
     fetchTriggeredAlerts();
   }, []);
 
-  const handleRemoveAlert = async (alertId: string) => {
-    await removeAlert(alertId);
+  const handleOpenDeleteDialog = (alertId: string, symbol: string) => {
+    setAlertToDelete({ id: alertId, symbol });
+    setDeleteDialogOpen(true);
   };
 
-  const handleClearHistory = async () => {
+  const handleConfirmDelete = async () => {
+    if (alertToDelete) {
+      await removeAlert(alertToDelete.id);
+      setAlertToDelete(null);
+    }
+    setDeleteDialogOpen(false);
+  };
+
+  const handleRemoveAlert = (alertId: string, symbol: string) => {
+    handleOpenDeleteDialog(alertId, symbol);
+  };
+
+  const handleOpenClearHistoryDialog = () => {
+    setClearHistoryDialogOpen(true);
+  };
+
+  const handleConfirmClearHistory = async () => {
     try {
       const { error } = await supabase
         .from("price_alerts")
@@ -93,13 +123,16 @@ const Alerts = () => {
 
       if (error) {
         console.error("Error clearing history:", error);
+        setClearHistoryDialogOpen(false);
         return;
       }
 
       setTriggeredAlerts([]);
+      toast.info("Alert history cleared");
     } catch (err) {
       console.error("Error:", err);
     }
+    setClearHistoryDialogOpen(false);
   };
 
   const formatDate = (dateString: string) => {
@@ -379,7 +412,7 @@ const Alerts = () => {
                               variant="ghost"
                               size="icon"
                               className="text-muted-foreground hover:text-destructive"
-                              onClick={() => handleRemoveAlert(alert.id)}
+                              onClick={() => handleRemoveAlert(alert.id, alert.symbol)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -395,7 +428,7 @@ const Alerts = () => {
                 <div className="p-6 border-b border-border flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-foreground">{t("alerts.triggeredHistory")}</h3>
                   {triggeredAlerts.length > 0 && (
-                    <Button variant="outline" size="sm" onClick={handleClearHistory}>
+                    <Button variant="outline" size="sm" onClick={handleOpenClearHistoryDialog}>
                       <Trash2 className="h-4 w-4 mr-2" />
                       {t("alerts.clearHistory")}
                     </Button>
@@ -458,6 +491,50 @@ const Alerts = () => {
           </div>
         </div>
       </main>
+
+      {/* Delete Single Alert Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("alerts.deleteAlert") || "Delete Alert"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("alerts.deleteAlertConfirm", { symbol: alertToDelete?.symbol }) || 
+                `Are you sure you want to permanently delete the ${alertToDelete?.symbol} price alert? This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel") || "Cancel"}</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t("common.delete") || "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Clear History Confirmation Dialog */}
+      <AlertDialog open={clearHistoryDialogOpen} onOpenChange={setClearHistoryDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("alerts.clearHistoryTitle") || "Clear Alert History"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("alerts.clearHistoryConfirm") || 
+                "Are you sure you want to clear all triggered alerts from history? This action cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel") || "Cancel"}</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmClearHistory}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t("alerts.clearHistory") || "Clear History"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
