@@ -1171,6 +1171,13 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
             </div>
           </div>
         )}
+        
+        {/* Disclaimer Footer */}
+        <div className="mt-4 pt-3 border-t border-border/50">
+          <p className="text-xs text-muted-foreground text-center italic">
+            ⚠️ This AI analysis is for informational purposes only. Always check your chart for confirmation before making trading decisions.
+          </p>
+        </div>
         </div>
       </div>
     </div>
