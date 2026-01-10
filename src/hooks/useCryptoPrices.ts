@@ -671,7 +671,7 @@ export const useCryptoPrices = () => {
     }
   }, [updatePrice]);
 
-  // Connect to Binance WebSocket - Most reliable free source
+  // Connect to Binance WebSocket - Most reliable free source for real-time prices
   const connectBinance = useCallback(() => {
     if (cryptoListRef.current.length === 0) return;
 
@@ -683,14 +683,20 @@ export const useCryptoPrices = () => {
     const cryptoList = cryptoListRef.current;
     
     // Build combined stream for all symbols (Binance supports up to 1024 streams)
-    const streams = cryptoList.slice(0, 100).map(c => `${c.symbol.toLowerCase()}usdt@ticker`).join("/");
+    // Use both ticker and miniTicker for comprehensive data
+    const streams = cryptoList
+      .slice(0, 100)
+      .map(c => `${c.symbol.toLowerCase()}usdt@ticker`)
+      .join("/");
     
     try {
-      const ws = new WebSocket(`${EXCHANGES.binance.combinedUrl}${streams}`);
+      const wsUrl = `${EXCHANGES.binance.combinedUrl}${streams}`;
+      console.log(`[Binance] Connecting to ${cryptoList.length} streams...`);
+      const ws = new WebSocket(wsUrl);
       
       const connectTimeout = setTimeout(() => {
         if (ws.readyState !== WebSocket.OPEN) {
-          console.log(`[Binance] Connection timeout, trying fallback...`);
+          console.log(`[Binance] Connection timeout after 8s, trying fallback...`);
           ws.close();
           // Try Binance.US as fallback
           connectBinanceUS();
@@ -699,7 +705,7 @@ export const useCryptoPrices = () => {
       
       ws.onopen = () => {
         clearTimeout(connectTimeout);
-        console.log(`[Binance] ✓ Connected successfully`);
+        console.log(`[Binance] ✓ Connected - Real-time prices active`);
         setConnectedExchanges(prev => 
           prev.includes("Binance") ? prev : [...prev, "Binance"]
         );
@@ -711,16 +717,26 @@ export const useCryptoPrices = () => {
           const message = JSON.parse(event.data);
           if (message.data) {
             const ticker = message.data;
-            const symbol = ticker.s?.replace("USDT", "");
+            // Extract symbol: BTCUSDT -> BTC
+            const rawSymbol = ticker.s || '';
+            const symbol = rawSymbol.replace(/USDT$/, '');
             
             if (symbol && ticker.c) {
-              updatePrice(symbol, {
-                current_price: parseFloat(ticker.c),
-                price_change_percentage_24h: parseFloat(ticker.P || 0),
-                high_24h: parseFloat(ticker.h || 0),
-                low_24h: parseFloat(ticker.l || 0),
-                total_volume: parseFloat(ticker.q || 0),
-              }, "Binance");
+              const price = parseFloat(ticker.c);
+              const change24h = parseFloat(ticker.P || '0');
+              const high24h = parseFloat(ticker.h || '0');
+              const low24h = parseFloat(ticker.l || '0');
+              const volume = parseFloat(ticker.q || '0'); // Quote volume in USDT
+              
+              if (price > 0) {
+                updatePrice(symbol, {
+                  current_price: price,
+                  price_change_percentage_24h: change24h,
+                  high_24h: high24h,
+                  low_24h: low24h,
+                  total_volume: volume,
+                }, "Binance");
+              }
             }
           }
         } catch (e) {
@@ -728,18 +744,21 @@ export const useCryptoPrices = () => {
         }
       };
       
-      ws.onerror = () => {
+      ws.onerror = (e) => {
         clearTimeout(connectTimeout);
+        console.log(`[Binance] WebSocket error, will reconnect...`);
       };
       
-      ws.onclose = () => {
+      ws.onclose = (e) => {
         clearTimeout(connectTimeout);
-        setConnectedExchanges(prev => prev.filter(e => e !== "Binance"));
+        setConnectedExchanges(prev => prev.filter(ex => ex !== "Binance"));
         
-        const delay = 3000 + Math.random() * 2000;
+        // Reconnect with exponential backoff
+        const delay = 2000 + Math.random() * 2000;
         if (reconnectTimeoutsRef.current.binance) {
           clearTimeout(reconnectTimeoutsRef.current.binance);
         }
+        console.log(`[Binance] Disconnected (code: ${e.code}), reconnecting in ${Math.round(delay)}ms...`);
         reconnectTimeoutsRef.current.binance = window.setTimeout(() => {
           connectBinance();
         }, delay);
@@ -891,16 +910,20 @@ export const useCryptoPrices = () => {
       if (cryptoListRef.current.length > 0 && !exchangesConnectedRef.current) {
         exchangesConnectedRef.current = true;
         
-        // Priority: Binance first (most reliable), then CoinCap, then Kraken
-        console.log('[WebSocket] Starting connections to free live feeds...');
+        // Priority: Binance first (most reliable for real-time), then others as backup
+        console.log('[WebSocket] ⚡ Connecting to Binance for real-time prices...');
         connectBinance();
-        setTimeout(() => connectCoinCap(), 500);
-        setTimeout(() => connectKraken(), 1000);
+        // CoinCap as backup for coins not on Binance
+        setTimeout(() => connectCoinCap(), 300);
+        // Kraken for additional coverage
+        setTimeout(() => connectKraken(), 600);
       }
     };
     
+    // Try to connect immediately
     checkAndConnect();
-    const timeoutId = setTimeout(checkAndConnect, 1000);
+    // Retry check after a short delay in case crypto list wasn't ready
+    const timeoutId = setTimeout(checkAndConnect, 500);
     
     return () => {
       clearTimeout(timeoutId);
