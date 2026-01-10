@@ -570,8 +570,18 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     };
   }, [liveData.priceIsLive, processBackgroundLearning]);
 
-  // Restart learning when crypto changes
+  // Restart learning and reset state when crypto changes
   useEffect(() => {
+    // Reset analysis state for new crypto
+    setDisplayedText("");
+    setFullAnalysis("");
+    setHasAnalyzed(false);
+    setCurrentAnalysisId(null);
+    setFeedbackSubmitted(false);
+    setSelectedHistory(null);
+    setAnalysisResult(null);
+    charIndexRef.current = 0;
+    
     if (backgroundStreamingRef.current) {
       // Reset local streaming data for new crypto (persistent data loads automatically via hook)
       priceHistoryRef.current = [];
