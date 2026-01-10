@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BarChart3, Layers, Radio, Square } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BarChart3, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -56,12 +56,28 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   
-  // Streaming state
+  // Background streaming state (hidden, always running)
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamUpdateCount, setStreamUpdateCount] = useState(0);
   const [priceHistory, setPriceHistory] = useState<{ price: number; timestamp: number }[]>([]);
+  const [learnedPatterns, setLearnedPatterns] = useState<{
+    trendAccuracy: number;
+    avgVelocity: number;
+    volatility: number;
+    lastBias: 'LONG' | 'SHORT' | 'NEUTRAL';
+    biasChanges: number;
+    correctPredictions: number;
+  }>({
+    trendAccuracy: 0,
+    avgVelocity: 0,
+    volatility: 0,
+    lastBias: 'NEUTRAL',
+    biasChanges: 0,
+    correctPredictions: 0
+  });
   const streamingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const priceHistoryRef = useRef<{ price: number; timestamp: number }[]>([]);
+  const backgroundStreamingRef = useRef(false);
   
   const charIndexRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
@@ -373,35 +389,44 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, liveData.onChain, liveData.sentiment, useCachedAnalysis, getCacheAge, cacheAnalysis, markFreshData, onChainMetrics]);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 🔴 STREAMING MODE — Real-time continuous analysis
+  // 🧠 BACKGROUND AI LEARNING — Silent, always-on data collection & adaptation
   // ═══════════════════════════════════════════════════════════════════════════
   
-  const processStreamingUpdate = useCallback(() => {
+  const processBackgroundLearning = useCallback(() => {
+    if (!backgroundStreamingRef.current) return;
+    
     const now = Date.now();
     
-    // Add to price history
+    // Collect price data point
     priceHistoryRef.current = [
-      ...priceHistoryRef.current.slice(-59),
+      ...priceHistoryRef.current.slice(-299), // Keep last 300 points (10 min @ 2s intervals)
       { price: currentPrice, timestamp: now }
     ];
     setPriceHistory([...priceHistoryRef.current]);
     
-    // Calculate real-time metrics from price history
+    // Calculate learning metrics from collected data
     const history = priceHistoryRef.current;
-    const recentPrices = history.slice(-10).map(p => p.price);
+    const recentPrices = history.slice(-30).map(p => p.price);
     const avgRecentPrice = recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length;
+    
+    // Calculate price velocity
     const priceVelocity = history.length >= 2 
       ? (history[history.length - 1].price - history[history.length - 2].price) / 
         ((history[history.length - 1].timestamp - history[history.length - 2].timestamp) / 1000)
       : 0;
     
-    // Determine real-time micro-trend
+    // Calculate volatility from recent prices
+    const volatility = recentPrices.length > 1
+      ? Math.sqrt(recentPrices.reduce((sum, p) => sum + Math.pow(p - avgRecentPrice, 2), 0) / recentPrices.length) / avgRecentPrice * 100
+      : 0;
+    
+    // Micro-trend detection
     const microTrend = priceVelocity > 0.1 ? 'ACCELERATING ↑' :
                        priceVelocity < -0.1 ? 'ACCELERATING ↓' :
                        currentPrice > avgRecentPrice ? 'DRIFTING ↑' :
                        currentPrice < avgRecentPrice ? 'DRIFTING ↓' : 'CONSOLIDATING ↔';
 
-    // Build adapted on-chain data
+    // Build adapted on-chain data for brain processing
     const adaptedOnChainData = onChainMetrics ? {
       exchangeNetFlow: onChainMetrics.exchangeNetFlow,
       whaleActivity: onChainMetrics.whaleActivity,
@@ -461,7 +486,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       confluence: multiTfData.confluence
     } : undefined;
     
-    // Run full analysis
+    // Run brain analysis to learn from current data
     const result = runClientSideAnalysis({
       crypto,
       price: currentPrice,
@@ -472,7 +497,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       marketCap,
       language: currentLanguage,
       isLiveData: true,
-      dataSource: `STREAMING (${streamUpdateCount + 1} updates)`,
+      dataSource: `LEARNING (${streamUpdateCount + 1} samples)`,
       onChainData: adaptedOnChainData,
       sentimentData: liveData.sentiment ? {
         fearGreed: { value: liveData.sentiment.fearGreedValue, label: liveData.sentiment.fearGreedLabel },
@@ -489,74 +514,75 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       multiTimeframeData: adaptedMultiTfData
     });
     
-    // Build streaming header
-    const streamHeader = `┌────────────────────────────────────────────────────┐
-│  🔴 LIVE STREAMING ANALYSIS                        │
-│  Updates: ${(streamUpdateCount + 1).toString().padStart(4)} │ Points: ${history.length.toString().padStart(3)} │ ${new Date().toLocaleTimeString()}      │
-└────────────────────────────────────────────────────┘
-
-⚡ MICRO-TREND: ${microTrend}
-📊 Velocity: ${priceVelocity >= 0 ? '+' : ''}${priceVelocity.toFixed(6)}/sec
-📈 Recent Avg: $${avgRecentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
-${priceVelocity > 0 ? '🟢' : priceVelocity < 0 ? '🔴' : '⚪'} Momentum: ${Math.abs(priceVelocity * 100).toFixed(4)}%/100s
-
-`;
-
-    const fullText = streamHeader + result.analysis;
+    // Update learned patterns (AI adaptation)
+    setLearnedPatterns(prev => {
+      const biasChanged = prev.lastBias !== result.bias;
+      return {
+        trendAccuracy: history.length > 10 ? 
+          (prev.trendAccuracy * 0.95 + (result.confidence / 100) * 0.05) : prev.trendAccuracy,
+        avgVelocity: (prev.avgVelocity * 0.9 + Math.abs(priceVelocity) * 0.1),
+        volatility: (prev.volatility * 0.9 + volatility * 0.1),
+        lastBias: result.bias,
+        biasChanges: biasChanged ? prev.biasChanges + 1 : prev.biasChanges,
+        correctPredictions: prev.correctPredictions
+      };
+    });
     
+    // Store latest analysis result for when user clicks Analyze
     setAnalysisResult(result);
-    setFullAnalysis(fullText);
-    setDisplayedText(fullText); // Instant update for streaming
-    charIndexRef.current = fullText.length;
-    setHasAnalyzed(true);
     setStreamUpdateCount(prev => prev + 1);
     
-    console.log(`[Streaming] Update #${streamUpdateCount + 1}: $${currentPrice}, velocity=${priceVelocity.toFixed(6)}`);
+    // Silent console log for debugging
+    if (streamUpdateCount % 10 === 0) {
+      console.log(`[AI Learning] Sample #${streamUpdateCount + 1}: $${currentPrice.toFixed(2)}, bias=${result.bias}, conf=${result.confidence}%, vol=${volatility.toFixed(2)}%`);
+    }
   }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, liveData.sentiment, onChainMetrics, chartTrendData, multiTfData, streamUpdateCount]);
 
-  const startStreaming = useCallback(() => {
-    if (isStreaming) return;
-    
-    console.log('[Streaming] Starting real-time analysis stream...');
-    setIsStreaming(true);
-    setStreamUpdateCount(0);
-    priceHistoryRef.current = [];
-    setPriceHistory([]);
-    
-    // Initial update
-    processStreamingUpdate();
-    
-    // Set up interval
-    streamingIntervalRef.current = setInterval(() => {
-      processStreamingUpdate();
-    }, STREAMING_INTERVAL);
-    
-    toast.success('🔴 Streaming analysis started - Live updates every 2s');
-  }, [isStreaming, processStreamingUpdate]);
-
-  const stopStreaming = useCallback(() => {
-    console.log('[Streaming] Stopping stream...');
-    setIsStreaming(false);
-    
-    if (streamingIntervalRef.current) {
-      clearInterval(streamingIntervalRef.current);
-      streamingIntervalRef.current = null;
+  // Auto-start background learning on mount
+  useEffect(() => {
+    if (!backgroundStreamingRef.current && liveData.priceIsLive) {
+      console.log('[AI Learning] Starting background data collection...');
+      backgroundStreamingRef.current = true;
+      setIsStreaming(true);
+      
+      // Initial learning cycle
+      processBackgroundLearning();
+      
+      // Set up interval for continuous learning
+      streamingIntervalRef.current = setInterval(() => {
+        processBackgroundLearning();
+      }, STREAMING_INTERVAL);
     }
     
-    toast.info('Streaming stopped');
-  }, []);
-
-  // Cleanup on unmount
-  useEffect(() => {
     return () => {
       if (streamingIntervalRef.current) {
         clearInterval(streamingIntervalRef.current);
+        streamingIntervalRef.current = null;
       }
+      backgroundStreamingRef.current = false;
     };
-  }, []);
+  }, [liveData.priceIsLive, processBackgroundLearning]);
+
+  // Restart learning when crypto changes
+  useEffect(() => {
+    if (backgroundStreamingRef.current) {
+      // Reset learning data for new crypto
+      priceHistoryRef.current = [];
+      setPriceHistory([]);
+      setStreamUpdateCount(0);
+      setLearnedPatterns({
+        trendAccuracy: 0,
+        avgVelocity: 0,
+        volatility: 0,
+        lastBias: 'NEUTRAL',
+        biasChanges: 0,
+        correctPredictions: 0
+      });
+      console.log(`[AI Learning] Switched to ${crypto}, resetting learning data...`);
+    }
+  }, [crypto]);
 
   const handleSelectHistory = (record: AnalysisRecord) => {
-    stopStreaming(); // Stop streaming when viewing history
     setSelectedHistory(record);
     setDisplayedText(record.analysis_text);
     setFullAnalysis(record.analysis_text);
@@ -567,7 +593,6 @@ ${priceVelocity > 0 ? '🟢' : priceVelocity < 0 ? '🔴' : '⚪'} Momentum: ${M
   };
 
   const handleClearAnalysis = async () => {
-    stopStreaming();
     setSelectedHistory(null);
     setDisplayedText("");
     setFullAnalysis("");
@@ -625,28 +650,19 @@ ${priceVelocity > 0 ? '🟢' : priceVelocity < 0 ? '🔴' : '⚪'} Momentum: ${M
           <div className="flex items-center gap-3">
             <div className={cn(
               "flex h-10 w-10 items-center justify-center rounded-xl transition-all",
-              isStreaming ? "bg-destructive/30 animate-pulse" :
               isAnalyzing ? "bg-primary/30 animate-pulse" : "bg-primary/20"
             )}>
-              {isStreaming ? (
-                <Radio className="h-5 w-5 text-destructive animate-pulse" />
-              ) : (
-                <Brain className={cn("h-5 w-5 text-primary", isAnalyzing && "animate-spin")} />
-              )}
+              <Brain className={cn("h-5 w-5 text-primary", isAnalyzing && "animate-spin")} />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">v11.0</span>
-                {/* Streaming Indicator */}
-                {isStreaming ? (
-                  <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-destructive/20 text-destructive animate-pulse">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
-                    </span>
-                    <span>STREAMING</span>
-                    <span className="ml-1 px-1 py-0.5 rounded bg-destructive/30 text-[9px]">{streamUpdateCount}</span>
+                {/* AI Learning Indicator - Always learning in background */}
+                {isStreaming && priceHistory.length > 0 ? (
+                  <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-chart-cyan/20 text-chart-cyan" title={`AI actively learning from ${priceHistory.length} data points`}>
+                    <Cpu className="h-3 w-3 animate-pulse" />
+                    <span>LEARNING</span>
                   </div>
                 ) : isOffline ? (
                   <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-destructive/20 text-destructive">
@@ -1026,103 +1042,53 @@ ${priceVelocity > 0 ? '🟢' : priceVelocity < 0 ? '🔴' : '⚪'} Momentum: ${M
           </div>
         )}
 
-        {/* Analyze Buttons - Single Shot + Streaming */}
-        <div className="flex gap-2 mb-4">
-          {/* Single Analysis Button */}
-          <Button
-            onClick={() => {
-              stopStreaming();
-              runAnalysis();
-            }}
-            disabled={isAnalyzing || isStreaming || (isOffline && !hasCache)}
-            className={cn(
-              "flex-1 h-11 font-semibold",
-              isAnalyzing ? "bg-primary/50" : 
-              isOffline ? (hasCache ? "bg-gradient-to-r from-warning to-warning/80" : "bg-muted") :
-              "bg-gradient-to-r from-primary to-chart-cyan shadow-lg shadow-primary/20"
-            )}
-          >
-            {isAnalyzing ? (
-              <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Analyzing...</>
-            ) : isOffline ? (
-              hasCache ? (
-                <><Database className="h-4 w-4 mr-2" />Cached</>
-              ) : (
-                <><WifiOff className="h-4 w-4 mr-2" />Offline</>
-              )
-            ) : hasAnalyzed && !isStreaming ? (
-              <><RefreshCw className="h-4 w-4 mr-2" />Re-Analyze</>
+        {/* Analyze Button - AI uses background-learned data */}
+        <Button
+          onClick={runAnalysis}
+          disabled={isAnalyzing || (isOffline && !hasCache)}
+          className={cn(
+            "w-full h-11 mb-4 font-semibold",
+            isAnalyzing ? "bg-primary/50" : 
+            isOffline ? (hasCache ? "bg-gradient-to-r from-warning to-warning/80" : "bg-muted") :
+            "bg-gradient-to-r from-primary to-chart-cyan shadow-lg shadow-primary/20"
+          )}
+        >
+          {isAnalyzing ? (
+            <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Analyzing {crypto}...</>
+          ) : isOffline ? (
+            hasCache ? (
+              <><Database className="h-4 w-4 mr-2" />View Cached Analysis</>
             ) : (
-              <><Play className="h-4 w-4 mr-2" />Analyze</>
-            )}
-          </Button>
-          
-          {/* Streaming Toggle Button */}
-          <Button
-            onClick={() => isStreaming ? stopStreaming() : startStreaming()}
-            disabled={isAnalyzing || isOffline}
-            className={cn(
-              "h-11 px-4 font-semibold transition-all",
-              isStreaming 
-                ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground animate-pulse" 
-                : "bg-gradient-to-r from-chart-orange to-destructive shadow-lg shadow-destructive/20"
-            )}
-          >
-            {isStreaming ? (
-              <>
-                <Square className="h-4 w-4 mr-2" />
-                Stop
-                <span className="ml-2 px-1.5 py-0.5 rounded bg-destructive-foreground/20 text-xs">
-                  {streamUpdateCount}
-                </span>
-              </>
-            ) : (
-              <>
-                <Radio className="h-4 w-4 mr-2" />
-                Stream
-              </>
-            )}
-          </Button>
-        </div>
+              <><WifiOff className="h-4 w-4 mr-2" />Offline - No Cache</>
+            )
+          ) : hasAnalyzed ? (
+            <><RefreshCw className="h-4 w-4 mr-2" />Re-Analyze {crypto}</>
+          ) : (
+            <><Play className="h-4 w-4 mr-2" />Analyze {crypto}</>
+          )}
+        </Button>
         
-        {/* Streaming Status Bar */}
-        {isStreaming && (
-          <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-destructive/10 via-chart-orange/10 to-warning/10 border border-destructive/30 animate-pulse">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                </span>
-                <span className="text-sm font-medium text-foreground">LIVE STREAMING</span>
-                <span className="text-xs text-muted-foreground">• {streamUpdateCount} updates</span>
-              </div>
-              <div className="flex items-center gap-3 text-xs">
-                <span className="text-muted-foreground">
-                  {priceHistory.length} data points
-                </span>
-                <span className={cn(
-                  "px-2 py-0.5 rounded font-medium",
-                  currentChange >= 0 ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
-                )}>
-                  ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
-                </span>
-              </div>
+        {/* AI Learning Status - Subtle indicator */}
+        {isStreaming && priceHistory.length > 0 && (
+          <div className="mb-4 flex items-center justify-between text-xs text-muted-foreground px-2">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/50 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+              </span>
+              <span>AI Learning: {streamUpdateCount} samples</span>
             </div>
-            {priceHistory.length >= 2 && (
-              <div className="mt-2 flex items-center gap-2">
-                <div className="flex-1 h-1.5 bg-background/50 rounded-full overflow-hidden">
-                  <div 
-                    className={cn(
-                      "h-full transition-all duration-300 rounded-full",
-                      currentPrice > priceHistory[0]?.price ? "bg-success" : "bg-destructive"
-                    )}
-                    style={{ width: `${Math.min(100, (priceHistory.length / 60) * 100)}%` }}
-                  />
-                </div>
-                <span className="text-[10px] text-muted-foreground">{priceHistory.length}/60</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <span>Vol: {learnedPatterns.volatility.toFixed(2)}%</span>
+              <span className={cn(
+                "px-1.5 py-0.5 rounded text-[10px] font-medium",
+                learnedPatterns.lastBias === 'LONG' ? "bg-success/20 text-success" :
+                learnedPatterns.lastBias === 'SHORT' ? "bg-destructive/20 text-destructive" :
+                "bg-muted text-muted-foreground"
+              )}>
+                {learnedPatterns.lastBias}
+              </span>
+            </div>
           </div>
         )}
 
