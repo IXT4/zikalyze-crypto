@@ -48,24 +48,33 @@ const Dashboard = () => {
     }
   }, []);
 
-  const cryptoData: Record<string, { name: string; price: number; change: number }> = {
-    BTC: { name: "Bitcoin", price: getPriceBySymbol("BTC")?.current_price || 86512, change: getPriceBySymbol("BTC")?.price_change_percentage_24h || -4.87 },
-    ETH: { name: "Ethereum", price: getPriceBySymbol("ETH")?.current_price || 2842, change: getPriceBySymbol("ETH")?.price_change_percentage_24h || -5.46 },
-    SOL: { name: "Solana", price: getPriceBySymbol("SOL")?.current_price || 127.18, change: getPriceBySymbol("SOL")?.price_change_percentage_24h || -6.85 },
-    XRP: { name: "Ripple", price: getPriceBySymbol("XRP")?.current_price || 2.05, change: getPriceBySymbol("XRP")?.price_change_percentage_24h || -6.63 },
-    DOGE: { name: "Dogecoin", price: getPriceBySymbol("DOGE")?.current_price || 0.1376, change: getPriceBySymbol("DOGE")?.price_change_percentage_24h || -7.84 },
-    KAS: { name: "Kaspa", price: getPriceBySymbol("KAS")?.current_price || 0.12, change: getPriceBySymbol("KAS")?.price_change_percentage_24h || 2.5 },
-    ADA: { name: "Cardano", price: getPriceBySymbol("ADA")?.current_price || 0.45, change: getPriceBySymbol("ADA")?.price_change_percentage_24h || -3.2 },
-    AVAX: { name: "Avalanche", price: getPriceBySymbol("AVAX")?.current_price || 28.5, change: getPriceBySymbol("AVAX")?.price_change_percentage_24h || -4.1 },
-    LINK: { name: "Chainlink", price: getPriceBySymbol("LINK")?.current_price || 14.2, change: getPriceBySymbol("LINK")?.price_change_percentage_24h || -2.8 },
-    DOT: { name: "Polkadot", price: getPriceBySymbol("DOT")?.current_price || 5.8, change: getPriceBySymbol("DOT")?.price_change_percentage_24h || -3.5 },
+  // Use ONLY live data from CoinGecko/WebSocket - no hardcoded fallback prices
+  const getLivePrice = (symbol: string) => {
+    const data = getPriceBySymbol(symbol);
+    return data ? { 
+      name: data.name, 
+      price: data.current_price, 
+      change: data.price_change_percentage_24h,
+      high24h: data.high_24h,
+      low24h: data.low_24h,
+      volume: data.total_volume,
+      marketCap: data.market_cap
+    } : null;
   };
 
-  // Get selected crypto from prices or fallback
+  // Get selected crypto from live prices only
   const liveData = getPriceBySymbol(selectedCrypto);
   const selected = liveData 
-    ? { name: liveData.name, price: liveData.current_price, change: liveData.price_change_percentage_24h }
-    : cryptoData[selectedCrypto] || { name: selectedCrypto, price: 0, change: 0 };
+    ? { 
+        name: liveData.name, 
+        price: liveData.current_price, 
+        change: liveData.price_change_percentage_24h,
+        high24h: liveData.high_24h,
+        low24h: liveData.low_24h,
+        volume: liveData.total_volume,
+        marketCap: liveData.market_cap
+      }
+    : { name: selectedCrypto, price: 0, change: 0, high24h: 0, low24h: 0, volume: 0, marketCap: 0 };
 
   return (
     <div className="min-h-screen min-h-[100dvh] bg-background texture-noise custom-scrollbar">
