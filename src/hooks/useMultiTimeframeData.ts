@@ -283,13 +283,15 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
       );
       
       if (!response || !response.ok) {
-        // Silent fail - data will just not update
+        // Log failure for debugging but don't throw
+        console.log(`[MTF] ${timeframe} fetch failed for ${coinCapId}, using fallback`);
         return null;
       }
       
       const result = await response.json();
       
-      if (!result.data || result.data.length < 5) {
+      if (!result.data || !Array.isArray(result.data) || result.data.length < 5) {
+        console.log(`[MTF] ${timeframe} insufficient data for ${coinCapId}: ${result.data?.length || 0} points`);
         return null;
       }
       
@@ -355,7 +357,17 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
         strength: 50,
         alignedTimeframes: 0,
         conflictingTimeframes: 0,
-        recommendation: 'Waiting for data...',
+        recommendation: 'No chart data available - using price-based analysis',
+      };
+    }
+    
+    if (valid.length < 2) {
+      return {
+        overallBias: valid[0]?.trend || 'NEUTRAL' as const,
+        strength: Math.round(valid[0]?.trendStrength || 50),
+        alignedTimeframes: 1,
+        conflictingTimeframes: 0,
+        recommendation: 'Limited data - analysis based on ' + (valid[0]?.timeframe || 'partial') + ' only',
       };
     }
     

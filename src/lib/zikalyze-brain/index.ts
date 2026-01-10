@@ -121,12 +121,15 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
 
   // Use provided on-chain data (real) or estimate (fallback)
   // Mark source clearly for transparency
-  const hasRealOnChain = !!onChainData && onChainData.source !== 'derived-deterministic';
+  const hasRealOnChain = !!onChainData && onChainData.source !== 'derived-deterministic' && onChainData.source !== 'derived';
+  const hasRealChartData = !!chartTrendData && chartTrendData.isLive && chartTrendData.candles.length >= 10;
+  const hasRealMultiTfData = !!multiTimeframeData && (multiTimeframeData['1h'] !== null || multiTimeframeData['4h'] !== null);
+  
   const onChainMetrics: OnChainMetrics = onChainData || estimateOnChainMetrics(crypto, price, change);
   const etfFlowData: ETFFlowData | null = estimateETFFlowData(price, change, crypto);
   
-  // Log data source for debugging
-  console.log(`[AI Brain] On-chain source: ${hasRealOnChain ? 'REAL-TIME' : 'DERIVED'}, Live data: ${isLiveData}`);
+  // Log data sources for debugging - helps identify when using derived vs real data
+  console.log(`[AI Brain] Data sources — On-chain: ${hasRealOnChain ? onChainData?.source : 'DERIVED'}, Chart: ${hasRealChartData ? 'REAL' : 'DERIVED'}, Multi-TF: ${hasRealMultiTfData ? 'REAL' : 'DERIVED'}, Live price: ${isLiveData}`);
 
   // Get macro catalysts with countdown
   const macroCatalysts = getUpcomingMacroCatalysts();
@@ -411,8 +414,8 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   }
 
   // ETF insight — only show for BTC/ETH (cryptos with actual ETFs) and if it supports the bias
-  if (etfFlowData && Math.abs(etfFlowData.btcNetFlow24h || etfFlowData.ethNetFlow24h) > 50) {
-    const flowValue = etfFlowData.btcNetFlow24h || etfFlowData.ethNetFlow24h;
+  if (etfFlowData && (Math.abs(etfFlowData.btcNetFlow24h) > 50 || Math.abs(etfFlowData.ethNetFlow24h || 0) > 50)) {
+    const flowValue = etfFlowData.btcNetFlow24h || etfFlowData.ethNetFlow24h || 0;
     const flowDir = flowValue > 0 ? '+' : '';
     const isETFBullish = flowValue > 0;
     if ((bias === 'LONG' && isETFBullish) || (bias === 'SHORT' && !isETFBullish) || bias === 'NEUTRAL') {
@@ -504,14 +507,14 @@ ${volumeSpike.isSpike ? `📊 VOLUME SPIKE: +${volumeSpike.percentageAboveAvg.to
 😊 Fear & Greed: [${fearGreedVisual.bar}] ${fearGreed} ${fearGreedVisual.emoji} ${fearGreedVisual.label}
    └─ Source: Alternative.me (24h)
 🐋 Whale Activity: ${getWhaleVisual(onChainMetrics.whaleActivity.netFlow, onChainMetrics.whaleActivity.buying, onChainMetrics.whaleActivity.selling)}
-   └─ Net: ${onChainMetrics.whaleActivity.netFlow} [Glassnode/Santiment 24h]
+   └─ Net: ${onChainMetrics.whaleActivity.netFlow} ${hasRealOnChain ? '[Live on-chain]' : '[Derived from price action]'}
 🔗 Exchange Flow: ${onChainMetrics.exchangeNetFlow.trend} (${onChainMetrics.exchangeNetFlow.magnitude})
-   └─ Source: CryptoQuant (rolling 24h)
-💼 Institutional: ${etfFlowData.institutionalSentiment}
-   └─ Source: IntoTheBlock + ETF flows (24h)
+   └─ ${hasRealOnChain ? 'Source: CryptoQuant (rolling 24h)' : 'Estimated from market momentum'}
+💼 Institutional: ${etfFlowData ? etfFlowData.institutionalSentiment : 'N/A (no ETF for this asset)'}
+   └─ ${etfFlowData ? 'Source: ETF flow data' : 'ETFs only available for BTC/ETH'}
 ${macroSection ? `\n━━━ ⚡ MACRO CATALYST ━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${macroSection}\n` : ''}
 ━━━ 🔭 MULTI-TIMEFRAME ━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+${!hasRealMultiTfData ? '⚠️ Using price-based estimates (chart API unavailable)\n' : ''}
 ${htfVisual}  →  ${alignmentText}
 
 W: ${topDownAnalysis.weekly.trend.padEnd(7)} ${createBar(topDownAnalysis.weekly.strength, 100, '█', '░', 8)} ${topDownAnalysis.weekly.strength.toFixed(0)}%
@@ -520,7 +523,7 @@ D: ${topDownAnalysis.daily.trend.padEnd(7)} ${createBar(topDownAnalysis.daily.st
 1H: ${topDownAnalysis.h1.trend.padEnd(6)} ${createBar(topDownAnalysis.h1.strength, 100, '█', '░', 8)} ${topDownAnalysis.h1.strength.toFixed(0)}%
 15M: ${topDownAnalysis.m15.trend.padEnd(5)} ${createBar(topDownAnalysis.m15.strength, 100, '█', '░', 8)} ${topDownAnalysis.m15.strength.toFixed(0)}%
 
-🎯 Confluence: ${topDownAnalysis.confluenceScore}% ${topDownAnalysis.confluenceScore >= 70 ? '(STRONG ✓)' : topDownAnalysis.confluenceScore >= 50 ? '(MODERATE)' : '(WEAK ⚠️)'}
+🎯 Confluence: ${topDownAnalysis.confluenceScore}% ${topDownAnalysis.confluenceScore >= 70 ? '(STRONG ✓)' : topDownAnalysis.confluenceScore >= 50 ? '(MODERATE)' : '(WEAK ⚠️)'} ${hasRealMultiTfData ? '' : '(estimated)'}
 
 ━━━ 📌 15-MINUTE PRECISION ENTRY ━━━━━━━━━━━━━━━
 
@@ -555,7 +558,7 @@ ${bias === 'SHORT' ? `📈 UPSIDE SCENARIO: If price reclaims $${(high24h - rang
   📋 React to the breakout, don't predict`}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 Zikalyze AI v11.0 • ${isLiveData ? '🟢 REAL-TIME DATA' : '⚪ DERIVED DATA'}
+🧠 Zikalyze AI v11.0 • ${isLiveData ? '🟢 LIVE PRICE' : '⚪ CACHED PRICE'} • ${hasRealMultiTfData ? '📊 Real Charts' : '📊 Derived'}${hasRealOnChain ? ' • 🔗 Live On-Chain' : ''}
 `;
 
   return {
