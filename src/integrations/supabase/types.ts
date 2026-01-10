@@ -14,6 +14,135 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_global_learning: {
+        Row: {
+          accuracy_percentage: number | null
+          avg_trend_accuracy: number | null
+          avg_volatility: number | null
+          bias_confidence: number | null
+          consensus_bias: string | null
+          contributor_count: number | null
+          correct_predictions: number | null
+          strong_resistance: number | null
+          strong_support: number | null
+          symbol: string
+          total_predictions: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          accuracy_percentage?: number | null
+          avg_trend_accuracy?: number | null
+          avg_volatility?: number | null
+          bias_confidence?: number | null
+          consensus_bias?: string | null
+          contributor_count?: number | null
+          correct_predictions?: number | null
+          strong_resistance?: number | null
+          strong_support?: number | null
+          symbol: string
+          total_predictions?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          accuracy_percentage?: number | null
+          avg_trend_accuracy?: number | null
+          avg_volatility?: number | null
+          bias_confidence?: number | null
+          consensus_bias?: string | null
+          contributor_count?: number | null
+          correct_predictions?: number | null
+          strong_resistance?: number | null
+          strong_support?: number | null
+          symbol?: string
+          total_predictions?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      ai_learning_data: {
+        Row: {
+          avg_price_24h: number | null
+          avg_velocity: number | null
+          bias_changes: number | null
+          confidence_adjustment: number | null
+          correct_predictions: number | null
+          created_at: string
+          exchange_flow_sensitivity: number | null
+          id: string
+          last_bias: string | null
+          last_learning_at: string | null
+          learning_sessions: number | null
+          overconfidence_penalty: number | null
+          price_range_24h: number | null
+          resistance_levels: number[] | null
+          samples_collected: number | null
+          support_levels: number[] | null
+          symbol: string
+          total_predictions: number | null
+          trend_accuracy: number | null
+          underconfidence_bonus: number | null
+          updated_at: string
+          user_id: string | null
+          volatility: number | null
+          whale_buy_threshold: number | null
+          whale_sell_threshold: number | null
+        }
+        Insert: {
+          avg_price_24h?: number | null
+          avg_velocity?: number | null
+          bias_changes?: number | null
+          confidence_adjustment?: number | null
+          correct_predictions?: number | null
+          created_at?: string
+          exchange_flow_sensitivity?: number | null
+          id?: string
+          last_bias?: string | null
+          last_learning_at?: string | null
+          learning_sessions?: number | null
+          overconfidence_penalty?: number | null
+          price_range_24h?: number | null
+          resistance_levels?: number[] | null
+          samples_collected?: number | null
+          support_levels?: number[] | null
+          symbol: string
+          total_predictions?: number | null
+          trend_accuracy?: number | null
+          underconfidence_bonus?: number | null
+          updated_at?: string
+          user_id?: string | null
+          volatility?: number | null
+          whale_buy_threshold?: number | null
+          whale_sell_threshold?: number | null
+        }
+        Update: {
+          avg_price_24h?: number | null
+          avg_velocity?: number | null
+          bias_changes?: number | null
+          confidence_adjustment?: number | null
+          correct_predictions?: number | null
+          created_at?: string
+          exchange_flow_sensitivity?: number | null
+          id?: string
+          last_bias?: string | null
+          last_learning_at?: string | null
+          learning_sessions?: number | null
+          overconfidence_penalty?: number | null
+          price_range_24h?: number | null
+          resistance_levels?: number[] | null
+          samples_collected?: number | null
+          support_levels?: number[] | null
+          symbol?: string
+          total_predictions?: number | null
+          trend_accuracy?: number | null
+          underconfidence_bonus?: number | null
+          updated_at?: string
+          user_id?: string | null
+          volatility?: number | null
+          whale_buy_threshold?: number | null
+          whale_sell_threshold?: number | null
+        }
+        Relationships: []
+      }
       alert_digest_queue: {
         Row: {
           alert_type: string
@@ -407,6 +536,16 @@ export type Database = {
           p_window_minutes?: number
         }
         Returns: Json
+      }
+      contribute_to_global_learning: {
+        Args: {
+          p_bias: string
+          p_symbol: string
+          p_trend_accuracy: number
+          p_volatility: number
+          p_was_correct: boolean
+        }
+        Returns: undefined
       }
       get_my_login_attempts: {
         Args: { p_limit?: number }

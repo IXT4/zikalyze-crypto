@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BarChart3, Layers } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BarChart3, Layers, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { useAnalysisCache } from "@/hooks/useAnalysisCache";
 import { useOnChainData } from "@/hooks/useOnChainData";
 import { useChartTrendData } from "@/hooks/useChartTrendData";
 import { useMultiTimeframeData, Timeframe } from "@/hooks/useMultiTimeframeData";
+import { useAILearning } from "@/hooks/useAILearning";
 import { runClientSideAnalysis, AnalysisResult } from "@/lib/zikalyze-brain";
 import { MultiTimeframeInput, TimeframeAnalysisInput } from "@/lib/zikalyze-brain/types";
 import { format } from "date-fns";
@@ -60,21 +61,6 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamUpdateCount, setStreamUpdateCount] = useState(0);
   const [priceHistory, setPriceHistory] = useState<{ price: number; timestamp: number }[]>([]);
-  const [learnedPatterns, setLearnedPatterns] = useState<{
-    trendAccuracy: number;
-    avgVelocity: number;
-    volatility: number;
-    lastBias: 'LONG' | 'SHORT' | 'NEUTRAL';
-    biasChanges: number;
-    correctPredictions: number;
-  }>({
-    trendAccuracy: 0,
-    avgVelocity: 0,
-    volatility: 0,
-    lastBias: 'NEUTRAL',
-    biasChanges: 0,
-    correctPredictions: 0
-  });
   const streamingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const priceHistoryRef = useRef<{ price: number; timestamp: number }[]>([]);
   const backgroundStreamingRef = useRef(false);
@@ -128,6 +114,19 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   
   const { history, learningStats, loading: historyLoading, saveAnalysis, submitFeedback, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
   const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
+
+  // Persistent AI Learning Hook
+  const { 
+    patterns: learnedPatterns, 
+    globalLearning,
+    updatePatterns,
+    recordPrediction,
+    recordOutcome,
+    learnPriceLevel,
+    startLearningSession,
+    getAccuracy,
+    getConfidenceModifier
+  } = useAILearning(crypto);
 
   // Offline cache support
   const { 
@@ -514,19 +513,27 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       multiTimeframeData: adaptedMultiTfData
     });
     
-    // Update learned patterns (AI adaptation)
-    setLearnedPatterns(prev => {
-      const biasChanged = prev.lastBias !== result.bias;
-      return {
-        trendAccuracy: history.length > 10 ? 
-          (prev.trendAccuracy * 0.95 + (result.confidence / 100) * 0.05) : prev.trendAccuracy,
-        avgVelocity: (prev.avgVelocity * 0.9 + Math.abs(priceVelocity) * 0.1),
-        volatility: (prev.volatility * 0.9 + volatility * 0.1),
-        lastBias: result.bias,
-        biasChanges: biasChanged ? prev.biasChanges + 1 : prev.biasChanges,
-        correctPredictions: prev.correctPredictions
-      };
+    // Update learned patterns using persistent hook (AI adaptation)
+    const biasChanged = learnedPatterns.lastBias !== result.bias;
+    updatePatterns({
+      trendAccuracy: priceHistoryRef.current.length > 10 ? 
+        (learnedPatterns.trendAccuracy * 0.95 + (result.confidence / 100) * 0.05) : learnedPatterns.trendAccuracy,
+      avgVelocity: (learnedPatterns.avgVelocity * 0.9 + Math.abs(priceVelocity) * 0.1),
+      volatility: (learnedPatterns.volatility * 0.9 + volatility * 0.1),
+      lastBias: result.bias,
+      biasChanges: biasChanged ? learnedPatterns.biasChanges + 1 : learnedPatterns.biasChanges,
+      samplesCollected: learnedPatterns.samplesCollected + 1,
+      avgPrice24h: (learnedPatterns.avgPrice24h * 0.95 + currentPrice * 0.05) || currentPrice,
+      priceRange24h: Math.max(learnedPatterns.priceRange24h, currentHigh - currentLow)
     });
+    
+    // Learn support/resistance levels from chart data
+    if (chartTrendData?.isLive && chartTrendData.candles.length > 0) {
+      const lowPrice = Math.min(...chartTrendData.candles.map(c => c.low));
+      const highPrice = Math.max(...chartTrendData.candles.map(c => c.high));
+      learnPriceLevel(lowPrice, 'support');
+      learnPriceLevel(highPrice, 'resistance');
+    }
     
     // Store latest analysis result for when user clicks Analyze
     setAnalysisResult(result);
@@ -566,21 +573,14 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   // Restart learning when crypto changes
   useEffect(() => {
     if (backgroundStreamingRef.current) {
-      // Reset learning data for new crypto
+      // Reset local streaming data for new crypto (persistent data loads automatically via hook)
       priceHistoryRef.current = [];
       setPriceHistory([]);
       setStreamUpdateCount(0);
-      setLearnedPatterns({
-        trendAccuracy: 0,
-        avgVelocity: 0,
-        volatility: 0,
-        lastBias: 'NEUTRAL',
-        biasChanges: 0,
-        correctPredictions: 0
-      });
-      console.log(`[AI Learning] Switched to ${crypto}, resetting learning data...`);
+      startLearningSession();
+      console.log(`[AI Learning] Switched to ${crypto}, loading persistent learning data...`);
     }
-  }, [crypto]);
+  }, [crypto, startLearningSession]);
 
   const handleSelectHistory = (record: AnalysisRecord) => {
     setSelectedHistory(record);
@@ -608,7 +608,9 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     setFeedbackLoading(null);
     
     if (success) {
-      toast.success(wasCorrect ? "Thanks! Marked as correct prediction 🎯" : "Thanks for the feedback! AI will learn from this.");
+      // Record outcome to persistent AI learning
+      await recordOutcome(wasCorrect, learnedPatterns.lastBias);
+      toast.success(wasCorrect ? "Thanks! AI will remember this success 🎯" : "Thanks! AI will learn from this mistake.");
     } else {
       toast.error("Failed to submit feedback");
     }
@@ -1068,27 +1070,64 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           )}
         </Button>
         
-        {/* AI Learning Status - Subtle indicator */}
-        {isStreaming && priceHistory.length > 0 && (
-          <div className="mb-4 flex items-center justify-between text-xs text-muted-foreground px-2">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/50 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-              </span>
-              <span>AI Learning: {streamUpdateCount} samples</span>
+        {/* AI Learning Status - Persistent learning indicator */}
+        {isStreaming && (priceHistory.length > 0 || learnedPatterns.samplesCollected > 0) && (
+          <div className="mb-4 p-2 rounded-xl bg-gradient-to-r from-chart-cyan/5 to-primary/5 border border-chart-cyan/20">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-chart-cyan/50 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-chart-cyan"></span>
+                </span>
+                <Cpu className="h-3 w-3 text-chart-cyan" />
+                <span>AI Learning</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Total samples collected (persisted) */}
+                <div className="flex items-center gap-1" title={`${learnedPatterns.samplesCollected} total samples collected`}>
+                  <Sparkles className="h-3 w-3 text-primary" />
+                  <span className="text-foreground font-medium">{learnedPatterns.samplesCollected}</span>
+                </div>
+                {/* Accuracy if available */}
+                {learnedPatterns.totalPredictions > 0 && (
+                  <div className="flex items-center gap-1" title={`${learnedPatterns.correctPredictions}/${learnedPatterns.totalPredictions} correct`}>
+                    <Award className="h-3 w-3 text-success" />
+                    <span className={cn(
+                      "font-medium",
+                      getAccuracy()! >= 60 ? "text-success" : getAccuracy()! >= 40 ? "text-warning" : "text-destructive"
+                    )}>
+                      {getAccuracy()?.toFixed(0)}%
+                    </span>
+                  </div>
+                )}
+                {/* Volatility */}
+                <span className="text-muted-foreground">Vol: {learnedPatterns.volatility.toFixed(2)}%</span>
+                {/* Current bias */}
+                <span className={cn(
+                  "px-1.5 py-0.5 rounded text-[10px] font-medium",
+                  learnedPatterns.lastBias === 'LONG' ? "bg-success/20 text-success" :
+                  learnedPatterns.lastBias === 'SHORT' ? "bg-destructive/20 text-destructive" :
+                  "bg-muted text-muted-foreground"
+                )}>
+                  {learnedPatterns.lastBias}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span>Vol: {learnedPatterns.volatility.toFixed(2)}%</span>
-              <span className={cn(
-                "px-1.5 py-0.5 rounded text-[10px] font-medium",
-                learnedPatterns.lastBias === 'LONG' ? "bg-success/20 text-success" :
-                learnedPatterns.lastBias === 'SHORT' ? "bg-destructive/20 text-destructive" :
-                "bg-muted text-muted-foreground"
-              )}>
-                {learnedPatterns.lastBias}
-              </span>
-            </div>
+            {/* Global learning insight if available */}
+            {globalLearning && globalLearning.contributorCount > 5 && (
+              <div className="mt-1.5 pt-1.5 border-t border-chart-cyan/10 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Database className="h-2.5 w-2.5" />
+                  Global: {globalLearning.contributorCount} contributors
+                </span>
+                <span className={cn(
+                  "font-medium",
+                  globalLearning.accuracyPercentage >= 55 ? "text-success" : "text-muted-foreground"
+                )}>
+                  Consensus: {globalLearning.consensusBias} ({globalLearning.accuracyPercentage.toFixed(0)}% accuracy)
+                </span>
+              </div>
+            )}
           </div>
         )}
 
