@@ -660,13 +660,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">v11.0</span>
-                {/* AI Learning Indicator - Always learning in background */}
-                {isStreaming && priceHistory.length > 0 ? (
-                  <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-chart-cyan/20 text-chart-cyan" title={`AI actively learning from ${priceHistory.length} data points`}>
-                    <Cpu className="h-3 w-3 animate-pulse" />
-                    <span>LEARNING</span>
-                  </div>
-                ) : isOffline ? (
+                {/* Status badges - learning runs silently in background */}
+                {isOffline ? (
                   <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-destructive/20 text-destructive">
                     <WifiOff className="h-3 w-3" />
                     <span>OFFLINE</span>
@@ -1070,66 +1065,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           )}
         </Button>
         
-        {/* AI Learning Status - Persistent learning indicator */}
-        {isStreaming && (priceHistory.length > 0 || learnedPatterns.samplesCollected > 0) && (
-          <div className="mb-4 p-2 rounded-xl bg-gradient-to-r from-chart-cyan/5 to-primary/5 border border-chart-cyan/20">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-chart-cyan/50 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-chart-cyan"></span>
-                </span>
-                <Cpu className="h-3 w-3 text-chart-cyan" />
-                <span>AI Learning</span>
-              </div>
-              <div className="flex items-center gap-3">
-                {/* Total samples collected (persisted) */}
-                <div className="flex items-center gap-1" title={`${learnedPatterns.samplesCollected} total samples collected`}>
-                  <Sparkles className="h-3 w-3 text-primary" />
-                  <span className="text-foreground font-medium">{learnedPatterns.samplesCollected}</span>
-                </div>
-                {/* Accuracy if available */}
-                {learnedPatterns.totalPredictions > 0 && (
-                  <div className="flex items-center gap-1" title={`${learnedPatterns.correctPredictions}/${learnedPatterns.totalPredictions} correct`}>
-                    <Award className="h-3 w-3 text-success" />
-                    <span className={cn(
-                      "font-medium",
-                      getAccuracy()! >= 60 ? "text-success" : getAccuracy()! >= 40 ? "text-warning" : "text-destructive"
-                    )}>
-                      {getAccuracy()?.toFixed(0)}%
-                    </span>
-                  </div>
-                )}
-                {/* Volatility */}
-                <span className="text-muted-foreground">Vol: {learnedPatterns.volatility.toFixed(2)}%</span>
-                {/* Current bias */}
-                <span className={cn(
-                  "px-1.5 py-0.5 rounded text-[10px] font-medium",
-                  learnedPatterns.lastBias === 'LONG' ? "bg-success/20 text-success" :
-                  learnedPatterns.lastBias === 'SHORT' ? "bg-destructive/20 text-destructive" :
-                  "bg-muted text-muted-foreground"
-                )}>
-                  {learnedPatterns.lastBias}
-                </span>
-              </div>
-            </div>
-            {/* Global learning insight if available */}
-            {globalLearning && globalLearning.contributorCount > 5 && (
-              <div className="mt-1.5 pt-1.5 border-t border-chart-cyan/10 flex items-center justify-between text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Database className="h-2.5 w-2.5" />
-                  Global: {globalLearning.contributorCount} contributors
-                </span>
-                <span className={cn(
-                  "font-medium",
-                  globalLearning.accuracyPercentage >= 55 ? "text-success" : "text-muted-foreground"
-                )}>
-                  Consensus: {globalLearning.consensusBias} ({globalLearning.accuracyPercentage.toFixed(0)}% accuracy)
-                </span>
-              </div>
-            )}
-          </div>
-        )}
+        {/* AI Learning runs silently in background - no visible status bar */}
 
         {/* Analysis Output */}
         <div className="relative">
