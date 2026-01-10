@@ -424,6 +424,19 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   // Macro section (pass penalty status)
   const macroSection = buildMacroSection(macroPenalty > 0);
 
+  // Build TL;DR headline — one-liner summary for quick scanning
+  const biasWord = bias === 'LONG' ? 'Bullish' : bias === 'SHORT' ? 'Bearish' : 'Neutral';
+  const structureWord = topDownAnalysis.confluenceScore >= 70 ? 'strong' : topDownAnalysis.confluenceScore >= 50 ? 'moderate' : 'weak';
+  const marketPhase = pricePosition > 70 ? 'extended' : pricePosition < 30 ? 'discount' : 'mid-range';
+  const actionWord = precisionEntry.timing === 'NOW' 
+    ? (bias === 'LONG' ? 'Buy zone active' : bias === 'SHORT' ? 'Sell zone active' : 'Range-bound')
+    : precisionEntry.timing === 'WAIT_PULLBACK' 
+      ? 'Await pullback' 
+      : precisionEntry.timing === 'WAIT_BREAKOUT'
+        ? 'Await breakout'
+        : 'No clear entry';
+  const tldr = `${biasWord} bias (${structureWord} confluence) | ${marketPhase.charAt(0).toUpperCase() + marketPhase.slice(1)} zone | ${actionWord}`;
+
   // ═══════════════════════════════════════════════════════════════════════════
   // BUILD FINAL ANALYSIS — Dense, Visual, Actionable
   // ═══════════════════════════════════════════════════════════════════════════
@@ -431,6 +444,8 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   const analysis = `┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
    ${crypto.toUpperCase()} ANALYSIS   ${trendEmoji} ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+📌 TL;DR: ${tldr}
 
 💰 $${price.toFixed(decimals)}  │  24h: $${low24h.toFixed(decimals)} → $${high24h.toFixed(decimals)}
 ${historicalContext}
