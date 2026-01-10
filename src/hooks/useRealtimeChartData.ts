@@ -12,6 +12,7 @@ type Exchange = "coincap" | "binance" | "coinbase" | "kraken" | "coingecko";
 
 // Map symbols to CoinCap IDs (free, all cryptos, no rate limits)
 const COINCAP_ID_MAP: Record<string, string> = {
+  // Top cryptos
   BTC: "bitcoin", ETH: "ethereum", SOL: "solana", XRP: "xrp", DOGE: "dogecoin",
   BNB: "binance-coin", ADA: "cardano", AVAX: "avalanche", DOT: "polkadot",
   MATIC: "polygon", LINK: "chainlink", UNI: "uniswap", ATOM: "cosmos",
@@ -35,11 +36,40 @@ const COINCAP_ID_MAP: Record<string, string> = {
   CRO: "cronos", WLD: "worldcoin", JUP: "jupiter", JTO: "jito-governance-token",
   KAS: "kaspa", TAO: "bittensor", PYTH: "pyth-network", TRB: "tellor", ORDI: "ordi",
   STG: "stargate-finance", BLUR: "blur", PENDLE: "pendle", DYDX: "dydx",
-  PI: "pi-network", TRUMP: "maga", POL: "polygon-ecosystem-token",
-  HYPE: "hyperliquid", SXP: "solar", FARTCOIN: "fartcoin", VIRTUAL: "virtual-protocol",
-  ENA: "ethena", ONDO: "ondo-finance", OM: "mantra-dao", BRETT: "brett",
-  XDC: "xdc-network", JASMY: "jasmycoin", IOTA: "iota", QNT: "quant-network",
-  AERO: "aerodrome-finance", CORE: "core", MANTLE: "mantle",
+  TRUMP: "official-trump", POL: "polygon-ecosystem-token",
+  HYPE: "hyperliquid", SXP: "swipe", FARTCOIN: "fartcoin", VIRTUAL: "virtual-protocol",
+  ENA: "ethena", ONDO: "ondo-finance", OM: "mantra", BRETT: "brett",
+  XDC: "xdc-network", JASMY: "jasmycoin", IOTA: "iota", QNT: "quant",
+  AERO: "aerodrome-finance", CORE: "core-dao", MANTLE: "mantle",
+  // New tokens and memecoins
+  GMT: "stepn", STRK: "starknet", DYM: "dymension", ALT: "altlayer",
+  PIXEL: "pixels", W: "wormhole", ETHFI: "ether-fi",
+  BOME: "book-of-meme", SAGA: "saga-2", REZ: "renzo", BB: "bouncebit",
+  NOT: "notcoin", IO: "io-net", ZK: "zksync", LISTA: "lista-dao",
+  ZRO: "layerzero", BLAST: "blast", DOGS: "dogs", EIGEN: "eigenlayer",
+  CATI: "catizen", SCR: "scroll", MOVE: "movement", ME: "magic-eden",
+  VANA: "vana", USUAL: "usual", BIO: "bio-protocol", AIXBT: "aixbt",
+  SPX: "spx6900", POPCAT: "popcat", MOG: "mog-coin", GIGA: "gigachad-2",
+  MOODENG: "moo-deng", PNUT: "peanut-the-squirrel", ACT: "act-i-the-ai-prophecy",
+  GOAT: "goatseus-maximus", CHILLGUY: "just-a-chill-guy", AI16Z: "ai16z",
+  ARC: "arc", ZEREBRO: "zerebro", GRIFFAIN: "griffain", FWOG: "fwog",
+  // Layer 1s and Layer 2s
+  ZETA: "zetachain", BEAM: "beam", CELO: "celo",
+  KLAY: "klaytn", OSMO: "osmosis", CANTO: "canto",
+  // DeFi tokens
+  BAL: "balancer", INCH: "1inch", GMX: "gmx",
+  RPL: "rocket-pool", FXS: "frax-share", CVX: "convex-finance",
+  // Gaming and Metaverse
+  RONIN: "ronin", MAGIC: "magic", ILV: "illuvium", 
+  PRIME: "echelon-prime", GODS: "gods-unchained",
+  // AI tokens
+  AGIX: "singularitynet", OCEAN: "ocean-protocol",
+  RNDR: "render-token", ARKM: "arkham", AKT: "akash-network", AIOZ: "aioz-network",
+  // Infrastructure
+  AR: "arweave", STORJ: "storj", LPT: "livepeer",
+  API3: "api3", BAND: "band-protocol", UMA: "uma", REQ: "request-network",
+  // Privacy coins
+  SCRT: "secret", NYM: "nym",
 };
 
 // Map symbols to CoinGecko IDs for fallback
