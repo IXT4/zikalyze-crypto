@@ -34,11 +34,29 @@ const MetricsSkeleton = () => (
   </div>
 );
 
+const LAST_CRYPTO_KEY = "zikalyze_last_crypto";
+
 const Dashboard = () => {
-  const [selectedCrypto, setSelectedCrypto] = useState("BTC");
+  // Restore last viewed crypto from localStorage, default to BTC
+  const [selectedCrypto, setSelectedCrypto] = useState(() => {
+    try {
+      return localStorage.getItem(LAST_CRYPTO_KEY) || "BTC";
+    } catch {
+      return "BTC";
+    }
+  });
   const [userName, setUserName] = useState<string | null>(null);
   const { prices, loading, getPriceBySymbol } = useCryptoPrices();
   const { t } = useTranslation();
+
+  // Save selected crypto to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAST_CRYPTO_KEY, selectedCrypto);
+    } catch (error) {
+      console.error("Error saving last crypto:", error);
+    }
+  }, [selectedCrypto]);
 
   useEffect(() => {
     const session = localStorage.getItem("wallet_session");
