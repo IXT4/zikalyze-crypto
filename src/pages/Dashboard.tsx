@@ -8,6 +8,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import ErrorBoundary, { ChartErrorFallback, MinimalErrorFallback } from "@/components/ErrorBoundary";
 
 // Lazy load heavy chart components to reduce initial bundle
 const PriceChart = lazy(() => import("@/components/dashboard/PriceChart"));
@@ -177,58 +178,70 @@ const Dashboard = () => {
           </div>
 
           {/* Live On-Chain Data */}
-          <Suspense fallback={<MetricsSkeleton />}>
-            <OnChainMetrics
-              crypto={selectedCrypto}
-              price={selected.price}
-              change={selected.change}
-              volume={liveData?.total_volume}
-              marketCap={liveData?.market_cap}
-              coinGeckoId={liveData?.id}
-            />
-          </Suspense>
+          <ErrorBoundary componentName="On-Chain Metrics" fallback={<MinimalErrorFallback />}>
+            <Suspense fallback={<MetricsSkeleton />}>
+              <OnChainMetrics
+                crypto={selectedCrypto}
+                price={selected.price}
+                change={selected.change}
+                volume={liveData?.total_volume}
+                marketCap={liveData?.market_cap}
+                coinGeckoId={liveData?.id}
+              />
+            </Suspense>
+          </ErrorBoundary>
 
           {/* AI Analyzer */}
-          <Suspense fallback={<ChartSkeleton />}>
-            <AIAnalyzer 
-              crypto={selectedCrypto} 
-              price={selected.price} 
-              change={selected.change}
-              high24h={liveData?.high_24h}
-              low24h={liveData?.low_24h}
-              volume={liveData?.total_volume}
-              marketCap={liveData?.market_cap}
-            />
-          </Suspense>
+          <ErrorBoundary componentName="AI Analyzer" fallback={<ChartErrorFallback />}>
+            <Suspense fallback={<ChartSkeleton />}>
+              <AIAnalyzer 
+                crypto={selectedCrypto} 
+                price={selected.price} 
+                change={selected.change}
+                high24h={liveData?.high_24h}
+                low24h={liveData?.low_24h}
+                volume={liveData?.total_volume}
+                marketCap={liveData?.market_cap}
+              />
+            </Suspense>
+          </ErrorBoundary>
 
           {/* Charts Grid */}
           <div className="grid gap-4 md:gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-4 md:space-y-6">
-              <Suspense fallback={<ChartSkeleton />}>
-                <PriceChart crypto={selectedCrypto} coinGeckoId={liveData?.id} change24h={selected.change} />
-              </Suspense>
-              <Suspense fallback={<ChartSkeleton />}>
-                <VolumeChart crypto={selectedCrypto} coinGeckoId={liveData?.id} />
-              </Suspense>
+              <ErrorBoundary componentName="Price Chart" fallback={<ChartErrorFallback />}>
+                <Suspense fallback={<ChartSkeleton />}>
+                  <PriceChart crypto={selectedCrypto} coinGeckoId={liveData?.id} change24h={selected.change} />
+                </Suspense>
+              </ErrorBoundary>
+              <ErrorBoundary componentName="Volume Chart" fallback={<ChartErrorFallback />}>
+                <Suspense fallback={<ChartSkeleton />}>
+                  <VolumeChart crypto={selectedCrypto} coinGeckoId={liveData?.id} />
+                </Suspense>
+              </ErrorBoundary>
             </div>
             <div className="space-y-4 md:space-y-6">
-              <Suspense fallback={<MetricsSkeleton />}>
-                <AIMetrics 
-                  price={selected.price}
-                  change={selected.change}
-                  high24h={liveData?.high_24h}
-                  low24h={liveData?.low_24h}
-                  volume={liveData?.total_volume}
-                  marketCap={liveData?.market_cap}
-                />
-              </Suspense>
+              <ErrorBoundary componentName="AI Metrics" fallback={<MinimalErrorFallback />}>
+                <Suspense fallback={<MetricsSkeleton />}>
+                  <AIMetrics 
+                    price={selected.price}
+                    change={selected.change}
+                    high24h={liveData?.high_24h}
+                    low24h={liveData?.low_24h}
+                    volume={liveData?.total_volume}
+                    marketCap={liveData?.market_cap}
+                  />
+                </Suspense>
+              </ErrorBoundary>
             </div>
           </div>
 
           {/* Top 100 Crypto List */}
-          <Suspense fallback={<ChartSkeleton />}>
-            <Top100CryptoList selected={selectedCrypto} onSelect={setSelectedCrypto} />
-          </Suspense>
+          <ErrorBoundary componentName="Crypto List" fallback={<ChartErrorFallback />}>
+            <Suspense fallback={<ChartSkeleton />}>
+              <Top100CryptoList selected={selectedCrypto} onSelect={setSelectedCrypto} />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </main>
     </div>
