@@ -321,11 +321,20 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   const keyInsights: string[] = [];
   
   // Add the definitive bias summary FIRST — aligned with final bias and showing alignment status
+  // Include specific divergence direction for nuance
+  const getFundamentalLabel = (b: 'LONG' | 'SHORT' | 'NEUTRAL'): string => {
+    if (b === 'LONG') return 'bullish';
+    if (b === 'SHORT') return 'bearish';
+    return 'neutral';
+  };
+  
   const alignmentNote = fundamentalAlignment 
     ? 'Technical + fundamental aligned' 
     : fundamentalConflict 
-      ? 'Technical leads (fundamental diverges)'
-      : 'Technical signal';
+      ? `Technical leads (fundamental ${getFundamentalLabel(rawBias)} diverges)`
+      : rawBias === 'NEUTRAL' 
+        ? 'Technical signal (fundamental neutral)'
+        : 'Technical signal';
   
   if (bias === 'LONG') {
     keyInsights.push(`🎯 BULLISH — ${alignmentNote}`);
