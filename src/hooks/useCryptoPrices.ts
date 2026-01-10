@@ -267,6 +267,7 @@ export const useCryptoPrices = () => {
   const lastUpdateTimeRef = useRef<Map<string, number>>(new Map());
   const coinIdMapRef = useRef<Map<string, string>>(new Map()); // CoinCap ID to symbol mapping
   const exchangesConnectedRef = useRef(false);
+  const pricesInitializedRef = useRef(false); // Track if prices have been initialized
   
   // Throttle interval - minimum 2 seconds between updates per coin for readable UI
   const UPDATE_THROTTLE_MS = 2000;
@@ -414,70 +415,73 @@ export const useCryptoPrices = () => {
   }, []);
 
   const fetchPrices = useCallback(async () => {
+    // Prevent re-fetching if already initialized
+    if (pricesInitializedRef.current) return;
+    pricesInitializedRef.current = true;
+    
     // PRIORITY 1: Load persisted live prices first (most recent data)
-    if (prices.length === 0) {
-      const livePricesCache = loadCachedLivePrices();
-      if (livePricesCache && livePricesCache.length > 0) {
-        // Use live prices cache - these are the most recent prices from last session
-        cryptoListRef.current = livePricesCache.map((coin) => ({
+    // Since we only run once (pricesInitializedRef guards this), prices will be empty here
+    const livePricesCache = loadCachedLivePrices();
+    if (livePricesCache && livePricesCache.length > 0) {
+      // Use live prices cache - these are the most recent prices from last session
+      cryptoListRef.current = livePricesCache.map((coin) => ({
+        symbol: coin.symbol.toUpperCase(),
+        name: coin.name,
+        id: coin.id,
+      }));
+      
+      livePricesCache.forEach((p) => pricesRef.current.set(p.symbol, p));
+      setPrices(livePricesCache.map(p => ({ ...p, source: "Restored" })));
+      console.log(`[Top100] ✓ Restored ${livePricesCache.length} prices from last session`);
+    } else {
+      // PRIORITY 2: Fall back to CoinGecko metadata cache
+      const cached = loadCachedTop100();
+      if (cached && cached.length > 0) {
+        const cleanData = cached.filter(
+          (coin) =>
+            !STABLECOINS.includes(coin.symbol.toLowerCase()) &&
+            !STABLECOINS.includes(coin.id.toLowerCase()) &&
+            !isUsdPrefixed(coin.symbol)
+        );
+        const sortedData = cleanData.sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
+        const filteredData = sortedData.slice(0, 100);
+        
+        cryptoListRef.current = filteredData.map((coin) => ({
           symbol: coin.symbol.toUpperCase(),
           name: coin.name,
           id: coin.id,
         }));
         
-        livePricesCache.forEach((p) => pricesRef.current.set(p.symbol, p));
-        setPrices(livePricesCache.map(p => ({ ...p, source: "Restored" })));
-        console.log(`[Top100] ✓ Restored ${livePricesCache.length} prices from last session`);
+        const initialPrices: CryptoPrice[] = filteredData.map((coin, index) => ({
+          id: coin.id,
+          symbol: coin.symbol.toLowerCase(),
+          name: coin.name,
+          image: coin.image,
+          current_price: coin.current_price ?? 0,
+          price_change_percentage_24h: coin.price_change_percentage_24h ?? 0,
+          high_24h: coin.high_24h ?? 0,
+          low_24h: coin.low_24h ?? 0,
+          total_volume: coin.total_volume ?? 0,
+          market_cap: coin.market_cap ?? 0,
+          market_cap_rank: coin.market_cap_rank ?? index + 1,
+          circulating_supply: coin.circulating_supply ?? 0,
+          lastUpdate: Date.now(),
+          source: "Cache",
+        }));
+        
+        initialPrices.forEach((p) => pricesRef.current.set(p.symbol, p));
+        setPrices(initialPrices);
+        console.log('[Top100] Loaded initial prices from metadata cache');
       } else {
-        // PRIORITY 2: Fall back to CoinGecko metadata cache
-        const cached = loadCachedTop100();
-        if (cached && cached.length > 0) {
-          const cleanData = cached.filter(
-            (coin) =>
-              !STABLECOINS.includes(coin.symbol.toLowerCase()) &&
-              !STABLECOINS.includes(coin.id.toLowerCase()) &&
-              !isUsdPrefixed(coin.symbol)
-          );
-          const sortedData = cleanData.sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
-          const filteredData = sortedData.slice(0, 100);
-          
-          cryptoListRef.current = filteredData.map((coin) => ({
-            symbol: coin.symbol.toUpperCase(),
-            name: coin.name,
-            id: coin.id,
-          }));
-          
-          const initialPrices: CryptoPrice[] = filteredData.map((coin, index) => ({
-            id: coin.id,
-            symbol: coin.symbol.toLowerCase(),
-            name: coin.name,
-            image: coin.image,
-            current_price: coin.current_price ?? 0,
-            price_change_percentage_24h: coin.price_change_percentage_24h ?? 0,
-            high_24h: coin.high_24h ?? 0,
-            low_24h: coin.low_24h ?? 0,
-            total_volume: coin.total_volume ?? 0,
-            market_cap: coin.market_cap ?? 0,
-            market_cap_rank: coin.market_cap_rank ?? index + 1,
-            circulating_supply: coin.circulating_supply ?? 0,
-            lastUpdate: Date.now(),
-            source: "Cache",
-          }));
-          
-          initialPrices.forEach((p) => pricesRef.current.set(p.symbol, p));
-          setPrices(initialPrices);
-          console.log('[Top100] Loaded initial prices from metadata cache');
-        } else {
-          // PRIORITY 3: Use fallback skeleton (loading state)
-          const fallbackWithTimestamp = FALLBACK_CRYPTOS.map((c) => ({ ...c, lastUpdate: Date.now() }));
-          setPrices(fallbackWithTimestamp);
-          fallbackWithTimestamp.forEach((p) => pricesRef.current.set(p.symbol, p));
-          cryptoListRef.current = fallbackWithTimestamp.map((coin) => ({
-            symbol: coin.symbol.toUpperCase(),
-            name: coin.name,
-            id: coin.id,
-          }));
-        }
+        // PRIORITY 3: Use fallback skeleton (loading state)
+        const fallbackWithTimestamp = FALLBACK_CRYPTOS.map((c) => ({ ...c, lastUpdate: Date.now() }));
+        setPrices(fallbackWithTimestamp);
+        fallbackWithTimestamp.forEach((p) => pricesRef.current.set(p.symbol, p));
+        cryptoListRef.current = fallbackWithTimestamp.map((coin) => ({
+          symbol: coin.symbol.toUpperCase(),
+          name: coin.name,
+          id: coin.id,
+        }));
       }
     }
 
@@ -586,7 +590,7 @@ export const useCryptoPrices = () => {
     } finally {
       setLoading(false);
     }
-  }, [prices.length]);
+  }, []); // Empty deps - only run once on mount, use ref to track initialization
 
   // Connect to CoinCap WebSocket - FREE, supports ALL cryptocurrencies
   const connectCoinCap = useCallback(() => {
