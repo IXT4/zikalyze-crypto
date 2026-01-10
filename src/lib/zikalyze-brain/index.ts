@@ -252,14 +252,30 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     volumeSpike.isSpike ? 'HIGH' : 'MODERATE'
   );
   
-  // Create tighter zone (reduce width by ~60%)
-  const tightRange = range * 0.15; // 15% of 24h range instead of 30%+
+  // Create tighter zone with PROPER range (never same value)
+  // Use smart decimal precision based on price magnitude
+  const getDecimalPlaces = (p: number): number => {
+    if (p < 0.001) return 8;
+    if (p < 0.01) return 6;
+    if (p < 0.1) return 5;
+    if (p < 1) return 4;
+    if (p < 10) return 3;
+    if (p < 1000) return 2;
+    return 0;
+  };
+  const decimals = getDecimalPlaces(price);
+  
+  // Ensure minimum spread of 2% of price, never same value
+  const minSpread = price * 0.02;
+  const tightRange = Math.max(minSpread, range * 0.15);
   const entryMid = bias === 'LONG' 
     ? low24h + range * 0.25 
-    : high24h - range * 0.25;
+    : bias === 'SHORT'
+      ? high24h - range * 0.25
+      : price; // NEUTRAL uses current price as mid
   const tightZoneLow = entryMid - tightRange / 2;
   const tightZoneHigh = entryMid + tightRange / 2;
-  const tightZone = `$${tightZoneLow.toLocaleString(undefined, { maximumFractionDigits: 2 })} – $${tightZoneHigh.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  const tightZone = `$${tightZoneLow.toFixed(decimals)} – $${tightZoneHigh.toFixed(decimals)}`;
 
   // Generate scenarios
   const keySupport = low24h + range * 0.15;
@@ -273,16 +289,31 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     keyResistance
   });
 
-  // Build KEY insights (deduplicated, no "neutral" padding)
+  // Build KEY insights — BIAS-ALIGNED only (no contradictions)
   const keyInsights: string[] = [];
   
-  // Add directional insights only
-  const directionalInsights = insights.filter(i => 
-    !i.includes('NEUTRAL') && 
-    !i.includes('No clear') && 
-    !i.includes('Mixed') &&
-    !i.includes('Sideways')
-  );
+  // Filter insights to match current bias direction
+  const directionalInsights = insights.filter(i => {
+    // Remove neutral/mixed signals
+    if (i.includes('NEUTRAL') || i.includes('No clear') || i.includes('Mixed') || i.includes('Sideways')) {
+      return false;
+    }
+    // For BEARISH bias, exclude bullish-sounding insights
+    if (bias === 'SHORT') {
+      if (i.includes('buy zone') || i.includes('Optimal buy') || i.includes('Deep discount') || 
+          i.includes('accumulation') || i.includes('bullish') || i.includes('uptrend')) {
+        return false;
+      }
+    }
+    // For BULLISH bias, exclude bearish-sounding insights
+    if (bias === 'LONG') {
+      if (i.includes('sell zone') || i.includes('Optimal sell') || i.includes('Premium') ||
+          i.includes('distribution') || i.includes('bearish') || i.includes('downtrend')) {
+        return false;
+      }
+    }
+    return true;
+  });
   directionalInsights.slice(0, 3).forEach(i => keyInsights.push(i));
 
 // On-chain flow insight with source
@@ -313,21 +344,26 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     keyInsights.push(`⚡ ${institutionalVsRetail.divergenceNote}`);
   }
 
-  // Success probability with detailed methodology
-  const confluenceBonus = Math.round(topDownAnalysis.confluenceScore * 0.3);
-  const timingBonus = precisionEntry.timing === 'NOW' ? 12 : precisionEntry.timing === 'WAIT_PULLBACK' ? 5 : 0;
-  const biasBonus = bias !== 'NEUTRAL' ? 8 : 0;
-  const volumeBonus = volumeSpike.isSpike && volumeSpike.magnitude === 'HIGH' ? 5 : 0;
-  const successProb = Math.min(88, 40 + confluenceBonus + timingBonus + biasBonus + volumeBonus);
+  // Success probability with CORRECT math
+  // Base: 40%, then add bonuses that sum correctly
+  const BASE_PROB = 40;
+  const confluenceBonus = Math.round(topDownAnalysis.confluenceScore * 0.35); // max ~31
+  const timingBonus = precisionEntry.timing === 'NOW' ? 10 : precisionEntry.timing === 'WAIT_PULLBACK' ? 4 : 0;
+  const biasBonus = bias !== 'NEUTRAL' ? 6 : 0;
+  const volumeBonus = volumeSpike.isSpike && volumeSpike.magnitude === 'HIGH' ? 4 : volumeSpike.isSpike ? 2 : 0;
+  
+  // Calculate total with correct addition
+  const totalBonuses = confluenceBonus + timingBonus + biasBonus + volumeBonus;
+  const successProb = Math.min(88, BASE_PROB + totalBonuses);
   const probBar = createBar(successProb, 100, '▓', '░', 12);
   
-  // Detailed probability methodology
-  const probMethodology = `TF confluence ${Math.round(confluenceBonus)}% + timing ${timingBonus}% + bias ${biasBonus}%${volumeBonus ? ` + vol ${volumeBonus}%` : ''}`;
+  // Show EXACT breakdown for transparency
+  const probMethodology = `Base ${BASE_PROB} + conf ${confluenceBonus} + timing ${timingBonus} + bias ${biasBonus}${volumeBonus ? ` + vol ${volumeBonus}` : ''} = ${successProb}%`;
   const probFootnote = successProb >= 70 
-    ? `(${probMethodology} = STRONG)` 
+    ? 'STRONG setup' 
     : successProb >= 55 
-      ? `(${probMethodology} = MODERATE)` 
-      : `(${probMethodology} = WEAK)`;
+      ? 'MODERATE — manage risk' 
+      : 'WEAK — reduce size';
 
   // HTF visual with alignment
   const getTrendIcon = (trend: string) => trend === 'BULLISH' ? '🟢' : trend === 'BEARISH' ? '🔴' : '⚪';
@@ -356,10 +392,9 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
    ${crypto.toUpperCase()} ANALYSIS   ${trendEmoji} ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-💰 $${price.toLocaleString()}  │  24h: $${low24h.toLocaleString()} → $${high24h.toLocaleString()}
+💰 $${price.toFixed(decimals)}  │  24h: $${low24h.toFixed(decimals)} → $${high24h.toFixed(decimals)}
 ${historicalContext}
-${volumeSpike.isSpike ? `📊 VOLUME SPIKE: +${volumeSpike.percentageAboveAvg.toFixed(0)}% vs 24h avg (${volumeSpike.magnitude}) [Spot via aggregator]\n` : ''}
-📈 Volume & OI Context: Spot vol ${volume > avgVolume ? 'ABOVE' : volume < avgVolume * 0.8 ? 'BELOW' : 'NEAR'} avg | Futures OI ${change > 2 ? 'rising (longs building)' : change < -2 ? 'declining (shorts closing)' : 'stable'}
+${volumeSpike.isSpike ? `📊 VOLUME SPIKE: +${volumeSpike.percentageAboveAvg.toFixed(0)}% above 24h avg (${volumeSpike.magnitude}) [Spot via aggregator]\n` : ''}📈 Volume: ${volume > avgVolume ? `+${((volume / avgVolume - 1) * 100).toFixed(0)}% above` : volume < avgVolume * 0.8 ? `${((1 - volume / avgVolume) * 100).toFixed(0)}% below` : 'near'} 24h avg | Futures OI ${change > 2 ? 'rising (longs building)' : change < -2 ? 'declining (shorts closing)' : 'stable'}
 ┌─────────────────────────────────────────────────┐
 │  🎯 VERDICT: ${bias === 'LONG' ? '🟢 BULLISH' : bias === 'SHORT' ? '🔴 BEARISH' : '⚪ NEUTRAL'}  │  Confidence: ${confidence.toFixed(0)}%
 └─────────────────────────────────────────────────┘
