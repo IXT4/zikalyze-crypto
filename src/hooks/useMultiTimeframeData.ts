@@ -1,8 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // 📊 useMultiTimeframeData — Multi-Timeframe Chart Analysis (15m, 1h, 4h, Daily)
 // ═══════════════════════════════════════════════════════════════════════════════
+// Uses server-side edge function to bypass CORS and get reliable Binance data
+// ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { safeFetch } from '@/lib/fetchWithRetry';
 
 export type Timeframe = '15m' | '1h' | '4h' | '1d';
@@ -301,44 +304,32 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
   const mountedRef = useRef(true);
   const refreshIntervalRef = useRef<number | null>(null);
   
-  // Fetch from Binance API (PRIMARY - most reliable)
-  const fetchFromBinance = useCallback(async (
+  // Fetch from Edge Function (PRIMARY - bypasses CORS, uses Binance/Bybit/OKX)
+  const fetchFromEdgeFunction = useCallback(async (
     symbol: string,
     timeframe: Timeframe
   ): Promise<CandleData[] | null> => {
     try {
-      const binanceSymbol = BINANCE_SYMBOL_MAP[symbol.toUpperCase()];
-      if (!binanceSymbol) return null;
-      
-      const interval = BINANCE_INTERVALS[timeframe];
       const config = TIMEFRAME_CONFIG[timeframe];
-      const limit = config.candleCount;
+      const interval = BINANCE_INTERVALS[timeframe];
       
-      // Try Binance.com first, then Binance.US
-      const endpoints = [
-        `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=${limit}`,
-        `https://api.binance.us/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=${limit}`,
-      ];
+      const { data, error } = await supabase.functions.invoke('crypto-candles', {
+        body: { symbol, interval, limit: config.candleCount }
+      });
       
-      for (const url of endpoints) {
-        const response = await safeFetch(url, { timeoutMs: 8000, maxRetries: 2 });
-        
-        if (response?.ok) {
-          const data = await response.json();
-          if (Array.isArray(data) && data.length >= 5) {
-            return data.map((k: any[]) => ({
-              timestamp: k[0],
-              open: parseFloat(k[1]),
-              high: parseFloat(k[2]),
-              low: parseFloat(k[3]),
-              close: parseFloat(k[4]),
-              volume: parseFloat(k[5]),
-            }));
-          }
-        }
+      if (error) {
+        console.log(`[MTF] Edge function error for ${symbol}:`, error);
+        return null;
       }
+      
+      if (data?.candles && Array.isArray(data.candles) && data.candles.length >= 5) {
+        console.log(`[MTF] ${timeframe} loaded from ${data.source}: ${data.candles.length} candles`);
+        return data.candles;
+      }
+      
       return null;
-    } catch {
+    } catch (e) {
+      console.log(`[MTF] Edge function failed for ${symbol}:`, e);
       return null;
     }
   }, []);
@@ -401,21 +392,15 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
   ): Promise<TimeframeAnalysis | null> => {
     try {
       let candles: CandleData[] | null = null;
-      let source = 'unknown';
       
-      // 1. Try Binance first (most reliable, but may have CORS issues)
-      candles = await fetchFromBinance(symbol, timeframe);
-      if (candles && candles.length >= 5) {
-        source = 'binance';
-        console.log(`[MTF] ${timeframe} loaded from Binance: ${candles.length} candles`);
-      }
+      // 1. Try Edge Function first (bypasses CORS, uses Binance/Bybit/OKX)
+      candles = await fetchFromEdgeFunction(symbol, timeframe);
       
       // 2. Fallback to CoinCap (browser-friendly, no CORS)
       if (!candles || candles.length < 5) {
         candles = await fetchFromCoinCap(symbol, timeframe);
         if (candles && candles.length >= 5) {
-          source = 'coincap';
-          console.log(`[MTF] ${timeframe} loaded from CoinCap: ${candles.length} candles`);
+          console.log(`[MTF] ${timeframe} loaded from CoinCap fallback: ${candles.length} candles`);
         }
       }
       
@@ -452,7 +437,7 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
       console.log(`[MTF] ${timeframe} fetch error for ${symbol}:`, e);
       return null;
     }
-  }, [fetchFromBinance, fetchFromCoinCap]);
+  }, [fetchFromEdgeFunction, fetchFromCoinCap]);
 
   const calculateConfluence = (analyses: Record<Timeframe, TimeframeAnalysis | null>) => {
     const valid = Object.values(analyses).filter(a => a !== null) as TimeframeAnalysis[];
