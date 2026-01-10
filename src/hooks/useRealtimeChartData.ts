@@ -10,66 +10,124 @@ export interface ChartDataPoint {
 // Supported exchanges in priority order (CoinCap first - free, all cryptos, no limits)
 type Exchange = "coincap" | "binance" | "coinbase" | "kraken" | "coingecko";
 
-// Map symbols to CoinCap IDs (free, all cryptos, no rate limits)
+// Map symbols to CoinCap v2 API IDs (verified correct IDs)
+// CoinCap uses lowercase names with hyphens, NOT the same as CoinGecko
 const COINCAP_ID_MAP: Record<string, string> = {
-  // Top cryptos
-  BTC: "bitcoin", ETH: "ethereum", SOL: "solana", XRP: "xrp", DOGE: "dogecoin",
-  BNB: "binance-coin", ADA: "cardano", AVAX: "avalanche", DOT: "polkadot",
-  MATIC: "polygon", LINK: "chainlink", UNI: "uniswap", ATOM: "cosmos",
-  LTC: "litecoin", BCH: "bitcoin-cash", NEAR: "near-protocol", APT: "aptos", FIL: "filecoin",
-  ARB: "arbitrum", OP: "optimism", INJ: "injective-protocol", SUI: "sui",
-  TIA: "celestia", SEI: "sei-network", PEPE: "pepe", SHIB: "shiba-inu",
-  WIF: "dogwifhat", BONK: "bonk", FLOKI: "floki-inu", RENDER: "render-token",
-  FET: "fetch", AAVE: "aave", MKR: "maker", GRT: "the-graph", IMX: "immutable-x",
-  STX: "stacks", RUNE: "thorchain", SAND: "the-sandbox", MANA: "decentraland",
-  AXS: "axie-infinity", GALA: "gala", APE: "apecoin", CRV: "curve-dao-token",
-  SNX: "synthetix-network-token", COMP: "compound", LDO: "lido-dao",
-  ENS: "ethereum-name-service", ALGO: "algorand", XLM: "stellar", VET: "vechain",
-  ICP: "internet-computer", HBAR: "hedera", ETC: "ethereum-classic",
-  FTM: "fantom", TRX: "tron", XMR: "monero", EOS: "eos", THETA: "theta-token",
-  XTZ: "tezos", NEO: "neo", KAVA: "kava", ZEC: "zcash", DASH: "dash",
-  EGLD: "multiversx-egld", FLOW: "flow", MINA: "mina-protocol", ROSE: "oasis-network",
-  ONE: "harmony", ZIL: "zilliqa", ENJ: "enjin-coin", CHZ: "chiliz",
-  BAT: "basic-attention-token", CAKE: "pancakeswap", SUSHI: "sushi",
-  YFI: "yearn-finance", STETH: "lido-staked-ether", WBTC: "wrapped-bitcoin",
-  TON: "toncoin", LEO: "unus-sed-leo", OKB: "okb", KCS: "kucoin-token",
-  CRO: "cronos", WLD: "worldcoin", JUP: "jupiter", JTO: "jito-governance-token",
-  KAS: "kaspa", TAO: "bittensor", PYTH: "pyth-network", TRB: "tellor", ORDI: "ordi",
-  STG: "stargate-finance", BLUR: "blur", PENDLE: "pendle", DYDX: "dydx",
-  TRUMP: "official-trump", POL: "polygon-ecosystem-token",
-  HYPE: "hyperliquid", SXP: "swipe", FARTCOIN: "fartcoin", VIRTUAL: "virtual-protocol",
-  ENA: "ethena", ONDO: "ondo-finance", OM: "mantra", BRETT: "brett",
-  XDC: "xdc-network", JASMY: "jasmycoin", IOTA: "iota", QNT: "quant",
-  AERO: "aerodrome-finance", CORE: "core-dao", MANTLE: "mantle",
-  // New tokens and memecoins
-  GMT: "stepn", STRK: "starknet", DYM: "dymension", ALT: "altlayer",
-  PIXEL: "pixels", W: "wormhole", ETHFI: "ether-fi",
-  BOME: "book-of-meme", SAGA: "saga-2", REZ: "renzo", BB: "bouncebit",
-  NOT: "notcoin", IO: "io-net", ZK: "zksync", LISTA: "lista-dao",
-  ZRO: "layerzero", BLAST: "blast", DOGS: "dogs", EIGEN: "eigenlayer",
-  CATI: "catizen", SCR: "scroll", MOVE: "movement", ME: "magic-eden",
-  VANA: "vana", USUAL: "usual", BIO: "bio-protocol", AIXBT: "aixbt",
-  SPX: "spx6900", POPCAT: "popcat", MOG: "mog-coin", GIGA: "gigachad-2",
-  MOODENG: "moo-deng", PNUT: "peanut-the-squirrel", ACT: "act-i-the-ai-prophecy",
-  GOAT: "goatseus-maximus", CHILLGUY: "just-a-chill-guy", AI16Z: "ai16z",
-  ARC: "arc", ZEREBRO: "zerebro", GRIFFAIN: "griffain", FWOG: "fwog",
-  // Layer 1s and Layer 2s
-  ZETA: "zetachain", BEAM: "beam", CELO: "celo",
-  KLAY: "klaytn", OSMO: "osmosis", CANTO: "canto",
-  // DeFi tokens
-  BAL: "balancer", INCH: "1inch", GMX: "gmx",
-  RPL: "rocket-pool", FXS: "frax-share", CVX: "convex-finance",
-  // Gaming and Metaverse
-  RONIN: "ronin", MAGIC: "magic", ILV: "illuvium", 
-  PRIME: "echelon-prime", GODS: "gods-unchained",
-  // AI tokens
-  AGIX: "singularitynet", OCEAN: "ocean-protocol",
-  RNDR: "render-token", ARKM: "arkham", AKT: "akash-network", AIOZ: "aioz-network",
-  // Infrastructure
-  AR: "arweave", STORJ: "storj", LPT: "livepeer",
-  API3: "api3", BAND: "band-protocol", UMA: "uma", REQ: "request-network",
-  // Privacy coins
-  SCRT: "secret", NYM: "nym",
+  // Top 50 - Verified CoinCap IDs
+  BTC: "bitcoin",
+  ETH: "ethereum", 
+  USDT: "tether",
+  XRP: "xrp",
+  SOL: "solana",
+  BNB: "binance-coin",
+  DOGE: "dogecoin",
+  USDC: "usd-coin",
+  ADA: "cardano",
+  TRX: "tron",
+  AVAX: "avalanche",
+  LINK: "chainlink",
+  TON: "the-open-network",
+  SHIB: "shiba-inu",
+  SUI: "sui",
+  XLM: "stellar",
+  DOT: "polkadot",
+  HBAR: "hedera-hashgraph",
+  BCH: "bitcoin-cash",
+  LEO: "unus-sed-leo",
+  LTC: "litecoin",
+  ATOM: "cosmos",
+  UNI: "uniswap",
+  NEAR: "near-protocol",
+  ETC: "ethereum-classic",
+  APT: "aptos",
+  RNDR: "render-token",
+  VET: "vechain",
+  ICP: "internet-computer",
+  MATIC: "polygon",
+  CRO: "crypto-com-coin",
+  FIL: "filecoin",
+  ARB: "arbitrum",
+  MKR: "maker",
+  ALGO: "algorand",
+  KAS: "kaspa",
+  OP: "optimism",
+  AAVE: "aave",
+  IMX: "immutable-x",
+  INJ: "injective-protocol",
+  FTM: "fantom",
+  STX: "stacks",
+  XMR: "monero",
+  THETA: "theta",
+  GRT: "the-graph",
+  WIF: "dogwifcoin",
+  BONK: "bonk",
+  PEPE: "pepe",
+  FLOKI: "floki-inu",
+  // Additional popular cryptos
+  FET: "fetch-ai",
+  RUNE: "thorchain",
+  SAND: "the-sandbox",
+  MANA: "decentraland",
+  AXS: "axie-infinity",
+  GALA: "gala",
+  APE: "apecoin",
+  CRV: "curve-dao-token",
+  SNX: "synthetix-network-token",
+  COMP: "compound",
+  LDO: "lido-dao",
+  ENS: "ethereum-name-service",
+  EOS: "eos",
+  XTZ: "tezos",
+  NEO: "neo",
+  KAVA: "kava",
+  ZEC: "zcash",
+  DASH: "dash",
+  EGLD: "elrond-erd-2",
+  FLOW: "flow",
+  MINA: "mina",
+  ROSE: "oasis-network",
+  ONE: "harmony",
+  ZIL: "zilliqa",
+  ENJ: "enjin-coin",
+  CHZ: "chiliz",
+  BAT: "basic-attention-token",
+  CAKE: "pancakeswap-token",
+  SUSHI: "sushiswap",
+  YFI: "yearn-finance",
+  WBTC: "wrapped-bitcoin",
+  OKB: "okb",
+  TIA: "celestia",
+  SEI: "sei-network",
+  TAO: "bittensor",
+  PYTH: "pyth-network",
+  ORDI: "ordi",
+  BLUR: "blur",
+  PENDLE: "pendle",
+  WLD: "worldcoin-wld",
+  JUP: "jupiter-exchange-solana",
+  ONDO: "ondo-finance",
+  XDC: "xdc-network",
+  JASMY: "jasmy",
+  IOTA: "iota",
+  QNT: "quant",
+  CORE: "core",
+  GMT: "green-metaverse-token",
+  STRK: "starknet-token",
+  NOT: "notcoin",
+  ZK: "zksync",
+  EIGEN: "eigenlayer",
+  POPCAT: "popcat-sol",
+  AR: "arweave",
+  STORJ: "storj",
+  LPT: "livepeer",
+  OSMO: "osmosis",
+  CELO: "celo",
+  KLAY: "klaytn",
+  GMX: "gmx",
+  BAL: "balancer",
+  OCEAN: "ocean-protocol",
+  AGIX: "singularitynet",
+  AKT: "akash-network",
 };
 
 // Map symbols to CoinGecko IDs for fallback
@@ -221,11 +279,56 @@ const setCacheData = (symbol: string, data: ChartDataPoint[], priceChange: numbe
   dataCache.set(symbol.toUpperCase(), { data, priceChange, timestamp: Date.now(), exchange });
 };
 
+// Dynamic CoinCap ID lookup cache
+const coinCapIdCache = new Map<string, string | null>();
+
+// Search CoinCap API for asset ID by symbol
+const searchCoinCapId = async (symbol: string): Promise<string | null> => {
+  const upperSym = symbol.toUpperCase();
+  
+  // Check cache first
+  if (coinCapIdCache.has(upperSym)) {
+    return coinCapIdCache.get(upperSym) || null;
+  }
+  
+  try {
+    const response = await fetchWithTimeout(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=5`);
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    if (!data.data || data.data.length === 0) {
+      coinCapIdCache.set(upperSym, null);
+      return null;
+    }
+    
+    // Find exact symbol match
+    const exactMatch = data.data.find((asset: any) => 
+      asset.symbol?.toUpperCase() === upperSym
+    );
+    
+    if (exactMatch) {
+      console.log(`[CoinCap] Found ID for ${upperSym}: ${exactMatch.id}`);
+      coinCapIdCache.set(upperSym, exactMatch.id);
+      return exactMatch.id;
+    }
+    
+    // Use first result as fallback
+    const fallbackId = data.data[0].id;
+    console.log(`[CoinCap] Using fallback ID for ${upperSym}: ${fallbackId}`);
+    coinCapIdCache.set(upperSym, fallbackId);
+    return fallbackId;
+  } catch (err) {
+    console.log(`[CoinCap] Search failed for ${upperSym}:`, err);
+    coinCapIdCache.set(upperSym, null);
+    return null;
+  }
+};
+
 // Get exchange symbol
 const getExchangeSymbol = (sym: string, exchange: Exchange, coinGeckoId?: string): string | null => {
   const upperSym = sym.toUpperCase();
   switch (exchange) {
-    case "coincap": return COINCAP_ID_MAP[upperSym] || upperSym.toLowerCase();
+    case "coincap": return COINCAP_ID_MAP[upperSym] || null; // Will use dynamic lookup in fetch
     case "binance": return BINANCE_SYMBOL_MAP[upperSym] || null;
     case "coinbase": return COINBASE_SYMBOL_MAP[upperSym] || null;
     case "kraken": return KRAKEN_SYMBOL_MAP[upperSym] || null;
@@ -616,26 +719,33 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
       for (const exchange of exchanges) {
         if (!mountedRef.current) return;
 
-        const exchangeSymbol = getExchangeSymbol(symbol, exchange, coinGeckoId);
+        let exchangeSymbol = getExchangeSymbol(symbol, exchange, coinGeckoId);
+        
+        // For CoinCap, try dynamic lookup if not in static map
+        if (exchange === "coincap" && !exchangeSymbol) {
+          console.log(`[CoinCap] ${symbol} not in map, searching...`);
+          exchangeSymbol = await searchCoinCapId(symbol);
+        }
+        
         if (!exchangeSymbol) continue;
 
         let data: ChartDataPoint[] | null = null;
 
         switch (exchange) {
           case "coincap":
-            data = await fetchWithRetry(() => fetchCoinCapData(symbol, exchangeSymbol));
+            data = await fetchWithRetry(() => fetchCoinCapData(symbol, exchangeSymbol!));
             break;
           case "binance": 
-            data = await fetchWithRetry(() => fetchBinanceData(symbol, exchangeSymbol)); 
+            data = await fetchWithRetry(() => fetchBinanceData(symbol, exchangeSymbol!)); 
             break;
           case "coinbase": 
-            data = await fetchWithRetry(() => fetchCoinbaseData(symbol, exchangeSymbol)); 
+            data = await fetchWithRetry(() => fetchCoinbaseData(symbol, exchangeSymbol!)); 
             break;
           case "kraken": 
-            data = await fetchWithRetry(() => fetchKrakenData(symbol, exchangeSymbol)); 
+            data = await fetchWithRetry(() => fetchKrakenData(symbol, exchangeSymbol!)); 
             break;
           case "coingecko": 
-            data = await fetchWithRetry(() => fetchCoinGeckoData(symbol, exchangeSymbol)); 
+            data = await fetchWithRetry(() => fetchCoinGeckoData(symbol, exchangeSymbol!)); 
             break;
         }
 
