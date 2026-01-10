@@ -11,8 +11,52 @@ interface LivePriceData {
   isConnecting: boolean;
 }
 
-// Multi-exchange WebSocket configuration
+// CoinGecko ID mapping for CoinCap (supports ALL cryptos)
+const COINCAP_ID_MAP: Record<string, string> = {
+  'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'XRP': 'ripple', 
+  'BNB': 'binance-coin', 'ADA': 'cardano', 'DOGE': 'dogecoin', 'AVAX': 'avalanche-2',
+  'DOT': 'polkadot', 'MATIC': 'polygon', 'LINK': 'chainlink', 'LTC': 'litecoin',
+  'BCH': 'bitcoin-cash', 'ATOM': 'cosmos', 'NEAR': 'near-protocol', 'FTM': 'fantom',
+  'ARB': 'arbitrum', 'KAS': 'kaspa', 'SUI': 'sui', 'APT': 'aptos',
+  'OP': 'optimism', 'INJ': 'injective-protocol', 'TIA': 'celestia', 'RNDR': 'render-token',
+  'FET': 'fetch-ai', 'WLD': 'worldcoin-wld', 'JUP': 'jupiter-exchange-solana', 'JTO': 'jito-governance-token',
+  'HBAR': 'hedera-hashgraph', 'VET': 'vechain', 'ALGO': 'algorand', 'TON': 'the-open-network',
+  'ICP': 'internet-computer', 'FIL': 'filecoin', 'GRT': 'the-graph', 'AAVE': 'aave',
+  'MKR': 'maker', 'UNI': 'uniswap', 'SHIB': 'shiba-inu', 'TRX': 'tron',
+  'XLM': 'stellar', 'ETC': 'ethereum-classic', 'XMR': 'monero', 'CRO': 'crypto-com-chain',
+  'PEPE': 'pepe', 'IMX': 'immutable-x', 'RUNE': 'thorchain', 'SEI': 'sei-network',
+  'STX': 'stacks', 'KAVA': 'kava', 'MINA': 'mina-protocol', 'CFX': 'conflux-token',
+  'EGLD': 'elrond-erd-2', 'ROSE': 'oasis-network', 'ZEC': 'zcash', 'THETA': 'theta-token',
+  'QNT': 'quant-network', 'NEO': 'neo', 'FLOW': 'flow', 'KCS': 'kucoin-shares',
+  'XTZ': 'tezos', 'EOS': 'eos', 'IOTA': 'iota', 'XEC': 'ecash'
+};
+
+// Multi-exchange WebSocket configuration - CoinCap FIRST (supports ALL cryptos)
 const EXCHANGES = {
+  coincap: {
+    name: "CoinCap",
+    endpoints: ["wss://ws.coincap.io/prices?assets="],
+    getStreamUrl: (symbol: string, endpoint: string) => {
+      const coinCapId = COINCAP_ID_MAP[symbol.toUpperCase()] || symbol.toLowerCase();
+      return `${endpoint}${coinCapId}`;
+    },
+    parseMessage: (data: any, symbol: string) => {
+      const coinCapId = COINCAP_ID_MAP[symbol.toUpperCase()] || symbol.toLowerCase();
+      if (data[coinCapId]) {
+        const price = parseFloat(data[coinCapId]);
+        if (!isNaN(price) && price > 0) {
+          return {
+            price,
+            change24h: null, // CoinCap WebSocket only provides price
+            high24h: null,
+            low24h: null,
+            volume: null,
+          };
+        }
+      }
+      return null;
+    },
+  },
   binance: {
     name: "Binance",
     endpoints: [
@@ -64,7 +108,6 @@ const EXCHANGES = {
     endpoints: ["wss://ws.kraken.com"],
     getStreamUrl: (_symbol: string, endpoint: string) => endpoint,
     getSubscribeMessage: (symbol: string) => {
-      // Kraken uses XBT for Bitcoin
       const krakenSymbol = symbol.toUpperCase() === "BTC" ? "XBT" : symbol.toUpperCase();
       return {
         event: "subscribe",
@@ -73,12 +116,11 @@ const EXCHANGES = {
       };
     },
     parseMessage: (data: any, symbol: string) => {
-      // Kraken ticker format: [channelID, tickerData, channelName, pair]
       if (Array.isArray(data) && data.length >= 4 && data[2] === "ticker") {
         const ticker = data[1];
         if (ticker && ticker.c) {
           const price = parseFloat(ticker.c[0]);
-          const open = parseFloat(ticker.o[1]); // Today's opening price
+          const open = parseFloat(ticker.o[1]);
           const change24h = open ? ((price - open) / open) * 100 : 0;
           return {
             price,
@@ -95,29 +137,15 @@ const EXCHANGES = {
 };
 
 type ExchangeKey = keyof typeof EXCHANGES;
-const EXCHANGE_ORDER: ExchangeKey[] = ["binance", "coinbase", "kraken"];
+// CoinCap first - it supports ALL cryptocurrencies
+const EXCHANGE_ORDER: ExchangeKey[] = ["coincap", "binance", "coinbase", "kraken"];
 
-// Symbols that are NOT available on major exchanges (use fallback price only)
-const EXCHANGE_UNSUPPORTED_SYMBOLS = [
-  "KAS", // Kaspa - not on Binance/Coinbase/Kraken
-  "TIA", // Celestia - limited availability
-  "SEI", // Sei Network - limited availability
-  "STX", // Stacks - limited availability
-  "MINA", // Mina Protocol - limited availability
-  "CFX", // Conflux - limited availability
-  "ROSE", // Oasis - limited availability
-  "KAVA", // Kava - limited availability
-];
-
-const MAX_ATTEMPTS_PER_EXCHANGE = 3;
-const CONNECTION_TIMEOUT = 10000;
-const RECONNECT_DELAY = 1500;
-const FALLBACK_RETRY_DELAY = 30000;
+const MAX_ATTEMPTS_PER_EXCHANGE = 2;
+const CONNECTION_TIMEOUT = 8000;
+const RECONNECT_DELAY = 1000;
+const FALLBACK_RETRY_DELAY = 20000;
 
 export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fallbackChange?: number) => {
-  const symbolUpper = symbol.toUpperCase();
-  const isUnsupported = EXCHANGE_UNSUPPORTED_SYMBOLS.includes(symbolUpper);
-  
   const [liveData, setLiveData] = useState<LivePriceData>({
     price: fallbackPrice || 0,
     change24h: fallbackChange || 0,
@@ -126,7 +154,7 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
     volume: 0,
     lastUpdate: Date.now(),
     isLive: false,
-    isConnecting: !isUnsupported, // Don't show connecting for unsupported symbols
+    isConnecting: true,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -139,7 +167,6 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
   const currentEndpointIndexRef = useRef(0);
   const attemptsOnCurrentExchangeRef = useRef(0);
   const hasConnectedRef = useRef(false);
-  const isUnsupportedRef = useRef(isUnsupported);
 
   const cleanup = useCallback(() => {
     if (connectionTimeoutRef.current) {
@@ -179,18 +206,6 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
 
   const connect = useCallback(() => {
     if (!isMountedRef.current) return;
-    
-    // Skip WebSocket connection for unsupported symbols - use fallback data only
-    if (isUnsupportedRef.current) {
-      setLiveData(prev => ({ 
-        ...prev, 
-        price: fallbackPrice || prev.price,
-        change24h: fallbackChange || prev.change24h,
-        isLive: false, 
-        isConnecting: false,
-      }));
-      return;
-    }
     
     cleanup();
 
@@ -336,7 +351,6 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
 
   useEffect(() => {
     isMountedRef.current = true;
-    isUnsupportedRef.current = EXCHANGE_UNSUPPORTED_SYMBOLS.includes(symbol.toUpperCase());
     currentExchangeIndexRef.current = 0;
     currentEndpointIndexRef.current = 0;
     attemptsOnCurrentExchangeRef.current = 0;
