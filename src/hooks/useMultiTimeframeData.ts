@@ -52,7 +52,25 @@ export interface MultiTimeframeData {
   lastUpdated: number;
 }
 
-// CoinCap ID mapping
+// Binance symbol mapping (PRIMARY - most reliable)
+const BINANCE_SYMBOL_MAP: Record<string, string> = {
+  BTC: 'BTCUSDT', ETH: 'ETHUSDT', SOL: 'SOLUSDT', XRP: 'XRPUSDT', DOGE: 'DOGEUSDT',
+  BNB: 'BNBUSDT', ADA: 'ADAUSDT', AVAX: 'AVAXUSDT', DOT: 'DOTUSDT',
+  MATIC: 'MATICUSDT', LINK: 'LINKUSDT', UNI: 'UNIUSDT', ATOM: 'ATOMUSDT',
+  LTC: 'LTCUSDT', BCH: 'BCHUSDT', NEAR: 'NEARUSDT', APT: 'APTUSDT',
+  FIL: 'FILUSDT', ARB: 'ARBUSDT', OP: 'OPUSDT', INJ: 'INJUSDT',
+  SUI: 'SUIUSDT', TIA: 'TIAUSDT', SEI: 'SEIUSDT', PEPE: 'PEPEUSDT', SHIB: 'SHIBUSDT',
+  TON: 'TONUSDT', KAS: 'KASUSDT', TAO: 'TAOUSDT', RENDER: 'RENDERUSDT',
+  TRX: 'TRXUSDT', XLM: 'XLMUSDT', HBAR: 'HBARUSDT', VET: 'VETUSDT',
+  ALGO: 'ALGOUSDT', ICP: 'ICPUSDT', FTM: 'FTMUSDT', ETC: 'ETCUSDT',
+  AAVE: 'AAVEUSDT', MKR: 'MKRUSDT', GRT: 'GRTUSDT', IMX: 'IMXUSDT',
+  RUNE: 'RUNEUSDT', STX: 'STXUSDT', MINA: 'MINAUSDT', FLOW: 'FLOWUSDT',
+  XTZ: 'XTZUSDT', EOS: 'EOSUSDT', NEO: 'NEOUSDT', THETA: 'THETAUSDT',
+  EGLD: 'EGLDUSDT', ROSE: 'ROSEUSDT', ZEC: 'ZECUSDT', KAVA: 'KAVAUSDT',
+  CFX: 'CFXUSDT', QNT: 'QNTUSDT', WLD: 'WLDUSDT', JUP: 'JUPUSDT',
+};
+
+// CoinCap ID mapping (FALLBACK)
 const COINCAP_ID_MAP: Record<string, string> = {
   BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'xrp', DOGE: 'dogecoin',
   BNB: 'binance-coin', ADA: 'cardano', AVAX: 'avalanche', DOT: 'polkadot',
@@ -64,11 +82,19 @@ const COINCAP_ID_MAP: Record<string, string> = {
   USDT: 'tether', USDC: 'usd-coin', LEO: 'unus-sed-leo',
 };
 
+// Binance timeframe intervals
+const BINANCE_INTERVALS: Record<Timeframe, string> = {
+  '15m': '15m',
+  '1h': '1h',
+  '4h': '4h',
+  '1d': '1d',
+};
+
 // Timeframe configs
 const TIMEFRAME_CONFIG: Record<Timeframe, { interval: string; duration: number; candleCount: number }> = {
   '15m': { interval: 'm15', duration: 12 * 60 * 60 * 1000, candleCount: 48 }, // 12 hours
   '1h': { interval: 'h1', duration: 24 * 60 * 60 * 1000, candleCount: 24 }, // 24 hours
-  '4h': { interval: 'h1', duration: 4 * 24 * 60 * 60 * 1000, candleCount: 24 }, // 4 days (grouped)
+  '4h': { interval: 'h1', duration: 4 * 24 * 60 * 60 * 1000, candleCount: 24 }, // 4 days
   '1d': { interval: 'd1', duration: 30 * 24 * 60 * 60 * 1000, candleCount: 30 }, // 30 days
 };
 
@@ -261,63 +287,128 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
   const mountedRef = useRef(true);
   const refreshIntervalRef = useRef<number | null>(null);
   
-  const fetchTimeframe = useCallback(async (
+  // Fetch from Binance API (PRIMARY - most reliable)
+  const fetchFromBinance = useCallback(async (
+    symbol: string,
+    timeframe: Timeframe
+  ): Promise<CandleData[] | null> => {
+    try {
+      const binanceSymbol = BINANCE_SYMBOL_MAP[symbol.toUpperCase()];
+      if (!binanceSymbol) return null;
+      
+      const interval = BINANCE_INTERVALS[timeframe];
+      const config = TIMEFRAME_CONFIG[timeframe];
+      const limit = config.candleCount;
+      
+      // Try Binance.com first, then Binance.US
+      const endpoints = [
+        `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=${limit}`,
+        `https://api.binance.us/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=${limit}`,
+      ];
+      
+      for (const url of endpoints) {
+        const response = await safeFetch(url, { timeoutMs: 8000, maxRetries: 2 });
+        
+        if (response?.ok) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length >= 5) {
+            return data.map((k: any[]) => ({
+              timestamp: k[0],
+              open: parseFloat(k[1]),
+              high: parseFloat(k[2]),
+              low: parseFloat(k[3]),
+              close: parseFloat(k[4]),
+              volume: parseFloat(k[5]),
+            }));
+          }
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Fetch from CoinCap API (FALLBACK)
+  const fetchFromCoinCap = useCallback(async (
     coinCapId: string,
     timeframe: Timeframe
-  ): Promise<TimeframeAnalysis | null> => {
+  ): Promise<CandleData[] | null> => {
     try {
       const config = TIMEFRAME_CONFIG[timeframe];
       const end = Date.now();
       const start = end - config.duration;
       
-      // CoinCap supports: m1, m5, m15, m30, h1, h2, h6, h12, d1
       let interval = config.interval;
-      if (timeframe === '4h') {
-        // Fetch h1 and group into 4h
-        interval = 'h1';
-      }
+      if (timeframe === '4h') interval = 'h1';
       
       const response = await safeFetch(
         `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=${interval}&start=${start}&end=${end}`,
-        { timeoutMs: 15000, maxRetries: 4 }
+        { timeoutMs: 10000, maxRetries: 2 }
       );
       
-      if (!response || !response.ok) {
-        // Log failure for debugging but don't throw
-        console.log(`[MTF] ${timeframe} fetch failed for ${coinCapId}, using fallback`);
-        return null;
-      }
+      if (!response?.ok) return null;
       
       const result = await response.json();
+      if (!result.data || !Array.isArray(result.data) || result.data.length < 5) return null;
       
-      if (!result.data || !Array.isArray(result.data) || result.data.length < 5) {
-        console.log(`[MTF] ${timeframe} insufficient data for ${coinCapId}: ${result.data?.length || 0} points`);
-        return null;
-      }
-      
-      // Convert to candle format
       let candles: CandleData[] = result.data.map((point: any, index: number, arr: any[]) => {
         const price = parseFloat(point.priceUsd);
         const prevPrice = index > 0 ? parseFloat(arr[index - 1].priceUsd) : price;
-        const volatilityFactor = 0.003;
+        const volatilityFactor = 0.002;
         
         return {
           timestamp: new Date(point.time).getTime(),
           open: prevPrice,
-          high: Math.max(price, prevPrice) * (1 + volatilityFactor * Math.random()),
-          low: Math.min(price, prevPrice) * (1 - volatilityFactor * Math.random()),
+          high: Math.max(price, prevPrice) * (1 + volatilityFactor),
+          low: Math.min(price, prevPrice) * (1 - volatilityFactor),
           close: price,
           volume: parseFloat(point.circulatingSupply || '0') * price * 0.005,
         };
       });
       
-      // Group hourly into 4h if needed
       if (timeframe === '4h') {
         candles = groupInto4hCandles(candles);
       }
       
-      // Limit candle count
-      candles = candles.slice(-config.candleCount);
+      return candles.slice(-config.candleCount);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Main fetch function with fallback chain
+  const fetchTimeframe = useCallback(async (
+    symbol: string,
+    timeframe: Timeframe
+  ): Promise<TimeframeAnalysis | null> => {
+    try {
+      const config = TIMEFRAME_CONFIG[timeframe];
+      let candles: CandleData[] | null = null;
+      let source = 'unknown';
+      
+      // 1. Try Binance first (most reliable)
+      candles = await fetchFromBinance(symbol, timeframe);
+      if (candles && candles.length >= 5) {
+        source = 'binance';
+        console.log(`[MTF] ${timeframe} loaded from Binance: ${candles.length} candles`);
+      }
+      
+      // 2. Fallback to CoinCap
+      if (!candles || candles.length < 5) {
+        const coinCapId = COINCAP_ID_MAP[symbol.toUpperCase()] || symbol.toLowerCase();
+        candles = await fetchFromCoinCap(coinCapId, timeframe);
+        if (candles && candles.length >= 5) {
+          source = 'coincap';
+          console.log(`[MTF] ${timeframe} loaded from CoinCap: ${candles.length} candles`);
+        }
+      }
+      
+      // 3. No data available
+      if (!candles || candles.length < 5) {
+        console.log(`[MTF] ${timeframe} no data available for ${symbol}`);
+        return null;
+      }
       
       const closes = candles.map(c => c.close);
       const swings = detectSwingPoints(candles);
@@ -342,12 +433,12 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
         lastUpdated: Date.now(),
         isLive: true,
       };
-    } catch {
-      // Silent fail - network issues are expected
+    } catch (e) {
+      console.log(`[MTF] ${timeframe} fetch error for ${symbol}:`, e);
       return null;
     }
-  }, []);
-  
+  }, [fetchFromBinance, fetchFromCoinCap]);
+
   const calculateConfluence = (analyses: Record<Timeframe, TimeframeAnalysis | null>) => {
     const valid = Object.values(analyses).filter(a => a !== null) as TimeframeAnalysis[];
     
@@ -421,34 +512,13 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
   
   const fetchAllTimeframes = useCallback(async () => {
     const upperSymbol = symbol.toUpperCase();
-    let coinCapId = COINCAP_ID_MAP[upperSymbol];
     
-    if (!coinCapId) {
-      try {
-        const searchRes = await safeFetch(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=1`);
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          if (searchData.data?.[0]?.id) {
-            coinCapId = searchData.data[0].id;
-          }
-        }
-      } catch {
-        // Dynamic lookup failed
-      }
-    }
-    
-    if (!coinCapId) {
-      console.log(`[MTF] No CoinCap ID found for ${symbol}`);
-      setData(prev => ({ ...prev, isLoading: false }));
-      return;
-    }
-    
-    // Fetch all timeframes in parallel
+    // Fetch all timeframes in parallel using the new multi-source fetcher
     const [tf15m, tf1h, tf4h, tf1d] = await Promise.all([
-      fetchTimeframe(coinCapId, '15m'),
-      fetchTimeframe(coinCapId, '1h'),
-      fetchTimeframe(coinCapId, '4h'),
-      fetchTimeframe(coinCapId, '1d'),
+      fetchTimeframe(upperSymbol, '15m'),
+      fetchTimeframe(upperSymbol, '1h'),
+      fetchTimeframe(upperSymbol, '4h'),
+      fetchTimeframe(upperSymbol, '1d'),
     ]);
     
     if (!mountedRef.current) return;
@@ -463,7 +533,8 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
       lastUpdated: Date.now(),
     });
     
-    console.log(`[MTF] ${symbol} loaded: 15m=${tf15m?.trend || 'N/A'}, 1h=${tf1h?.trend || 'N/A'}, 4h=${tf4h?.trend || 'N/A'}, 1d=${tf1d?.trend || 'N/A'}`);
+    const successCount = [tf15m, tf1h, tf4h, tf1d].filter(Boolean).length;
+    console.log(`[MTF] ${symbol} loaded ${successCount}/4 timeframes: 15m=${tf15m?.trend || 'N/A'}, 1h=${tf1h?.trend || 'N/A'}, 4h=${tf4h?.trend || 'N/A'}, 1d=${tf1d?.trend || 'N/A'}`);
   }, [symbol, fetchTimeframe]);
   
   useEffect(() => {
