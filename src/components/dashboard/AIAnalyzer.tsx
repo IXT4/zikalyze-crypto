@@ -74,9 +74,20 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const currentLow = liveData.priceIsLive && liveData.low24h > 0 ? liveData.low24h : (low24h || price * 0.98);
   const currentVolume = liveData.priceIsLive && liveData.volume > 0 ? liveData.volume : (volume || 0);
   
-  // Track data freshness
+  // Track data freshness and build real-time source string
   const dataAgeMs = Date.now() - liveData.lastUpdated;
   const isDataFresh = dataAgeMs < 5000; // Data is fresh if < 5 seconds old
+  
+  // Build actual data source string for analysis
+  const buildDataSourceString = () => {
+    const sources: string[] = [];
+    if (liveData.priceIsLive) sources.push('WebSocket');
+    if (onChainMetrics && streamStatus === 'connected') sources.push('On-Chain');
+    if (liveData.sentiment?.isLive) sources.push('Sentiment');
+    return sources.length > 0 ? sources.join(' + ') : 'Fallback';
+  };
+  const actualDataSource = buildDataSourceString();
+  const isRealTimeData = liveData.priceIsLive && isDataFresh;
   
   const { history, learningStats, loading: historyLoading, saveAnalysis, submitFeedback, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
   const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
@@ -247,8 +258,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         volume: analysisVolume,
         marketCap,
         language: currentLanguage,
-        isLiveData: liveData.priceIsLive && isDataFresh,
-        dataSource: liveData.dataSourcesSummary,
+        isLiveData: isRealTimeData,
+        dataSource: actualDataSource,
         onChainData: adaptedOnChainData,
         sentimentData: adaptedSentimentData
       });
@@ -267,7 +278,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         saveAnalysis(result.analysis, analysisPrice, analysisChange, result.confidence, result.bias);
       }
 
-      const dataSourceMsg = liveData.priceIsLive ? "Real-time WebSocket data" : "Cached market data";
+      const dataSourceMsg = isRealTimeData ? `Real-time ${actualDataSource}` : "Cached data";
       toast.success(`Analysis complete — ${dataSourceMsg}`);
     } catch (error) {
       console.error("Analysis error:", error);
