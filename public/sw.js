@@ -1,5 +1,5 @@
 // Service Worker for Push Notifications and Offline Caching
-const CACHE_NAME = 'zikalyze-v3';
+const CACHE_NAME = 'zikalyze-v4';
 const STATIC_ASSETS = [
   '/',
   '/favicon.ico',
@@ -41,25 +41,35 @@ self.addEventListener('fetch', (event) => {
   if (request.url.includes('/api/') || 
       request.url.includes('supabase') ||
       request.url.includes('exchangerate-api') ||
+      request.url.includes('coingecko') ||
+      request.url.includes('coincap') ||
+      request.url.includes('binance') ||
       !request.url.startsWith(self.location.origin)) {
     return;
   }
 
   // For navigation requests, use network-first strategy
+  // IMPORTANT: HashRouter uses the hash fragment for routing, so we must
+  // always serve the root index.html and let the client-side router handle it
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Cache successful responses
+          // Cache the index.html for offline support
           if (response.ok) {
             const responseClone = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
+              // Always cache as root URL for HashRouter compatibility
+              cache.put('/', responseClone);
             });
           }
           return response;
         })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match('/offline.html')))
+        .catch(() => {
+          // For HashRouter: always serve cached root/index.html
+          // The hash fragment will be preserved and handled client-side
+          return caches.match('/').then((cached) => cached || caches.match('/offline.html'));
+        })
     );
     return;
   }
