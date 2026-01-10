@@ -383,9 +383,21 @@ export function generatePrecisionEntry(
   const range = high24h - low24h;
   const pricePosition = range > 0 ? ((price - low24h) / range) * 100 : 50;
   
+  // Smart decimal precision based on price magnitude
+  const getDecimals = (p: number): number => {
+    if (p < 0.001) return 8;
+    if (p < 0.01) return 6;
+    if (p < 0.1) return 5;
+    if (p < 1) return 4;
+    if (p < 10) return 3;
+    if (p < 1000) return 2;
+    return 0;
+  };
+  const dec = getDecimals(price);
+  
   const topDown = performTopDownAnalysis(price, high24h, low24h, change);
   
-  // Fibonacci levels
+  // Fibonacci levels with proper precision
   const fib382 = low24h + range * 0.382;
   const fib618 = low24h + range * 0.618;
   const support = low24h + range * 0.1;
@@ -403,7 +415,7 @@ export function generatePrecisionEntry(
   if (topDown.tradeableDirection === 'NO_TRADE' || topDown.confluenceScore < 45) {
     return {
       timing: 'AVOID',
-      zone: `$${support.toFixed(2)} - $${resistance.toFixed(2)}`,
+      zone: `$${support.toFixed(dec)} – $${resistance.toFixed(dec)}`,
       trigger: `⚠️ NO TRADE — ${topDown.confluenceScore}% confluence (need 45%+)`,
       confirmation: topDown.reasoning[0] || 'Wait for alignment',
       invalidation: 'N/A',
@@ -416,59 +428,76 @@ export function generatePrecisionEntry(
   if (bias === 'LONG' || topDown.tradeableDirection === 'LONG') {
     if (pricePosition < 35) {
       timing = 'NOW';
-      zone = `Discount: $${support.toFixed(2)} - $${fib382.toFixed(2)}`;
+      zone = `Discount: $${support.toFixed(dec)} – $${fib382.toFixed(dec)}`;
       trigger = '🟢 BUY — Price in discount with bullish confluence';
       confirmation = `${topDown.confluenceScore}% confluence • ${topDown.overallBias} bias`;
-      invalidation = `Below $${(support * 0.99).toFixed(2)}`;
+      invalidation = `Below $${(low24h * 0.98).toFixed(dec)}`;
       structureStatus = `Bullish (${topDown.confluenceScore}% conf)`;
       movementPhase = 'Accumulation';
     } else if (pricePosition > 70) {
       timing = 'WAIT_PULLBACK';
-      zone = `Wait: $${fib382.toFixed(2)} - $${fib618.toFixed(2)}`;
+      zone = `Wait: $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
       trigger = '🟡 WAIT — Extended, wait for pullback';
       confirmation = 'Retrace to Fib 38-62% zone';
-      invalidation = `Below $${support.toFixed(2)}`;
+      invalidation = `Below $${support.toFixed(dec)}`;
       structureStatus = 'Extended';
       movementPhase = 'Wait for retracement';
     } else {
       timing = change > 1 ? 'NOW' : 'WAIT_PULLBACK';
-      zone = `Mid-range: $${fib382.toFixed(2)}`;
+      zone = `Mid-range: $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
       trigger = change > 1 ? '🟢 BUY — Momentum active' : '🟡 WAIT — Better entry at support';
       confirmation = `Bullish momentum confirmed`;
-      invalidation = `Below $${support.toFixed(2)}`;
+      invalidation = `Below $${support.toFixed(dec)}`;
       structureStatus = 'Trending';
       movementPhase = 'Impulse';
     }
   } else if (bias === 'SHORT' || topDown.tradeableDirection === 'SHORT') {
+    // Check if price is already below key support (breakdown confirmed)
+    const alreadyBelowSupport = price < support;
+    
     if (pricePosition > 65) {
+      // Price at resistance - ideal short zone
       timing = 'NOW';
-      zone = `Premium: $${fib618.toFixed(2)} - $${resistance.toFixed(2)}`;
+      zone = `Premium: $${fib618.toFixed(dec)} – $${resistance.toFixed(dec)}`;
       trigger = '🔴 SELL — Price in premium with bearish confluence';
       confirmation = `${topDown.confluenceScore}% confluence • ${topDown.overallBias} bias`;
-      invalidation = `Above $${(resistance * 1.01).toFixed(2)}`;
+      invalidation = `Above $${(high24h * 1.02).toFixed(dec)}`;
       structureStatus = `Bearish (${topDown.confluenceScore}% conf)`;
       movementPhase = 'Distribution';
     } else if (pricePosition < 30) {
-      timing = 'WAIT_PULLBACK';
-      zone = `Wait: $${fib382.toFixed(2)} - $${fib618.toFixed(2)}`;
-      trigger = '🟡 WAIT — Oversold, wait for rally';
-      confirmation = 'Bounce to Fib 38-62% zone';
-      invalidation = `Above $${resistance.toFixed(2)}`;
-      structureStatus = 'Oversold';
-      movementPhase = 'Wait for retracement';
+      if (alreadyBelowSupport && change < -2) {
+        // Price broke down and still falling - trend continuation
+        timing = 'NOW';
+        const targetLow = low24h * 0.95;
+        zone = `Breakdown: $${(price * 0.98).toFixed(dec)} – $${price.toFixed(dec)}`;
+        trigger = '🔴 SELL — Breakdown confirmed, momentum short';
+        confirmation = `Price below support, ${Math.abs(change).toFixed(1)}% sell pressure`;
+        invalidation = `Above $${fib382.toFixed(dec)} (reclaim of support)`;
+        structureStatus = 'Breakdown Active';
+        movementPhase = 'Impulse Down';
+      } else {
+        // Oversold but bearish - wait for relief rally to short
+        timing = 'WAIT_PULLBACK';
+        zone = `Wait: $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
+        trigger = '🟡 WAIT — Oversold, wait for relief rally to short';
+        confirmation = 'Bounce to Fib 38-62% zone for short entry';
+        invalidation = `Above $${resistance.toFixed(dec)} (trend reversal)`;
+        structureStatus = 'Oversold';
+        movementPhase = 'Wait for retracement';
+      }
     } else {
       timing = change < -1 ? 'NOW' : 'WAIT_PULLBACK';
-      zone = `Mid-range: $${fib618.toFixed(2)}`;
+      zone = `Mid-range: $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
       trigger = change < -1 ? '🔴 SELL — Momentum active' : '🟡 WAIT — Better entry at resistance';
       confirmation = `Bearish momentum confirmed`;
-      invalidation = `Above $${resistance.toFixed(2)}`;
+      invalidation = `Above $${resistance.toFixed(dec)}`;
       structureStatus = 'Trending';
       movementPhase = 'Impulse';
     }
   } else {
     // NEUTRAL bias — no clear direction
     timing = 'AVOID';
-    zone = `Range: $${fib382.toFixed(2)} - $${fib618.toFixed(2)}`;
+    zone = `Range: $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
     trigger = '⏸️ NO TRADE — Neutral bias, wait for direction';
     confirmation = 'Wait for breakout or breakdown';
     invalidation = 'N/A';
@@ -478,7 +507,7 @@ export function generatePrecisionEntry(
 
   return {
     timing,
-    zone: zone || `$${support.toFixed(2)} - $${resistance.toFixed(2)}`, // Fallback
+    zone: zone || `$${support.toFixed(dec)} – $${resistance.toFixed(dec)}`,
     trigger: trigger || 'Wait for setup',
     confirmation: confirmation || 'Pending',
     invalidation: invalidation || 'N/A',
