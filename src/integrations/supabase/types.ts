@@ -537,29 +537,18 @@ export type Database = {
         }
         Returns: Json
       }
-      contribute_to_global_learning:
-        | {
-            Args: {
-              p_avg_trend_accuracy: number
-              p_avg_volatility: number
-              p_bias_confidence: number
-              p_consensus_bias: string
-              p_correct_predictions: number
-              p_symbol: string
-              p_total_predictions: number
-            }
-            Returns: boolean
-          }
-        | {
-            Args: {
-              p_bias: string
-              p_symbol: string
-              p_trend_accuracy: number
-              p_volatility: number
-              p_was_correct: boolean
-            }
-            Returns: undefined
-          }
+      contribute_to_global_learning: {
+        Args: {
+          p_avg_trend_accuracy: number
+          p_avg_volatility: number
+          p_bias_confidence: number
+          p_consensus_bias: string
+          p_correct_predictions: number
+          p_symbol: string
+          p_total_predictions: number
+        }
+        Returns: boolean
+      }
       get_my_login_attempts: {
         Args: { p_limit?: number }
         Returns: {
