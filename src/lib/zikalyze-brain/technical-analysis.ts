@@ -34,68 +34,98 @@ interface TopDownAnalysis {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📊 ACCURATE TREND DETECTION — Based on actual price action
+// 📊 ACCURATE TREND DETECTION — Based on REAL 24h price data
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function determineTrend(
-  change: number,
-  pricePosition: number
+function determineTrendFromRealData(
+  currentPrice: number,
+  high24h: number,
+  low24h: number,
+  change24h: number
 ): { trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL'; strength: number; structure: 'UPTREND' | 'DOWNTREND' | 'RANGE' } {
-  // CORE RULE: Trend follows price direction
-  // - Positive change = BULLISH
-  // - Negative change = BEARISH
-  // - Near zero = NEUTRAL
+  // REAL DATA ANALYSIS:
+  // 1. change24h = actual % change over 24 hours (from API/WebSocket)
+  // 2. high24h/low24h = actual price extremes in last 24 hours
+  // 3. currentPrice = real-time price from WebSocket
   
-  const absChange = Math.abs(change);
+  const range = high24h - low24h;
+  const pricePosition = range > 0 ? ((currentPrice - low24h) / range) * 100 : 50;
   
-  // Strong trends (>3% move)
-  if (change >= 3) {
+  // Distance from 24h high/low as percentages
+  const distanceFromHigh = high24h > 0 ? ((high24h - currentPrice) / high24h) * 100 : 0;
+  const distanceFromLow = low24h > 0 ? ((currentPrice - low24h) / low24h) * 100 : 0;
+  
+  const absChange = Math.abs(change24h);
+  
+  // STRONG BULLISH: Price up >3% AND near 24h highs (top 30% of range)
+  if (change24h >= 3 && pricePosition >= 70) {
     return {
       trend: 'BULLISH',
-      strength: Math.min(95, 70 + absChange * 3),
+      strength: Math.min(98, 75 + absChange * 2 + (pricePosition - 70)),
       structure: 'UPTREND'
     };
   }
   
-  if (change <= -3) {
+  // STRONG BEARISH: Price down >3% AND near 24h lows (bottom 30% of range)
+  if (change24h <= -3 && pricePosition <= 30) {
     return {
       trend: 'BEARISH',
-      strength: Math.min(95, 70 + absChange * 3),
+      strength: Math.min(98, 75 + absChange * 2 + (30 - pricePosition)),
       structure: 'DOWNTREND'
     };
   }
   
-  // Moderate trends (1-3% move)
-  if (change >= 1) {
+  // BULLISH with pullback: Up on day but pulled back from highs
+  if (change24h >= 2 && pricePosition >= 40) {
+    const pullbackPenalty = pricePosition < 60 ? 10 : 0;
     return {
       trend: 'BULLISH',
-      strength: 55 + absChange * 8,
-      structure: pricePosition > 60 ? 'UPTREND' : 'RANGE'
+      strength: Math.max(55, 65 + absChange * 3 - pullbackPenalty),
+      structure: pricePosition >= 55 ? 'UPTREND' : 'RANGE'
     };
   }
   
-  if (change <= -1) {
+  // BEARISH with bounce: Down on day but bounced from lows
+  if (change24h <= -2 && pricePosition <= 60) {
+    const bouncePenalty = pricePosition > 40 ? 10 : 0;
     return {
       trend: 'BEARISH',
-      strength: 55 + absChange * 8,
-      structure: pricePosition < 40 ? 'DOWNTREND' : 'RANGE'
+      strength: Math.max(55, 65 + absChange * 3 - bouncePenalty),
+      structure: pricePosition <= 45 ? 'DOWNTREND' : 'RANGE'
     };
   }
   
-  // Weak/no trend (-1% to +1%)
-  // Use price position to determine lean
-  if (change > 0.3 && pricePosition > 55) {
-    return { trend: 'BULLISH', strength: 52 + change * 5, structure: 'RANGE' };
+  // MODERATE BULLISH: Positive change, price above midpoint
+  if (change24h > 0.5 && pricePosition >= 50) {
+    return {
+      trend: 'BULLISH',
+      strength: 52 + change24h * 6 + (pricePosition - 50) * 0.3,
+      structure: pricePosition >= 60 ? 'UPTREND' : 'RANGE'
+    };
   }
   
-  if (change < -0.3 && pricePosition < 45) {
-    return { trend: 'BEARISH', strength: 52 + absChange * 5, structure: 'RANGE' };
+  // MODERATE BEARISH: Negative change, price below midpoint
+  if (change24h < -0.5 && pricePosition <= 50) {
+    return {
+      trend: 'BEARISH',
+      strength: 52 + absChange * 6 + (50 - pricePosition) * 0.3,
+      structure: pricePosition <= 40 ? 'DOWNTREND' : 'RANGE'
+    };
   }
   
-  // True neutral
+  // WEAK/CONFLICTING signals — check price position for direction
+  if (pricePosition >= 60 && change24h >= 0) {
+    return { trend: 'BULLISH', strength: 50 + pricePosition * 0.2, structure: 'RANGE' };
+  }
+  
+  if (pricePosition <= 40 && change24h <= 0) {
+    return { trend: 'BEARISH', strength: 50 + (100 - pricePosition) * 0.2, structure: 'RANGE' };
+  }
+  
+  // TRUE NEUTRAL: Price in middle of range with minimal change
   return {
     trend: 'NEUTRAL',
-    strength: 45 + Math.abs(50 - pricePosition) * 0.2,
+    strength: 45 + Math.min(10, absChange * 3),
     structure: 'RANGE'
   };
 }
@@ -111,48 +141,46 @@ export function performTopDownAnalysis(
   change: number
 ): TopDownAnalysis {
   const range = high24h - low24h;
-  const pricePosition = range > 0 ? ((price - low24h) / range) * 100 : 50;
   
-  // CRITICAL: All timeframes use the SAME directional bias from actual price change
-  // Higher timeframes have lower strength multipliers (less volatile)
+  // Use REAL 24h data for all timeframe analysis
+  // All timeframes derive from actual 24h price action (no simulated multipliers)
   
-  const baseTrend = determineTrend(change, pricePosition);
+  // SINGLE SOURCE OF TRUTH: Real 24h trend from actual data
+  const baseTrend = determineTrendFromRealData(price, high24h, low24h, change);
   
-  // Weekly (weight: 5) — Most stable, follows overall direction
-  const weeklyTrend = determineTrend(change * 0.6, pricePosition);
+  // Weekly (weight: 5) — Uses full 24h context, most conservative
   const weekly: TimeframeBias = {
     timeframe: 'WEEKLY',
-    trend: weeklyTrend.trend,
-    strength: Math.max(40, weeklyTrend.strength * 0.85),
-    keyLevel: weeklyTrend.trend === 'BULLISH' ? low24h * 0.95 : high24h * 1.05,
-    structure: weeklyTrend.structure,
+    trend: baseTrend.trend,
+    strength: Math.max(40, baseTrend.strength * 0.85), // HTF = smoother
+    keyLevel: baseTrend.trend === 'BULLISH' ? low24h * 0.95 : high24h * 1.05,
+    structure: baseTrend.structure,
     weight: 5
   };
   
   // Daily (weight: 4) — Primary trend timeframe
-  const dailyTrend = determineTrend(change * 0.8, pricePosition);
   const daily: TimeframeBias = {
     timeframe: 'DAILY',
-    trend: dailyTrend.trend,
-    strength: Math.max(45, dailyTrend.strength * 0.9),
-    keyLevel: dailyTrend.trend === 'BULLISH' ? low24h * 0.97 : high24h * 1.03,
-    structure: dailyTrend.structure,
+    trend: baseTrend.trend,
+    strength: Math.max(45, baseTrend.strength * 0.92),
+    keyLevel: baseTrend.trend === 'BULLISH' ? low24h * 0.97 : high24h * 1.03,
+    structure: baseTrend.structure,
     weight: 4
   };
   
-  // 4H (weight: 3) — Swing trade timeframe
-  const h4Trend = determineTrend(change * 0.9, pricePosition);
+  // 4H (weight: 3) — Swing trade timeframe, slightly more reactive
+  const h4Trend = determineTrendFromRealData(price, high24h, low24h, change);
   const h4: TimeframeBias = {
     timeframe: '4H',
     trend: h4Trend.trend,
-    strength: Math.max(48, h4Trend.strength * 0.95),
+    strength: Math.max(48, h4Trend.strength * 0.96),
     keyLevel: h4Trend.trend === 'BULLISH' ? low24h * 0.99 : high24h * 1.01,
     structure: h4Trend.structure,
     weight: 3
   };
   
-  // 1H (weight: 2) — Intraday timeframe (uses actual change)
-  const h1Trend = determineTrend(change, pricePosition);
+  // 1H (weight: 2) — Intraday, uses actual real-time data
+  const h1Trend = determineTrendFromRealData(price, high24h, low24h, change);
   const h1: TimeframeBias = {
     timeframe: '1H',
     trend: h1Trend.trend,
@@ -162,12 +190,22 @@ export function performTopDownAnalysis(
     weight: 2
   };
   
-  // 15M (weight: 1) — Entry timeframe (most reactive)
-  const m15Trend = determineTrend(change * 1.2, pricePosition);
+  // 15M (weight: 1) — Entry timeframe, most reactive to current price
+  const pricePosition = range > 0 ? ((price - low24h) / range) * 100 : 50;
+  // 15M can diverge if price is at extremes despite 24h trend
+  let m15Trend = determineTrendFromRealData(price, high24h, low24h, change);
+  
+  // 15M override: If price at 24h highs, favor continuation; if at lows, favor reversal potential
+  if (pricePosition >= 85 && change > 0) {
+    m15Trend = { trend: 'BULLISH', strength: Math.min(98, m15Trend.strength + 5), structure: 'UPTREND' };
+  } else if (pricePosition <= 15 && change < 0) {
+    m15Trend = { trend: 'BEARISH', strength: Math.min(98, m15Trend.strength + 5), structure: 'DOWNTREND' };
+  }
+  
   const m15: TimeframeBias = {
     timeframe: '15M',
     trend: m15Trend.trend,
-    strength: Math.min(98, m15Trend.strength * 1.05),
+    strength: Math.min(98, m15Trend.strength * 1.02),
     keyLevel: m15Trend.trend === 'BULLISH' ? low24h + range * 0.1 : high24h - range * 0.1,
     structure: m15Trend.structure,
     weight: 1
