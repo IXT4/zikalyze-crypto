@@ -2,6 +2,7 @@
 // 🧠 useAILearning — Persistent AI Learning & Adaptation Hook
 // ═══════════════════════════════════════════════════════════════════════════════
 // Stores and retrieves AI learning data for continuous improvement
+// Syncs with Service Worker for offline/background learning
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -25,6 +26,7 @@ export interface LearnedPatterns {
   confidenceAdjustment: number;
   samplesCollected: number;
   learningSessions: number;
+  offlineSamples?: number;
 }
 
 export interface GlobalLearning {
@@ -54,11 +56,64 @@ const DEFAULT_PATTERNS: LearnedPatterns = {
   exchangeFlowSensitivity: 0.5,
   confidenceAdjustment: 0,
   samplesCollected: 0,
-  learningSessions: 0
+  learningSessions: 0,
+  offlineSamples: 0
 };
 
 const STORAGE_KEY = 'zikalyze_ai_learning_v1';
 const SAVE_DEBOUNCE_MS = 5000; // Save every 5 seconds max
+
+// Initialize background learning in Service Worker
+function initBackgroundLearning() {
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: 'START_BACKGROUND_LEARNING' });
+    console.log('[AI Learning] Background learning initialized in Service Worker');
+    
+    // Register for periodic background sync if available
+    navigator.serviceWorker.ready.then(registration => {
+      if ('periodicSync' in registration) {
+        (registration as any).periodicSync?.register('ai-background-learning', {
+          minInterval: 60 * 1000 // 1 minute minimum
+        }).catch((e: Error) => {
+          console.log('[AI Learning] Periodic sync not available:', e.message);
+        });
+      }
+    });
+  }
+}
+
+// Get offline learning data from Service Worker
+async function getOfflineLearning(): Promise<any[]> {
+  return new Promise((resolve) => {
+    if (!navigator.serviceWorker?.controller) {
+      resolve([]);
+      return;
+    }
+    
+    const timeout = setTimeout(() => resolve([]), 3000);
+    
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'OFFLINE_LEARNING_DATA') {
+        clearTimeout(timeout);
+        navigator.serviceWorker.removeEventListener('message', handler);
+        resolve(event.data.data || []);
+      }
+    };
+    
+    navigator.serviceWorker.addEventListener('message', handler);
+    navigator.serviceWorker.controller.postMessage({ type: 'GET_OFFLINE_LEARNING' });
+  });
+}
+
+// Sync learning data to Service Worker
+function syncToServiceWorker(symbol: string, patterns: LearnedPatterns) {
+  if (navigator.serviceWorker?.controller) {
+    navigator.serviceWorker.controller.postMessage({
+      type: 'SYNC_LEARNING',
+      data: { symbol, patterns }
+    });
+  }
+}
 
 export function useAILearning(symbol: string) {
   const [patterns, setPatterns] = useState<LearnedPatterns>(DEFAULT_PATTERNS);
@@ -75,11 +130,28 @@ export function useAILearning(symbol: string) {
     patternsRef.current = patterns;
   }, [patterns]);
 
-  // Get user ID
+  // Get user ID and initialize background learning
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id || null);
     });
+    
+    // Initialize background learning in service worker
+    initBackgroundLearning();
+    
+    // Listen for learning updates from service worker
+    const handleSWMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'LEARNING_UPDATE') {
+        console.log('[AI Learning] Received background learning update');
+        loadPatterns();
+      }
+    };
+    
+    navigator.serviceWorker?.addEventListener('message', handleSWMessage);
+    
+    return () => {
+      navigator.serviceWorker?.removeEventListener('message', handleSWMessage);
+    };
   }, []);
 
   // Load patterns on mount/symbol change
@@ -88,23 +160,53 @@ export function useAILearning(symbol: string) {
     loadGlobalLearning();
   }, [symbol, userId]);
 
-  // Load from localStorage first, then from DB
+  // Load from localStorage first, then merge offline learning, then from DB
   const loadPatterns = useCallback(async () => {
     setIsLoading(true);
+    let mergedPatterns = { ...DEFAULT_PATTERNS };
     
     // 1. Try localStorage first (fastest)
     try {
       const stored = localStorage.getItem(`${STORAGE_KEY}_${symbol}`);
       if (stored) {
         const parsed = JSON.parse(stored);
-        setPatterns({ ...DEFAULT_PATTERNS, ...parsed });
+        mergedPatterns = { ...mergedPatterns, ...parsed };
         console.log(`[AI Learning] Loaded ${symbol} from localStorage:`, parsed.samplesCollected, 'samples');
       }
     } catch (e) {
       console.warn('[AI Learning] localStorage load failed:', e);
     }
     
-    // 2. If user is logged in, load from DB (authoritative)
+    // 2. Merge offline learning from Service Worker
+    try {
+      const offlineData = await getOfflineLearning();
+      const symbolData = offlineData.find((d: any) => d.symbol === symbol);
+      
+      if (symbolData && symbolData.offlineSamples > 0) {
+        console.log(`[AI Learning] Merging ${symbolData.offlineSamples} offline samples for ${symbol}`);
+        
+        // Merge offline learning (prefer higher values, combine samples)
+        mergedPatterns = {
+          ...mergedPatterns,
+          volatility: (mergedPatterns.volatility + symbolData.volatility) / 2,
+          avgVelocity: (mergedPatterns.avgVelocity + (symbolData.avgVelocity || 0)) / 2,
+          lastBias: symbolData.lastBias || mergedPatterns.lastBias,
+          biasChanges: mergedPatterns.biasChanges + (symbolData.biasChanges || 0),
+          samplesCollected: mergedPatterns.samplesCollected + symbolData.offlineSamples,
+          offlineSamples: symbolData.offlineSamples,
+          // Merge support/resistance levels
+          supportLevels: [...new Set([...mergedPatterns.supportLevels, ...(symbolData.supportLevels || [])])].slice(-10),
+          resistanceLevels: [...new Set([...mergedPatterns.resistanceLevels, ...(symbolData.resistanceLevels || [])])].slice(-10)
+        };
+        
+        // Clear offline samples after merging
+        syncToServiceWorker(symbol, { ...mergedPatterns, offlineSamples: 0 } as LearnedPatterns);
+      }
+    } catch (e) {
+      console.warn('[AI Learning] Offline learning merge failed:', e);
+    }
+    
+    // 3. If user is logged in, load from DB (authoritative) and merge
     if (userId) {
       try {
         const { data, error } = await supabase
@@ -134,15 +236,29 @@ export function useAILearning(symbol: string) {
             samplesCollected: data.samples_collected || 0,
             learningSessions: data.learning_sessions || 0
           };
-          setPatterns(dbPatterns);
-          // Sync to localStorage
-          localStorage.setItem(`${STORAGE_KEY}_${symbol}`, JSON.stringify(dbPatterns));
-          console.log(`[AI Learning] Loaded ${symbol} from DB:`, dbPatterns.samplesCollected, 'samples');
+          
+          // Merge DB data with local + offline (combine samples)
+          mergedPatterns = {
+            ...dbPatterns,
+            samplesCollected: Math.max(dbPatterns.samplesCollected, mergedPatterns.samplesCollected),
+            biasChanges: Math.max(dbPatterns.biasChanges, mergedPatterns.biasChanges),
+            volatility: (dbPatterns.volatility + mergedPatterns.volatility) / 2,
+            supportLevels: [...new Set([...dbPatterns.supportLevels, ...mergedPatterns.supportLevels])].slice(-10),
+            resistanceLevels: [...new Set([...dbPatterns.resistanceLevels, ...mergedPatterns.resistanceLevels])].slice(-10)
+          };
+          
+          console.log(`[AI Learning] Merged ${symbol} from DB:`, mergedPatterns.samplesCollected, 'total samples');
         }
       } catch (e) {
         console.warn('[AI Learning] DB load failed:', e);
       }
     }
+    
+    setPatterns(mergedPatterns);
+    // Sync merged data to localStorage
+    localStorage.setItem(`${STORAGE_KEY}_${symbol}`, JSON.stringify(mergedPatterns));
+    // Sync to service worker
+    syncToServiceWorker(symbol, mergedPatterns);
     
     setIsLoading(false);
   }, [symbol, userId]);
@@ -194,7 +310,10 @@ export function useAILearning(symbol: string) {
         console.warn('[AI Learning] localStorage save failed:', e);
       }
       
-      // 2. Save to DB if user is logged in
+      // 2. Sync to Service Worker for background persistence
+      syncToServiceWorker(symbol, newPatterns);
+      
+      // 3. Save to DB if user is logged in
       if (userId) {
         try {
           const dbData = {
