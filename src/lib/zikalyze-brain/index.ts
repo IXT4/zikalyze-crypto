@@ -119,9 +119,14 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   const t = getTranslations(language);
   const trendEmoji = change >= 0 ? '📈' : '📉';
 
-  // Use provided on-chain data or estimate
+  // Use provided on-chain data (real) or estimate (fallback)
+  // Mark source clearly for transparency
+  const hasRealOnChain = !!onChainData && onChainData.source !== 'derived-deterministic';
   const onChainMetrics: OnChainMetrics = onChainData || estimateOnChainMetrics(crypto, price, change);
   const etfFlowData: ETFFlowData = estimateETFFlowData(price, change);
+  
+  // Log data source for debugging
+  console.log(`[AI Brain] On-chain source: ${hasRealOnChain ? 'REAL-TIME' : 'DERIVED'}, Live data: ${isLiveData}`);
 
   // Get macro catalysts with countdown
   const macroCatalysts = getUpcomingMacroCatalysts();
@@ -209,7 +214,7 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 🎯 UNIFIED CONFIDENCE — Blend raw signal + confluence + macro
+  // 🎯 FINAL BIAS — Technical confluence is PRIMARY, fundamentals adjust confidence
   // ═══════════════════════════════════════════════════════════════════════════
   
   // Macro volatility penalty — reduce confidence if high-impact event imminent
@@ -223,36 +228,40 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   });
   
   if (imminentCatalyst) {
-    macroPenalty = 15; // Major event imminent — reduce confidence
+    macroPenalty = 15;
   }
   
-  // Base confluence from top-down
-  const confluenceBase = topDownAnalysis.confluenceScore;
-  
-  // Override bias if top-down conflicts
-  let bias: 'LONG' | 'SHORT' | 'NEUTRAL' = rawBias;
+  // TECHNICAL ANALYSIS IS PRIMARY — Use top-down direction as the source of truth
+  // Fundamentals (rawBias) only affect confidence, NOT direction
+  let bias: 'LONG' | 'SHORT' | 'NEUTRAL';
   let confidence: number;
   
-  if (topDownAnalysis.tradeableDirection === 'NO_TRADE') {
-    bias = 'NEUTRAL';
-    // Confidence = low since no trade signal
-    confidence = Math.max(40, Math.min(55, confluenceBase * 0.6)) - macroPenalty;
-  } else if (topDownAnalysis.tradeableDirection === 'LONG' && rawBias === 'SHORT') {
-    bias = 'NEUTRAL';
-    confidence = Math.max(40, 50 - macroPenalty);
-  } else if (topDownAnalysis.tradeableDirection === 'SHORT' && rawBias === 'LONG') {
-    bias = 'NEUTRAL';
-    confidence = Math.max(40, 50 - macroPenalty);
-  } else if (topDownAnalysis.tradeableDirection === 'LONG' && rawBias === 'NEUTRAL') {
+  // Map technical direction to bias
+  if (topDownAnalysis.tradeableDirection === 'LONG') {
     bias = 'LONG';
-    // Blend confluence with raw signal
-    confidence = Math.max(50, Math.min(78, (confluenceBase + rawConfidence) / 2)) - macroPenalty;
-  } else if (topDownAnalysis.tradeableDirection === 'SHORT' && rawBias === 'NEUTRAL') {
+  } else if (topDownAnalysis.tradeableDirection === 'SHORT') {
     bias = 'SHORT';
-    confidence = Math.max(50, Math.min(78, (confluenceBase + rawConfidence) / 2)) - macroPenalty;
   } else {
-    // Aligned direction — STRONG signal, blend confluence + raw confidence
-    confidence = Math.max(52, Math.min(88, (confluenceBase * 0.6 + rawConfidence * 0.4))) - macroPenalty;
+    bias = 'NEUTRAL';
+  }
+  
+  // Calculate confidence based on confluence + fundamental alignment
+  const confluenceBase = topDownAnalysis.confluenceScore;
+  const fundamentalAlignment = (rawBias === 'LONG' && bias === 'LONG') || (rawBias === 'SHORT' && bias === 'SHORT');
+  const fundamentalConflict = (rawBias === 'LONG' && bias === 'SHORT') || (rawBias === 'SHORT' && bias === 'LONG');
+  
+  if (bias === 'NEUTRAL') {
+    // No trade signal — low confidence
+    confidence = Math.max(40, Math.min(55, confluenceBase * 0.6)) - macroPenalty;
+  } else if (fundamentalAlignment) {
+    // Technical + fundamental agree — STRONG signal
+    confidence = Math.max(60, Math.min(88, (confluenceBase * 0.7 + rawConfidence * 0.3))) - macroPenalty;
+  } else if (fundamentalConflict) {
+    // Technical vs fundamental conflict — reduce confidence
+    confidence = Math.max(45, Math.min(65, confluenceBase * 0.6)) - macroPenalty;
+  } else {
+    // Technical clear, fundamental neutral — moderate confidence
+    confidence = Math.max(52, Math.min(78, confluenceBase * 0.8)) - macroPenalty;
   }
   
   // Clamp final confidence
@@ -311,13 +320,19 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   // Build KEY insights — BIAS-ALIGNED only (no contradictions)
   const keyInsights: string[] = [];
   
-  // Add the definitive bias summary FIRST — aligned with final bias
+  // Add the definitive bias summary FIRST — aligned with final bias and showing alignment status
+  const alignmentNote = fundamentalAlignment 
+    ? 'Technical + fundamental aligned' 
+    : fundamentalConflict 
+      ? 'Technical leads (fundamental diverges)'
+      : 'Technical signal';
+  
   if (bias === 'LONG') {
-    keyInsights.push(`🎯 BULLISH — Technical + fundamental confluence`);
+    keyInsights.push(`🎯 BULLISH — ${alignmentNote}`);
   } else if (bias === 'SHORT') {
-    keyInsights.push(`🎯 BEARISH — Technical + fundamental confluence`);
+    keyInsights.push(`🎯 BEARISH — ${alignmentNote}`);
   } else {
-    keyInsights.push(`⏸️ NEUTRAL — Mixed signals, wait for clarity`);
+    keyInsights.push(`⏸️ NEUTRAL — No clear technical direction`);
   }
   
   // Filter insights to match current bias direction — STRICT filtering
@@ -360,30 +375,42 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   // Add filtered directional insights (limit to 2 to avoid clutter)
   directionalInsights.slice(0, 2).forEach(i => keyInsights.push(i));
 
-// On-chain flow insight with source
-  if (onChainMetrics.exchangeNetFlow.trend === 'OUTFLOW' && onChainMetrics.exchangeNetFlow.magnitude !== 'LOW') {
-    keyInsights.push(`🔗 Exchange OUTFLOW (${onChainMetrics.exchangeNetFlow.magnitude}) → Accumulation signal [via CryptoQuant]`);
-  } else if (onChainMetrics.exchangeNetFlow.trend === 'INFLOW' && onChainMetrics.exchangeNetFlow.magnitude !== 'LOW') {
-    keyInsights.push(`🔗 Exchange INFLOW (${onChainMetrics.exchangeNetFlow.magnitude}) → Distribution pressure [via CryptoQuant]`);
+  // On-chain insights — ONLY show if they align with bias direction
+  // For BEARISH bias, show distribution/selling signals; for BULLISH, show accumulation
+  if (bias === 'SHORT') {
+    if (onChainMetrics.exchangeNetFlow.trend === 'INFLOW' && onChainMetrics.exchangeNetFlow.magnitude !== 'LOW') {
+      keyInsights.push(`🔗 Exchange INFLOW (${onChainMetrics.exchangeNetFlow.magnitude}) → Distribution pressure`);
+    }
+    if (onChainMetrics.whaleActivity.netFlow.includes('SELL') || onChainMetrics.whaleActivity.netFlow.includes('DISTRIBUT')) {
+      keyInsights.push(`🐋 Whales: ${onChainMetrics.whaleActivity.netFlow}`);
+    }
+  } else if (bias === 'LONG') {
+    if (onChainMetrics.exchangeNetFlow.trend === 'OUTFLOW' && onChainMetrics.exchangeNetFlow.magnitude !== 'LOW') {
+      keyInsights.push(`🔗 Exchange OUTFLOW (${onChainMetrics.exchangeNetFlow.magnitude}) → Accumulation signal`);
+    }
+    if (onChainMetrics.whaleActivity.netFlow.includes('BUY') || onChainMetrics.whaleActivity.netFlow.includes('ACCUMULAT')) {
+      keyInsights.push(`🐋 Whales: ${onChainMetrics.whaleActivity.netFlow}`);
+    }
+    if (onChainMetrics.longTermHolders.accumulating && onChainMetrics.longTermHolders.change7d > 0.5) {
+      keyInsights.push(`💎 Long-term holders +${onChainMetrics.longTermHolders.change7d.toFixed(1)}% (7d)`);
+    }
+  } else {
+    // NEUTRAL — show balanced/mixed signals
+    if (onChainMetrics.whaleActivity.netFlow === 'BALANCED') {
+      keyInsights.push(`🐋 Whales: Balanced activity`);
+    }
   }
 
-  // Whale insight with source
-  if (onChainMetrics.whaleActivity.netFlow !== 'BALANCED') {
-    keyInsights.push(`🐋 Whales: ${onChainMetrics.whaleActivity.netFlow} [via Glassnode 24h]`);
-  }
-
-  // LTH insight
-  if (onChainMetrics.longTermHolders.accumulating && onChainMetrics.longTermHolders.change7d > 0.5) {
-    keyInsights.push(`💎 Long-term holders +${onChainMetrics.longTermHolders.change7d.toFixed(1)}% (7d)`);
-  }
-
-  // ETF insight
+  // ETF insight — only show if it supports the bias
   if (Math.abs(etfFlowData.btcNetFlow24h) > 50) {
     const flowDir = etfFlowData.btcNetFlow24h > 0 ? '+' : '';
-    keyInsights.push(`💼 ETF Flow: ${flowDir}$${etfFlowData.btcNetFlow24h}M (${etfFlowData.institutionalSentiment})`);
+    const isETFBullish = etfFlowData.btcNetFlow24h > 0;
+    if ((bias === 'LONG' && isETFBullish) || (bias === 'SHORT' && !isETFBullish) || bias === 'NEUTRAL') {
+      keyInsights.push(`💼 ETF Flow: ${flowDir}$${etfFlowData.btcNetFlow24h}M (${etfFlowData.institutionalSentiment})`);
+    }
   }
 
-  // Divergence insight
+  // Divergence insight — always show as it's informational
   if (institutionalVsRetail.divergence) {
     keyInsights.push(`⚡ ${institutionalVsRetail.divergenceNote}`);
   }
@@ -500,7 +527,7 @@ ${scenarios.slice(0, 2).map(s => `${s.condition}
   📋 ${s.action}`).join('\n\n')}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 Zikalyze AI v11.0 • 🔴 LIVE
+🧠 Zikalyze AI v11.0 • ${isLiveData ? '🟢 REAL-TIME DATA' : '⚪ DERIVED DATA'}
 `;
 
   return {
