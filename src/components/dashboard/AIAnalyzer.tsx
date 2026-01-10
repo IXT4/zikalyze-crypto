@@ -8,9 +8,10 @@ import { useAnalysisHistory, AnalysisRecord } from "@/hooks/useAnalysisHistory";
 import { useLiveMarketData } from "@/hooks/useLiveMarketData";
 import { useAnalysisCache } from "@/hooks/useAnalysisCache";
 import { useOnChainData } from "@/hooks/useOnChainData";
-import { runClientSideAnalysis } from "@/lib/zikalyze-brain";
+import { runClientSideAnalysis, AnalysisResult } from "@/lib/zikalyze-brain";
 import { format } from "date-fns";
 import { Progress } from "@/components/ui/progress";
+import AISummaryCard from "./AISummaryCard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +48,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const [copied, setCopied] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [selectedHistory, setSelectedHistory] = useState<AnalysisRecord | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const charIndexRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef(0);
@@ -268,7 +270,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       setProcessingStep(processingSteps.length - 1);
       markFreshData();
 
-      // Typewriter effect for the analysis
+      // Store result for summary card and typewriter effect
+      setAnalysisResult(result);
       setFullAnalysis(result.analysis);
       setHasAnalyzed(true);
 
@@ -499,6 +502,19 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
             </div>
           </div>
         </div>
+
+        {/* Quick Summary Card - Shows after analysis */}
+        {analysisResult && hasAnalyzed && (
+          <AISummaryCard
+            bias={analysisResult.bias}
+            confidence={analysisResult.confidence}
+            entryZone={analysisResult.precisionEntry.zone}
+            timing={analysisResult.precisionEntry.timing}
+            successProbability={Math.min(88, 40 + Math.round(analysisResult.confidence * 0.3) + (analysisResult.precisionEntry.timing === 'NOW' ? 12 : 5))}
+            crypto={crypto}
+            isVisible={true}
+          />
+        )}
 
         {/* Offline/Cache Status Banner */}
         {(isOffline || isUsingCache) && (
