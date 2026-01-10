@@ -17,13 +17,18 @@ import {
 interface Top100CryptoListProps {
   onSelect: (symbol: string) => void;
   selected: string;
+  prices?: CryptoPrice[];
+  loading?: boolean;
 }
 
 // Track price changes for flash animations
 type PriceFlash = "up" | "down" | null;
 
-const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
-  const { prices, loading: pricesLoading } = useCryptoPrices();
+const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: propLoading }: Top100CryptoListProps) => {
+  // Use prices from props if provided, otherwise fetch own (for standalone usage)
+  const ownPrices = useCryptoPrices();
+  const prices = propPrices ?? ownPrices.prices;
+  const pricesLoading = propLoading ?? ownPrices.loading;
   const { alerts, loading: alertsLoading, createAlert, removeAlert, checkAlerts } = usePriceAlerts();
   const { formatPrice, symbol: currencySymbol } = useCurrency();
   const { t } = useTranslation();
