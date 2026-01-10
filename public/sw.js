@@ -391,7 +391,7 @@ self.addEventListener('push', (event) => {
     console.error('Error parsing push data:', e);
   }
 
-  // Professional notification options
+  // Professional notification options - auto-dismiss after confirmation
   const options = {
     body: data.body,
     icon: '/pwa-192x192.png',
@@ -404,7 +404,7 @@ self.addEventListener('push', (event) => {
         : [200],
     tag: `${data.type || 'alert'}-${data.symbol || 'general'}`,
     renotify: data.urgency === 'critical',
-    requireInteraction: data.urgency === 'critical' || data.urgency === 'high',
+    requireInteraction: false, // Auto-dismiss all notifications
     silent: data.urgency === 'low',
     timestamp: Date.now(),
     data: {

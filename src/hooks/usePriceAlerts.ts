@@ -231,28 +231,31 @@ export const usePriceAlerts = () => {
             alert.condition
           );
 
-          // Show browser notification
+          // Show browser notification (auto-dismisses after 8 seconds)
           if (
             "Notification" in window &&
             notificationPermission.current === "granted"
           ) {
             try {
-              new Notification(`🎯 ${alert.symbol} Price Alert Triggered!`, {
+              const notification = new Notification(`🎯 ${alert.symbol} Price Alert Triggered!`, {
                 body: `${alert.symbol} is now ${alert.condition === "above" ? "above" : "below"} $${alert.target_price.toLocaleString()} • Current: $${currentPrice.toLocaleString()}`,
                 icon: "/pwa-192x192.png",
                 tag: alert.id,
-                requireInteraction: true,
+                requireInteraction: false, // Auto-dismiss
               });
+              
+              // Auto-close notification after 8 seconds
+              setTimeout(() => notification.close(), 8000);
             } catch (err) {
               console.error("Error showing notification:", err);
             }
           }
 
-          // Show toast notification
+          // Show toast notification (auto-dismisses after 6 seconds)
           toast.success(
             `🎯 ${alert.symbol} hit $${currentPrice.toLocaleString()} (target: ${alert.condition} $${alert.target_price.toLocaleString()})`,
             {
-              duration: 10000,
+              duration: 6000,
             }
           );
 
