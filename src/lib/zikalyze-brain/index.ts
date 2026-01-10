@@ -311,29 +311,54 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   // Build KEY insights — BIAS-ALIGNED only (no contradictions)
   const keyInsights: string[] = [];
   
-  // Filter insights to match current bias direction
+  // Add the definitive bias summary FIRST — aligned with final bias
+  if (bias === 'LONG') {
+    keyInsights.push(`🎯 BULLISH — Technical + fundamental confluence`);
+  } else if (bias === 'SHORT') {
+    keyInsights.push(`🎯 BEARISH — Technical + fundamental confluence`);
+  } else {
+    keyInsights.push(`⏸️ NEUTRAL — Mixed signals, wait for clarity`);
+  }
+  
+  // Filter insights to match current bias direction — STRICT filtering
   const directionalInsights = insights.filter(i => {
+    // Always skip the first summary insight from calculateFinalBias (we replaced it)
+    if (i.includes('🎯') || i.includes('📊 Lean') || i.includes('⏸️ NEUTRAL')) {
+      return false;
+    }
     // Remove neutral/mixed signals
     if (i.includes('NEUTRAL') || i.includes('No clear') || i.includes('Mixed') || i.includes('Sideways')) {
       return false;
     }
-    // For BEARISH bias, exclude bullish-sounding insights
+    // For BEARISH/SHORT bias, exclude ALL bullish-sounding insights
     if (bias === 'SHORT') {
-      if (i.includes('buy zone') || i.includes('Optimal buy') || i.includes('Deep discount') || 
-          i.includes('accumulation') || i.includes('bullish') || i.includes('uptrend')) {
+      const bullishTerms = [
+        'buy zone', 'Optimal buy', 'Deep discount', 'accumulation', 'Accumulation',
+        'bullish', 'BULLISH', 'uptrend', 'Uptrend', 'Contrarian BUY', 'buying',
+        'confirms bulls', 'Strong uptrend', 'Bullish momentum', 'Mild bullish',
+        'Institutions buying', 'Exchange outflows'
+      ];
+      if (bullishTerms.some(term => i.includes(term))) {
         return false;
       }
     }
-    // For BULLISH bias, exclude bearish-sounding insights
+    // For BULLISH/LONG bias, exclude ALL bearish-sounding insights
     if (bias === 'LONG') {
-      if (i.includes('sell zone') || i.includes('Optimal sell') || i.includes('Premium') ||
-          i.includes('distribution') || i.includes('bearish') || i.includes('downtrend')) {
+      const bearishTerms = [
+        'sell zone', 'Optimal sell', 'Premium zone', 'distribution', 'Distribution',
+        'bearish', 'BEARISH', 'downtrend', 'Downtrend', 'Contrarian SELL', 'selling',
+        'confirms bears', 'Strong downtrend', 'Bearish momentum', 'Mild bearish',
+        'Institutions selling', 'Exchange inflows', 'Caution'
+      ];
+      if (bearishTerms.some(term => i.includes(term))) {
         return false;
       }
     }
     return true;
   });
-  directionalInsights.slice(0, 3).forEach(i => keyInsights.push(i));
+  
+  // Add filtered directional insights (limit to 2 to avoid clutter)
+  directionalInsights.slice(0, 2).forEach(i => keyInsights.push(i));
 
 // On-chain flow insight with source
   if (onChainMetrics.exchangeNetFlow.trend === 'OUTFLOW' && onChainMetrics.exchangeNetFlow.magnitude !== 'LOW') {
