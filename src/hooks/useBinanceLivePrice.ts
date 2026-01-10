@@ -9,141 +9,19 @@ interface LivePriceData {
   lastUpdate: number;
   isLive: boolean;
   isConnecting: boolean;
+  source: string;
 }
 
-// CoinGecko ID mapping for CoinCap (supports ALL cryptos)
-const COINCAP_ID_MAP: Record<string, string> = {
-  'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'XRP': 'ripple', 
-  'BNB': 'binance-coin', 'ADA': 'cardano', 'DOGE': 'dogecoin', 'AVAX': 'avalanche-2',
-  'DOT': 'polkadot', 'MATIC': 'polygon', 'LINK': 'chainlink', 'LTC': 'litecoin',
-  'BCH': 'bitcoin-cash', 'ATOM': 'cosmos', 'NEAR': 'near-protocol', 'FTM': 'fantom',
-  'ARB': 'arbitrum', 'KAS': 'kaspa', 'SUI': 'sui', 'APT': 'aptos',
-  'OP': 'optimism', 'INJ': 'injective-protocol', 'TIA': 'celestia', 'RNDR': 'render-token',
-  'FET': 'fetch-ai', 'WLD': 'worldcoin-wld', 'JUP': 'jupiter-exchange-solana', 'JTO': 'jito-governance-token',
-  'HBAR': 'hedera-hashgraph', 'VET': 'vechain', 'ALGO': 'algorand', 'TON': 'the-open-network',
-  'ICP': 'internet-computer', 'FIL': 'filecoin', 'GRT': 'the-graph', 'AAVE': 'aave',
-  'MKR': 'maker', 'UNI': 'uniswap', 'SHIB': 'shiba-inu', 'TRX': 'tron',
-  'XLM': 'stellar', 'ETC': 'ethereum-classic', 'XMR': 'monero', 'CRO': 'crypto-com-chain',
-  'PEPE': 'pepe', 'IMX': 'immutable-x', 'RUNE': 'thorchain', 'SEI': 'sei-network',
-  'STX': 'stacks', 'KAVA': 'kava', 'MINA': 'mina-protocol', 'CFX': 'conflux-token',
-  'EGLD': 'elrond-erd-2', 'ROSE': 'oasis-network', 'ZEC': 'zcash', 'THETA': 'theta-token',
-  'QNT': 'quant-network', 'NEO': 'neo', 'FLOW': 'flow', 'KCS': 'kucoin-shares',
-  'XTZ': 'tezos', 'EOS': 'eos', 'IOTA': 'iota', 'XEC': 'ecash'
-};
+// Supabase project URL for WebSocket proxy
+const SUPABASE_PROJECT_ID = "eqtzrftndyninwasclfd";
+const WS_PROXY_URL = `wss://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/crypto-ws-proxy`;
 
-// Multi-exchange WebSocket configuration - CoinCap FIRST (supports ALL cryptos)
-const EXCHANGES = {
-  coincap: {
-    name: "CoinCap",
-    endpoints: ["wss://ws.coincap.io/prices?assets="],
-    getStreamUrl: (symbol: string, endpoint: string) => {
-      const coinCapId = COINCAP_ID_MAP[symbol.toUpperCase()] || symbol.toLowerCase();
-      return `${endpoint}${coinCapId}`;
-    },
-    parseMessage: (data: any, symbol: string) => {
-      const coinCapId = COINCAP_ID_MAP[symbol.toUpperCase()] || symbol.toLowerCase();
-      if (data[coinCapId]) {
-        const price = parseFloat(data[coinCapId]);
-        if (!isNaN(price) && price > 0) {
-          return {
-            price,
-            change24h: null, // CoinCap WebSocket only provides price
-            high24h: null,
-            low24h: null,
-            volume: null,
-          };
-        }
-      }
-      return null;
-    },
-  },
-  binance: {
-    name: "Binance",
-    endpoints: [
-      "wss://stream.binance.com:9443/ws",
-      "wss://stream.binance.com:443/ws",
-    ],
-    getStreamUrl: (symbol: string, endpoint: string) => 
-      `${endpoint}/${symbol.toLowerCase()}usdt@ticker`,
-    parseMessage: (data: any) => {
-      if (data.c) {
-        return {
-          price: parseFloat(data.c),
-          change24h: parseFloat(data.P),
-          high24h: parseFloat(data.h),
-          low24h: parseFloat(data.l),
-          volume: parseFloat(data.q),
-        };
-      }
-      return null;
-    },
-  },
-  coinbase: {
-    name: "Coinbase",
-    endpoints: ["wss://ws-feed.exchange.coinbase.com"],
-    getStreamUrl: (_symbol: string, endpoint: string) => endpoint,
-    getSubscribeMessage: (symbol: string) => ({
-      type: "subscribe",
-      product_ids: [`${symbol.toUpperCase()}-USD`],
-      channels: ["ticker"],
-    }),
-    parseMessage: (data: any, symbol: string) => {
-      if (data.type === "ticker" && data.product_id === `${symbol.toUpperCase()}-USD`) {
-        const price = parseFloat(data.price);
-        const open24h = parseFloat(data.open_24h);
-        const change24h = open24h ? ((price - open24h) / open24h) * 100 : 0;
-        return {
-          price,
-          change24h,
-          high24h: parseFloat(data.high_24h) || 0,
-          low24h: parseFloat(data.low_24h) || 0,
-          volume: parseFloat(data.volume_24h) * price || 0,
-        };
-      }
-      return null;
-    },
-  },
-  kraken: {
-    name: "Kraken",
-    endpoints: ["wss://ws.kraken.com"],
-    getStreamUrl: (_symbol: string, endpoint: string) => endpoint,
-    getSubscribeMessage: (symbol: string) => {
-      const krakenSymbol = symbol.toUpperCase() === "BTC" ? "XBT" : symbol.toUpperCase();
-      return {
-        event: "subscribe",
-        pair: [`${krakenSymbol}/USD`],
-        subscription: { name: "ticker" },
-      };
-    },
-    parseMessage: (data: any, symbol: string) => {
-      if (Array.isArray(data) && data.length >= 4 && data[2] === "ticker") {
-        const ticker = data[1];
-        if (ticker && ticker.c) {
-          const price = parseFloat(ticker.c[0]);
-          const open = parseFloat(ticker.o[1]);
-          const change24h = open ? ((price - open) / open) * 100 : 0;
-          return {
-            price,
-            change24h,
-            high24h: parseFloat(ticker.h[1]) || 0,
-            low24h: parseFloat(ticker.l[1]) || 0,
-            volume: parseFloat(ticker.v[1]) * price || 0,
-          };
-        }
-      }
-      return null;
-    },
-  },
-};
+// Binance direct WebSocket as fallback
+const BINANCE_WS_URL = "wss://stream.binance.com:9443/ws";
 
-type ExchangeKey = keyof typeof EXCHANGES;
-// CoinCap first - it supports ALL cryptocurrencies
-const EXCHANGE_ORDER: ExchangeKey[] = ["coincap", "binance", "coinbase", "kraken"];
-
-const MAX_ATTEMPTS_PER_EXCHANGE = 2;
-const CONNECTION_TIMEOUT = 8000;
-const RECONNECT_DELAY = 1000;
-const FALLBACK_RETRY_DELAY = 20000;
+const CONNECTION_TIMEOUT = 10000;
+const RECONNECT_DELAY = 2000;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fallbackChange?: number) => {
   const [liveData, setLiveData] = useState<LivePriceData>({
@@ -155,18 +33,15 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
     lastUpdate: Date.now(),
     isLive: false,
     isConnecting: true,
+    source: 'initializing',
   });
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
-  
-  // Exchange rotation state
-  const currentExchangeIndexRef = useRef(0);
-  const currentEndpointIndexRef = useRef(0);
-  const attemptsOnCurrentExchangeRef = useRef(0);
-  const hasConnectedRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+  const useProxyRef = useRef(true); // Try proxy first
 
   const cleanup = useCallback(() => {
     if (connectionTimeoutRef.current) {
@@ -191,38 +66,35 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
     }
   }, []);
 
-  const moveToNextExchange = useCallback(() => {
-    attemptsOnCurrentExchangeRef.current = 0;
-    currentEndpointIndexRef.current = 0;
-    currentExchangeIndexRef.current++;
-    
-    if (currentExchangeIndexRef.current >= EXCHANGE_ORDER.length) {
-      // All exchanges exhausted - reset and try again later
-      currentExchangeIndexRef.current = 0;
-      return false;
-    }
-    return true;
-  }, []);
-
   const connect = useCallback(() => {
     if (!isMountedRef.current) return;
     
     cleanup();
 
-    const exchangeKey = EXCHANGE_ORDER[currentExchangeIndexRef.current];
-    const exchange = EXCHANGES[exchangeKey];
-    const endpointIndex = currentEndpointIndexRef.current % exchange.endpoints.length;
-    const endpoint = exchange.endpoints[endpointIndex];
+    // Build WebSocket URL
+    let wsUrl: string;
+    let sourceName: string;
     
-    const streamUrl = exchange.getStreamUrl(symbol, endpoint);
+    if (useProxyRef.current) {
+      // Use server-side proxy (bypasses CORS, more reliable)
+      wsUrl = `${WS_PROXY_URL}?symbol=${symbol.toUpperCase()}`;
+      sourceName = 'Binance (Proxy)';
+    } else {
+      // Direct Binance connection (fallback)
+      wsUrl = `${BINANCE_WS_URL}/${symbol.toLowerCase()}usdt@ticker`;
+      sourceName = 'Binance (Direct)';
+    }
+
+    console.log(`[LivePrice] Connecting to ${sourceName} for ${symbol}`);
 
     try {
-      const ws = new WebSocket(streamUrl);
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       // Connection timeout
       connectionTimeoutRef.current = setTimeout(() => {
         if (ws.readyState !== WebSocket.OPEN) {
+          console.log(`[LivePrice] Connection timeout for ${symbol}`);
           ws.close();
         }
       }, CONNECTION_TIMEOUT);
@@ -234,20 +106,14 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
           clearTimeout(connectionTimeoutRef.current);
         }
 
-        // Send subscribe message if needed (Coinbase, Kraken)
-        if ('getSubscribeMessage' in exchange) {
-          const subscribeMsg = exchange.getSubscribeMessage(symbol);
-          ws.send(JSON.stringify(subscribeMsg));
-        }
-
-        // Reset state on successful connection
-        attemptsOnCurrentExchangeRef.current = 0;
-        hasConnectedRef.current = true;
+        console.log(`[LivePrice] Connected to ${sourceName} for ${symbol}`);
+        reconnectAttemptsRef.current = 0;
         
         setLiveData(prev => ({ 
           ...prev, 
           isLive: true, 
           isConnecting: false,
+          source: sourceName,
         }));
       };
 
@@ -256,18 +122,41 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
         
         try {
           const data = JSON.parse(event.data);
-          const parsed = exchange.parseMessage(data, symbol);
           
-          if (parsed) {
+          // Handle proxy format
+          if (data.type === 'ticker' && data.source === 'binance') {
             setLiveData({
-              price: parsed.price,
-              change24h: parsed.change24h,
-              high24h: parsed.high24h,
-              low24h: parsed.low24h,
-              volume: parsed.volume,
+              price: data.price,
+              change24h: data.change24h,
+              high24h: data.high24h,
+              low24h: data.low24h,
+              volume: data.volume,
               lastUpdate: Date.now(),
               isLive: true,
               isConnecting: false,
+              source: 'Binance (Proxy)',
+            });
+            return;
+          }
+          
+          // Handle proxy connection confirmation
+          if (data.type === 'connected') {
+            console.log(`[LivePrice] Proxy confirmed connection for ${symbol}`);
+            return;
+          }
+          
+          // Handle direct Binance format
+          if (data.c) {
+            setLiveData({
+              price: parseFloat(data.c),
+              change24h: parseFloat(data.P),
+              high24h: parseFloat(data.h),
+              low24h: parseFloat(data.l),
+              volume: parseFloat(data.q),
+              lastUpdate: Date.now(),
+              isLive: true,
+              isConnecting: false,
+              source: 'Binance (Direct)',
             });
           }
         } catch {
@@ -275,8 +164,8 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
         }
       };
 
-      ws.onerror = () => {
-        // Error handled in onclose
+      ws.onerror = (error) => {
+        console.log(`[LivePrice] WebSocket error for ${symbol}:`, error);
       };
 
       ws.onclose = () => {
@@ -285,58 +174,55 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
         }
         if (!isMountedRef.current) return;
         
-        attemptsOnCurrentExchangeRef.current++;
+        console.log(`[LivePrice] Disconnected from ${sourceName} for ${symbol}`);
+        reconnectAttemptsRef.current++;
         
-        // Try next endpoint on same exchange
-        if (attemptsOnCurrentExchangeRef.current < MAX_ATTEMPTS_PER_EXCHANGE) {
-          currentEndpointIndexRef.current++;
-          
-          setLiveData(prev => ({ 
-            ...prev, 
-            isLive: false, 
-            isConnecting: true,
-          }));
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (isMountedRef.current) connect();
-          }, RECONNECT_DELAY);
-          return;
+        // Switch between proxy and direct on failures
+        if (reconnectAttemptsRef.current >= 2 && useProxyRef.current) {
+          console.log(`[LivePrice] Switching to direct Binance connection`);
+          useProxyRef.current = false;
+          reconnectAttemptsRef.current = 0;
+        } else if (reconnectAttemptsRef.current >= 2 && !useProxyRef.current) {
+          // Both failed, try proxy again
+          useProxyRef.current = true;
+          reconnectAttemptsRef.current = 0;
         }
         
-        // Move to next exchange
-        if (moveToNextExchange()) {
+        if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
           setLiveData(prev => ({ 
             ...prev, 
             isLive: false, 
             isConnecting: true,
           }));
           
+          const delay = RECONNECT_DELAY * Math.min(reconnectAttemptsRef.current + 1, 3);
           reconnectTimeoutRef.current = setTimeout(() => {
             if (isMountedRef.current) connect();
-          }, RECONNECT_DELAY);
+          }, delay);
         } else {
-          // All exchanges exhausted - use cached data
+          // Max attempts reached - use fallback data
           setLiveData(prev => ({ 
             ...prev, 
             isLive: false, 
             isConnecting: false,
             price: fallbackPrice || prev.price,
             change24h: fallbackChange || prev.change24h,
+            source: 'Cached',
           }));
           
-          // Retry from first exchange after delay
+          // Retry after longer delay
           reconnectTimeoutRef.current = setTimeout(() => {
             if (isMountedRef.current) {
-              currentExchangeIndexRef.current = 0;
-              currentEndpointIndexRef.current = 0;
-              attemptsOnCurrentExchangeRef.current = 0;
+              reconnectAttemptsRef.current = 0;
+              useProxyRef.current = true;
               connect();
             }
-          }, FALLBACK_RETRY_DELAY);
+          }, 30000);
         }
       };
-    } catch {
-      // Failed to create WebSocket - silently retry
+    } catch (e) {
+      console.log(`[LivePrice] Failed to create WebSocket:`, e);
+      
       setLiveData(prev => ({ 
         ...prev, 
         isLive: false, 
@@ -347,14 +233,12 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
         if (isMountedRef.current) connect();
       }, RECONNECT_DELAY);
     }
-  }, [symbol, fallbackPrice, fallbackChange, cleanup, moveToNextExchange]);
+  }, [symbol, fallbackPrice, fallbackChange, cleanup]);
 
   useEffect(() => {
     isMountedRef.current = true;
-    currentExchangeIndexRef.current = 0;
-    currentEndpointIndexRef.current = 0;
-    attemptsOnCurrentExchangeRef.current = 0;
-    hasConnectedRef.current = false;
+    reconnectAttemptsRef.current = 0;
+    useProxyRef.current = true;
     
     // Small delay before connecting
     const initTimeout = setTimeout(() => {
