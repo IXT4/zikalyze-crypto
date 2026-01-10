@@ -239,13 +239,25 @@ const getExchangeSymbol = (sym: string, exchange: Exchange, coinGeckoId?: string
 // CoinCap - free, supports all cryptos, no rate limits
 const fetchCoinCapData = async (symbol: string, coinCapId: string): Promise<ChartDataPoint[] | null> => {
   const backoffKey = getBackoffKey(symbol, "coincap");
-  if (!canRetry(backoffKey)) return null;
+  if (!canRetry(backoffKey)) {
+    console.log(`[CoinCap] ${symbol} in backoff, skipping`);
+    return null;
+  }
   try {
     // First get current price and 24h volume
+    console.log(`[CoinCap] Fetching ${symbol} with ID: ${coinCapId}`);
     const assetResponse = await fetchWithTimeout(`https://api.coincap.io/v2/assets/${coinCapId}`);
-    if (!assetResponse.ok) { recordFailure(backoffKey); return null; }
+    if (!assetResponse.ok) { 
+      console.log(`[CoinCap] ${symbol} asset fetch failed: ${assetResponse.status}`);
+      recordFailure(backoffKey); 
+      return null; 
+    }
     const assetData = await assetResponse.json();
-    if (!assetData.data) { recordFailure(backoffKey); return null; }
+    if (!assetData.data) { 
+      console.log(`[CoinCap] ${symbol} no asset data`);
+      recordFailure(backoffKey); 
+      return null; 
+    }
 
     const volume24h = parseFloat(assetData.data.volumeUsd24Hr) || 0;
 
@@ -255,11 +267,20 @@ const fetchCoinCapData = async (symbol: string, coinCapId: string): Promise<Char
     const historyResponse = await fetchWithTimeout(
       `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=m1&start=${start}&end=${end}`
     );
-    if (!historyResponse.ok) { recordFailure(backoffKey); return null; }
+    if (!historyResponse.ok) { 
+      console.log(`[CoinCap] ${symbol} history fetch failed: ${historyResponse.status}`);
+      recordFailure(backoffKey); 
+      return null; 
+    }
     const historyData = await historyResponse.json();
-    if (!historyData.data || historyData.data.length === 0) { recordFailure(backoffKey); return null; }
+    if (!historyData.data || historyData.data.length === 0) { 
+      console.log(`[CoinCap] ${symbol} no history data`);
+      recordFailure(backoffKey); 
+      return null; 
+    }
 
     recordSuccess(backoffKey);
+    console.log(`[CoinCap] ${symbol} success! Got ${historyData.data.length} data points`);
     const points = historyData.data.slice(-20);
     const volumePerPoint = volume24h / (24 * 60); // Distribute 24h volume across minutes
 
@@ -273,7 +294,11 @@ const fetchCoinCapData = async (symbol: string, coinCapId: string): Promise<Char
         positive: price >= prevPrice,
       };
     });
-  } catch { recordFailure(backoffKey); return null; }
+  } catch (err) { 
+    console.log(`[CoinCap] ${symbol} error:`, err);
+    recordFailure(backoffKey); 
+    return null; 
+  }
 };
 
 const fetchBinanceData = async (symbol: string, binanceSymbol: string): Promise<ChartDataPoint[] | null> => {
