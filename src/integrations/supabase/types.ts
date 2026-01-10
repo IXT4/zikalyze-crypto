@@ -352,7 +352,6 @@ export type Database = {
           created_at: string
           digest_frequency: string
           digest_time: number
-          email: string
           id: string
           include_market_summary: boolean
           include_price_alerts: boolean
@@ -366,7 +365,6 @@ export type Database = {
           created_at?: string
           digest_frequency?: string
           digest_time?: number
-          email: string
           id?: string
           include_market_summary?: boolean
           include_price_alerts?: boolean
@@ -380,7 +378,6 @@ export type Database = {
           created_at?: string
           digest_frequency?: string
           digest_time?: number
-          email?: string
           id?: string
           include_market_summary?: boolean
           include_price_alerts?: boolean
