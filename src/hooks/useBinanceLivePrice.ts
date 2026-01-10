@@ -97,12 +97,27 @@ const EXCHANGES = {
 type ExchangeKey = keyof typeof EXCHANGES;
 const EXCHANGE_ORDER: ExchangeKey[] = ["binance", "coinbase", "kraken"];
 
+// Symbols that are NOT available on major exchanges (use fallback price only)
+const EXCHANGE_UNSUPPORTED_SYMBOLS = [
+  "KAS", // Kaspa - not on Binance/Coinbase/Kraken
+  "TIA", // Celestia - limited availability
+  "SEI", // Sei Network - limited availability
+  "STX", // Stacks - limited availability
+  "MINA", // Mina Protocol - limited availability
+  "CFX", // Conflux - limited availability
+  "ROSE", // Oasis - limited availability
+  "KAVA", // Kava - limited availability
+];
+
 const MAX_ATTEMPTS_PER_EXCHANGE = 3;
 const CONNECTION_TIMEOUT = 10000;
 const RECONNECT_DELAY = 1500;
 const FALLBACK_RETRY_DELAY = 30000;
 
 export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fallbackChange?: number) => {
+  const symbolUpper = symbol.toUpperCase();
+  const isUnsupported = EXCHANGE_UNSUPPORTED_SYMBOLS.includes(symbolUpper);
+  
   const [liveData, setLiveData] = useState<LivePriceData>({
     price: fallbackPrice || 0,
     change24h: fallbackChange || 0,
@@ -111,7 +126,7 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
     volume: 0,
     lastUpdate: Date.now(),
     isLive: false,
-    isConnecting: true,
+    isConnecting: !isUnsupported, // Don't show connecting for unsupported symbols
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -124,6 +139,7 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
   const currentEndpointIndexRef = useRef(0);
   const attemptsOnCurrentExchangeRef = useRef(0);
   const hasConnectedRef = useRef(false);
+  const isUnsupportedRef = useRef(isUnsupported);
 
   const cleanup = useCallback(() => {
     if (connectionTimeoutRef.current) {
@@ -163,6 +179,18 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
 
   const connect = useCallback(() => {
     if (!isMountedRef.current) return;
+    
+    // Skip WebSocket connection for unsupported symbols - use fallback data only
+    if (isUnsupportedRef.current) {
+      setLiveData(prev => ({ 
+        ...prev, 
+        price: fallbackPrice || prev.price,
+        change24h: fallbackChange || prev.change24h,
+        isLive: false, 
+        isConnecting: false,
+      }));
+      return;
+    }
     
     cleanup();
 
@@ -308,6 +336,7 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
 
   useEffect(() => {
     isMountedRef.current = true;
+    isUnsupportedRef.current = EXCHANGE_UNSUPPORTED_SYMBOLS.includes(symbol.toUpperCase());
     currentExchangeIndexRef.current = 0;
     currentEndpointIndexRef.current = 0;
     attemptsOnCurrentExchangeRef.current = 0;
@@ -325,7 +354,7 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
       clearTimeout(initTimeout);
       cleanup();
     };
-  }, [connect, cleanup]);
+  }, [symbol, connect, cleanup]);
 
   // Update with fallback data when props change and not live
   useEffect(() => {
