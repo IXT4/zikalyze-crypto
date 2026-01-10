@@ -107,6 +107,38 @@ export interface ChartTrendInput {
   source: string;
 }
 
+// Multi-timeframe analysis data
+export interface TimeframeAnalysisInput {
+  timeframe: '15m' | '1h' | '4h' | '1d';
+  trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  trendStrength: number;
+  ema9: number;
+  ema21: number;
+  rsi: number;
+  support: number;
+  resistance: number;
+  volumeTrend: 'INCREASING' | 'DECREASING' | 'STABLE';
+  higherHighs: boolean;
+  higherLows: boolean;
+  lowerHighs: boolean;
+  lowerLows: boolean;
+  isLive: boolean;
+}
+
+export interface MultiTimeframeInput {
+  '15m': TimeframeAnalysisInput | null;
+  '1h': TimeframeAnalysisInput | null;
+  '4h': TimeframeAnalysisInput | null;
+  '1d': TimeframeAnalysisInput | null;
+  confluence: {
+    overallBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    strength: number;
+    alignedTimeframes: number;
+    conflictingTimeframes: number;
+    recommendation: string;
+  };
+}
+
 export interface AnalysisInput {
   crypto: string;
   price: number;
@@ -124,6 +156,7 @@ export interface AnalysisInput {
     social?: { overall?: { score: number } };
   };
   chartTrendData?: ChartTrendInput; // Real-time 24h chart data for accurate trend analysis
+  multiTimeframeData?: MultiTimeframeInput; // Multi-timeframe analysis (15m, 1h, 4h, 1d)
 }
 
 export interface AnalysisResult {

@@ -6,7 +6,7 @@
 // ⚡ No random values — 100% deterministic and reproducible
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { MarketStructure, PrecisionEntry, ChartTrendInput } from './types';
+import { MarketStructure, PrecisionEntry, ChartTrendInput, MultiTimeframeInput } from './types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🔍 TYPES FOR TOP-DOWN ANALYSIS
@@ -139,13 +139,172 @@ export function performTopDownAnalysis(
   high24h: number,
   low24h: number,
   change: number,
-  chartData?: ChartTrendInput // Real 24h chart data when available
+  chartData?: ChartTrendInput, // Real 24h chart data when available
+  multiTfData?: MultiTimeframeInput // Multi-timeframe analysis (15m, 1h, 4h, 1d)
 ): TopDownAnalysis {
   const range = high24h - low24h;
   const pricePosition = range > 0 ? ((price - low24h) / range) * 100 : 50;
   
   // ═══════════════════════════════════════════════════════════════════════════
-  // 📊 USE REAL CHART DATA when available for accurate trend detection
+  // 📊 USE MULTI-TIMEFRAME DATA when available — Most accurate analysis
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  if (multiTfData && multiTfData['1h']) {
+    console.log(`[TopDown] Using REAL multi-timeframe data: 15m=${multiTfData['15m']?.trend || 'N/A'}, 1h=${multiTfData['1h']?.trend || 'N/A'}, 4h=${multiTfData['4h']?.trend || 'N/A'}, 1d=${multiTfData['1d']?.trend || 'N/A'}`);
+    
+    // Build timeframes from REAL data
+    const weekly: TimeframeBias = multiTfData['1d'] ? {
+      timeframe: 'WEEKLY',
+      trend: multiTfData['1d'].trend,
+      strength: multiTfData['1d'].trendStrength * 0.9,
+      keyLevel: multiTfData['1d'].support,
+      structure: multiTfData['1d'].higherHighs && multiTfData['1d'].higherLows ? 'UPTREND' :
+                 multiTfData['1d'].lowerHighs && multiTfData['1d'].lowerLows ? 'DOWNTREND' : 'RANGE',
+      weight: 5
+    } : {
+      timeframe: 'WEEKLY',
+      trend: 'NEUTRAL',
+      strength: 50,
+      keyLevel: low24h,
+      structure: 'RANGE',
+      weight: 5
+    };
+    
+    const daily: TimeframeBias = multiTfData['1d'] ? {
+      timeframe: 'DAILY',
+      trend: multiTfData['1d'].trend,
+      strength: multiTfData['1d'].trendStrength,
+      keyLevel: multiTfData['1d'].trend === 'BULLISH' ? multiTfData['1d'].support : multiTfData['1d'].resistance,
+      structure: multiTfData['1d'].higherHighs && multiTfData['1d'].higherLows ? 'UPTREND' :
+                 multiTfData['1d'].lowerHighs && multiTfData['1d'].lowerLows ? 'DOWNTREND' : 'RANGE',
+      weight: 4
+    } : {
+      timeframe: 'DAILY',
+      trend: 'NEUTRAL',
+      strength: 50,
+      keyLevel: price,
+      structure: 'RANGE',
+      weight: 4
+    };
+    
+    const h4: TimeframeBias = multiTfData['4h'] ? {
+      timeframe: '4H',
+      trend: multiTfData['4h'].trend,
+      strength: multiTfData['4h'].trendStrength,
+      keyLevel: multiTfData['4h'].trend === 'BULLISH' ? multiTfData['4h'].support : multiTfData['4h'].resistance,
+      structure: multiTfData['4h'].higherHighs && multiTfData['4h'].higherLows ? 'UPTREND' :
+                 multiTfData['4h'].lowerHighs && multiTfData['4h'].lowerLows ? 'DOWNTREND' : 'RANGE',
+      weight: 3
+    } : {
+      timeframe: '4H',
+      trend: 'NEUTRAL',
+      strength: 50,
+      keyLevel: price,
+      structure: 'RANGE',
+      weight: 3
+    };
+    
+    const h1: TimeframeBias = multiTfData['1h'] ? {
+      timeframe: '1H',
+      trend: multiTfData['1h'].trend,
+      strength: multiTfData['1h'].trendStrength,
+      keyLevel: multiTfData['1h'].trend === 'BULLISH' ? multiTfData['1h'].support : multiTfData['1h'].resistance,
+      structure: multiTfData['1h'].higherHighs && multiTfData['1h'].higherLows ? 'UPTREND' :
+                 multiTfData['1h'].lowerHighs && multiTfData['1h'].lowerLows ? 'DOWNTREND' : 'RANGE',
+      weight: 2
+    } : {
+      timeframe: '1H',
+      trend: 'NEUTRAL',
+      strength: 50,
+      keyLevel: price,
+      structure: 'RANGE',
+      weight: 2
+    };
+    
+    const m15: TimeframeBias = multiTfData['15m'] ? {
+      timeframe: '15M',
+      trend: multiTfData['15m'].trend,
+      strength: multiTfData['15m'].trendStrength,
+      keyLevel: multiTfData['15m'].trend === 'BULLISH' ? multiTfData['15m'].support : multiTfData['15m'].resistance,
+      structure: multiTfData['15m'].higherHighs && multiTfData['15m'].higherLows ? 'UPTREND' :
+                 multiTfData['15m'].lowerHighs && multiTfData['15m'].lowerLows ? 'DOWNTREND' : 'RANGE',
+      weight: 1
+    } : {
+      timeframe: '15M',
+      trend: 'NEUTRAL',
+      strength: 50,
+      keyLevel: price,
+      structure: 'RANGE',
+      weight: 1
+    };
+    
+    // Calculate confluence from REAL multi-TF data
+    const allTimeframes = [weekly, daily, h4, h1, m15];
+    const totalWeight = allTimeframes.reduce((sum, tf) => sum + tf.weight, 0);
+    
+    let bullishWeight = 0;
+    let bearishWeight = 0;
+    
+    allTimeframes.forEach(tf => {
+      if (tf.trend === 'BULLISH') {
+        bullishWeight += tf.weight * (tf.strength / 100);
+      } else if (tf.trend === 'BEARISH') {
+        bearishWeight += tf.weight * (tf.strength / 100);
+      }
+    });
+    
+    const dominantWeight = Math.max(bullishWeight, bearishWeight);
+    const confluenceScore = Math.round((dominantWeight / totalWeight) * 100);
+    
+    // Determine bias from REAL multi-TF confluence
+    const bullishTFs = allTimeframes.filter(tf => tf.trend === 'BULLISH').length;
+    const bearishTFs = allTimeframes.filter(tf => tf.trend === 'BEARISH').length;
+    const htfBullish = (weekly.trend === 'BULLISH' || daily.trend === 'BULLISH') && h4.trend !== 'BEARISH';
+    const htfBearish = (weekly.trend === 'BEARISH' || daily.trend === 'BEARISH') && h4.trend !== 'BULLISH';
+    
+    let overallBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    let tradeableDirection: 'LONG' | 'SHORT' | 'NO_TRADE';
+    const reasoning: string[] = [];
+    
+    if (multiTfData.confluence.alignedTimeframes >= 3) {
+      overallBias = multiTfData.confluence.overallBias;
+      tradeableDirection = overallBias === 'BULLISH' ? 'LONG' : overallBias === 'BEARISH' ? 'SHORT' : 'NO_TRADE';
+      reasoning.push(`🎯 ${multiTfData.confluence.alignedTimeframes}/4 TFs ALIGNED — ${multiTfData.confluence.recommendation}`);
+    } else if (htfBullish && bullishTFs >= 3) {
+      overallBias = 'BULLISH';
+      tradeableDirection = 'LONG';
+      reasoning.push(`📈 HTF + ${bullishTFs}/5 TFs BULLISH — LONG entries valid`);
+    } else if (htfBearish && bearishTFs >= 3) {
+      overallBias = 'BEARISH';
+      tradeableDirection = 'SHORT';
+      reasoning.push(`📉 HTF + ${bearishTFs}/5 TFs BEARISH — SHORT entries valid`);
+    } else if (bullishTFs >= 3) {
+      overallBias = 'BULLISH';
+      tradeableDirection = bullishTFs >= 4 ? 'LONG' : 'NO_TRADE';
+      reasoning.push(`📊 ${bullishTFs}/5 TFs BULLISH — ${tradeableDirection === 'LONG' ? 'Strong' : 'Moderate'} confluence`);
+    } else if (bearishTFs >= 3) {
+      overallBias = 'BEARISH';
+      tradeableDirection = bearishTFs >= 4 ? 'SHORT' : 'NO_TRADE';
+      reasoning.push(`📊 ${bearishTFs}/5 TFs BEARISH — ${tradeableDirection === 'SHORT' ? 'Strong' : 'Moderate'} confluence`);
+    } else {
+      overallBias = 'NEUTRAL';
+      tradeableDirection = 'NO_TRADE';
+      reasoning.push(`⏸️ Mixed TFs (${bullishTFs}B/${bearishTFs}S) — Wait for alignment`);
+    }
+    
+    reasoning.push(`📊 Multi-TF Confluence: ${confluenceScore}%`);
+    
+    return {
+      weekly, daily, h4, h1, m15,
+      overallBias,
+      confluenceScore: Math.max(confluenceScore, multiTfData.confluence.strength),
+      tradeableDirection,
+      reasoning
+    };
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📊 FALLBACK: Use chart data or price-based analysis
   // ═══════════════════════════════════════════════════════════════════════════
   
   let baseTrend: { trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL'; strength: number; structure: 'UPTREND' | 'DOWNTREND' | 'RANGE' };

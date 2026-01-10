@@ -112,7 +112,8 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     dataSource = 'cached',
     onChainData,
     sentimentData,
-    chartTrendData // NEW: Real-time 24h chart data
+    chartTrendData, // Real-time 24h chart data
+    multiTimeframeData // Multi-timeframe analysis (15m, 1h, 4h, 1d)
   } = input;
 
   const t = getTranslations(language);
@@ -177,12 +178,24 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     change
   });
 
-  // Top-down multi-timeframe analysis FIRST — now with REAL chart data
-  const topDownAnalysis = performTopDownAnalysis(price, high24h, low24h, change, chartTrendData);
+  // Top-down multi-timeframe analysis — now with REAL chart data AND multi-TF
+  const topDownAnalysis = performTopDownAnalysis(price, high24h, low24h, change, chartTrendData, multiTimeframeData);
   
   // Log chart data usage for debugging
   if (chartTrendData?.isLive) {
     console.log(`[AI Brain] Using REAL 24h chart data: ${chartTrendData.candles.length} candles, trend=${chartTrendData.trend24h}, EMA9=${chartTrendData.ema9.toFixed(2)}, RSI=${chartTrendData.rsi.toFixed(1)}`);
+  }
+  
+  // Log multi-timeframe usage
+  if (multiTimeframeData) {
+    const tfKeys = ['15m', '1h', '4h', '1d'] as const;
+    const tfSummary = tfKeys
+      .map(tf => {
+        const tfData = multiTimeframeData[tf];
+        return `${tf}=${tfData?.trend || 'N/A'}`;
+      })
+      .join(', ');
+    console.log(`[AI Brain] Multi-TF confluence: ${multiTimeframeData.confluence.overallBias} (${multiTimeframeData.confluence.strength.toFixed(0)}%), ${tfSummary}`);
   }
 
   // Calculate multi-factor bias
