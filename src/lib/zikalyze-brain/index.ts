@@ -70,6 +70,8 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     low24h = price * 0.98,
     volume = 0,
     language = 'en',
+    isLiveData = false,
+    dataSource = 'cached',
     onChainData,
     sentimentData
   } = input;
@@ -220,9 +222,14 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   const getTrendIcon = (trend: string) => trend === 'BULLISH' ? '🟢' : trend === 'BEARISH' ? '🔴' : '⚪';
   const htfVisual = `${getTrendIcon(topDownAnalysis.weekly.trend)}W ${getTrendIcon(topDownAnalysis.daily.trend)}D ${getTrendIcon(topDownAnalysis.h4.trend)}4H ${getTrendIcon(topDownAnalysis.h1.trend)}1H ${getTrendIcon(topDownAnalysis.m15.trend)}15M`;
 
+  // Data source indicator
+  const dataStatusEmoji = isLiveData ? '🔴' : '⏸️';
+  const dataStatusLabel = isLiveData ? 'REAL-TIME' : 'CACHED';
+
   // Build final analysis text with improved TOP-DOWN section
   const analysis = `📊 ${crypto.toUpperCase()} ${t.quickAnalysis}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${dataStatusEmoji} Data: ${dataStatusLabel} ${dataSource ? `(${dataSource})` : ''}
 
 💰 ${t.price}: $${price.toLocaleString()} ${trendEmoji} ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
 📈 ${t.range24h}: $${low24h.toLocaleString()} - $${high24h.toLocaleString()}

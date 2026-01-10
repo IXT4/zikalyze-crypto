@@ -91,6 +91,8 @@ export interface AnalysisInput {
   volume?: number;
   marketCap?: number;
   language?: string;
+  isLiveData?: boolean; // True if using real-time WebSocket data
+  dataSource?: string;  // e.g., "price+on-chain+sentiment"
   onChainData?: OnChainMetrics;
   sentimentData?: {
     fearGreed?: { value: number; label: string };
