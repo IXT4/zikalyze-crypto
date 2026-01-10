@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BarChart3, Layers } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BarChart3, Layers, Radio, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ interface AIAnalyzerProps {
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crypto-analyze`;
 const CHARS_PER_FRAME = 12; // Much faster rendering
 const FRAME_INTERVAL = 8; // 120fps smooth
+const STREAMING_INTERVAL = 2000; // Re-process every 2 seconds when streaming
 
 const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap }: AIAnalyzerProps) => {
   const { t, i18n } = useTranslation();
@@ -54,6 +55,14 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  
+  // Streaming state
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamUpdateCount, setStreamUpdateCount] = useState(0);
+  const [priceHistory, setPriceHistory] = useState<{ price: number; timestamp: number }[]>([]);
+  const streamingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const priceHistoryRef = useRef<{ price: number; timestamp: number }[]>([]);
+  
   const charIndexRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef(0);
@@ -363,7 +372,191 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     }
   }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, liveData.onChain, liveData.sentiment, useCachedAnalysis, getCacheAge, cacheAnalysis, markFreshData, onChainMetrics]);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 STREAMING MODE — Real-time continuous analysis
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  const processStreamingUpdate = useCallback(() => {
+    const now = Date.now();
+    
+    // Add to price history
+    priceHistoryRef.current = [
+      ...priceHistoryRef.current.slice(-59),
+      { price: currentPrice, timestamp: now }
+    ];
+    setPriceHistory([...priceHistoryRef.current]);
+    
+    // Calculate real-time metrics from price history
+    const history = priceHistoryRef.current;
+    const recentPrices = history.slice(-10).map(p => p.price);
+    const avgRecentPrice = recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length;
+    const priceVelocity = history.length >= 2 
+      ? (history[history.length - 1].price - history[history.length - 2].price) / 
+        ((history[history.length - 1].timestamp - history[history.length - 2].timestamp) / 1000)
+      : 0;
+    
+    // Determine real-time micro-trend
+    const microTrend = priceVelocity > 0.1 ? 'ACCELERATING ↑' :
+                       priceVelocity < -0.1 ? 'ACCELERATING ↓' :
+                       currentPrice > avgRecentPrice ? 'DRIFTING ↑' :
+                       currentPrice < avgRecentPrice ? 'DRIFTING ↓' : 'CONSOLIDATING ↔';
+
+    // Build adapted on-chain data
+    const adaptedOnChainData = onChainMetrics ? {
+      exchangeNetFlow: onChainMetrics.exchangeNetFlow,
+      whaleActivity: onChainMetrics.whaleActivity,
+      longTermHolders: { 
+        accumulating: onChainMetrics.activeAddresses.trend === 'INCREASING', 
+        change7d: onChainMetrics.activeAddresses.change24h * 7, 
+        sentiment: onChainMetrics.activeAddresses.trend === 'INCREASING' ? 'BULLISH' : 'NEUTRAL' 
+      },
+      shortTermHolders: { behavior: 'NEUTRAL', profitLoss: 0 },
+      activeAddresses: onChainMetrics.activeAddresses,
+      transactionVolume: onChainMetrics.transactionVolume,
+      mempoolData: {
+        unconfirmedTxs: onChainMetrics.mempoolData.unconfirmedTxs,
+        mempoolSize: onChainMetrics.mempoolData.unconfirmedTxs * 250,
+        avgFeeRate: onChainMetrics.mempoolData.avgFeeRate
+      },
+      hashRate: onChainMetrics.hashRate,
+      blockHeight: onChainMetrics.blockHeight,
+      difficulty: onChainMetrics.difficulty,
+      source: onChainMetrics.source
+    } : undefined;
+
+    // Build multi-timeframe input
+    const adaptedMultiTfData: MultiTimeframeInput | undefined = multiTfData && !multiTfData.isLoading ? {
+      '15m': multiTfData['15m'] ? {
+        timeframe: '15m', trend: multiTfData['15m'].trend, trendStrength: multiTfData['15m'].trendStrength,
+        ema9: multiTfData['15m'].ema9, ema21: multiTfData['15m'].ema21, rsi: multiTfData['15m'].rsi,
+        support: multiTfData['15m'].support, resistance: multiTfData['15m'].resistance,
+        volumeTrend: multiTfData['15m'].volumeTrend, higherHighs: multiTfData['15m'].higherHighs,
+        higherLows: multiTfData['15m'].higherLows, lowerHighs: multiTfData['15m'].lowerHighs,
+        lowerLows: multiTfData['15m'].lowerLows, isLive: multiTfData['15m'].isLive
+      } : null,
+      '1h': multiTfData['1h'] ? {
+        timeframe: '1h', trend: multiTfData['1h'].trend, trendStrength: multiTfData['1h'].trendStrength,
+        ema9: multiTfData['1h'].ema9, ema21: multiTfData['1h'].ema21, rsi: multiTfData['1h'].rsi,
+        support: multiTfData['1h'].support, resistance: multiTfData['1h'].resistance,
+        volumeTrend: multiTfData['1h'].volumeTrend, higherHighs: multiTfData['1h'].higherHighs,
+        higherLows: multiTfData['1h'].higherLows, lowerHighs: multiTfData['1h'].lowerHighs,
+        lowerLows: multiTfData['1h'].lowerLows, isLive: multiTfData['1h'].isLive
+      } : null,
+      '4h': multiTfData['4h'] ? {
+        timeframe: '4h', trend: multiTfData['4h'].trend, trendStrength: multiTfData['4h'].trendStrength,
+        ema9: multiTfData['4h'].ema9, ema21: multiTfData['4h'].ema21, rsi: multiTfData['4h'].rsi,
+        support: multiTfData['4h'].support, resistance: multiTfData['4h'].resistance,
+        volumeTrend: multiTfData['4h'].volumeTrend, higherHighs: multiTfData['4h'].higherHighs,
+        higherLows: multiTfData['4h'].higherLows, lowerHighs: multiTfData['4h'].lowerHighs,
+        lowerLows: multiTfData['4h'].lowerLows, isLive: multiTfData['4h'].isLive
+      } : null,
+      '1d': multiTfData['1d'] ? {
+        timeframe: '1d', trend: multiTfData['1d'].trend, trendStrength: multiTfData['1d'].trendStrength,
+        ema9: multiTfData['1d'].ema9, ema21: multiTfData['1d'].ema21, rsi: multiTfData['1d'].rsi,
+        support: multiTfData['1d'].support, resistance: multiTfData['1d'].resistance,
+        volumeTrend: multiTfData['1d'].volumeTrend, higherHighs: multiTfData['1d'].higherHighs,
+        higherLows: multiTfData['1d'].higherLows, lowerHighs: multiTfData['1d'].lowerHighs,
+        lowerLows: multiTfData['1d'].lowerLows, isLive: multiTfData['1d'].isLive
+      } : null,
+      confluence: multiTfData.confluence
+    } : undefined;
+    
+    // Run full analysis
+    const result = runClientSideAnalysis({
+      crypto,
+      price: currentPrice,
+      change: currentChange,
+      high24h: currentHigh,
+      low24h: currentLow,
+      volume: currentVolume,
+      marketCap,
+      language: currentLanguage,
+      isLiveData: true,
+      dataSource: `STREAMING (${streamUpdateCount + 1} updates)`,
+      onChainData: adaptedOnChainData,
+      sentimentData: liveData.sentiment ? {
+        fearGreed: { value: liveData.sentiment.fearGreedValue, label: liveData.sentiment.fearGreedLabel },
+        social: liveData.sentiment.sentimentScore !== undefined ? { overall: { score: liveData.sentiment.sentimentScore } } : undefined
+      } : undefined,
+      chartTrendData: chartTrendData ? {
+        candles: chartTrendData.candles, trend24h: chartTrendData.trend24h, trendStrength: chartTrendData.trendStrength,
+        higherHighs: chartTrendData.higherHighs, higherLows: chartTrendData.higherLows,
+        lowerHighs: chartTrendData.lowerHighs, lowerLows: chartTrendData.lowerLows,
+        ema9: chartTrendData.ema9, ema21: chartTrendData.ema21, rsi: chartTrendData.rsi,
+        volumeTrend: chartTrendData.volumeTrend, priceVelocity: chartTrendData.priceVelocity,
+        isLive: chartTrendData.isLive, source: chartTrendData.source
+      } : undefined,
+      multiTimeframeData: adaptedMultiTfData
+    });
+    
+    // Build streaming header
+    const streamHeader = `┌────────────────────────────────────────────────────┐
+│  🔴 LIVE STREAMING ANALYSIS                        │
+│  Updates: ${(streamUpdateCount + 1).toString().padStart(4)} │ Points: ${history.length.toString().padStart(3)} │ ${new Date().toLocaleTimeString()}      │
+└────────────────────────────────────────────────────┘
+
+⚡ MICRO-TREND: ${microTrend}
+📊 Velocity: ${priceVelocity >= 0 ? '+' : ''}${priceVelocity.toFixed(6)}/sec
+📈 Recent Avg: $${avgRecentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+${priceVelocity > 0 ? '🟢' : priceVelocity < 0 ? '🔴' : '⚪'} Momentum: ${Math.abs(priceVelocity * 100).toFixed(4)}%/100s
+
+`;
+
+    const fullText = streamHeader + result.analysis;
+    
+    setAnalysisResult(result);
+    setFullAnalysis(fullText);
+    setDisplayedText(fullText); // Instant update for streaming
+    charIndexRef.current = fullText.length;
+    setHasAnalyzed(true);
+    setStreamUpdateCount(prev => prev + 1);
+    
+    console.log(`[Streaming] Update #${streamUpdateCount + 1}: $${currentPrice}, velocity=${priceVelocity.toFixed(6)}`);
+  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, liveData.sentiment, onChainMetrics, chartTrendData, multiTfData, streamUpdateCount]);
+
+  const startStreaming = useCallback(() => {
+    if (isStreaming) return;
+    
+    console.log('[Streaming] Starting real-time analysis stream...');
+    setIsStreaming(true);
+    setStreamUpdateCount(0);
+    priceHistoryRef.current = [];
+    setPriceHistory([]);
+    
+    // Initial update
+    processStreamingUpdate();
+    
+    // Set up interval
+    streamingIntervalRef.current = setInterval(() => {
+      processStreamingUpdate();
+    }, STREAMING_INTERVAL);
+    
+    toast.success('🔴 Streaming analysis started - Live updates every 2s');
+  }, [isStreaming, processStreamingUpdate]);
+
+  const stopStreaming = useCallback(() => {
+    console.log('[Streaming] Stopping stream...');
+    setIsStreaming(false);
+    
+    if (streamingIntervalRef.current) {
+      clearInterval(streamingIntervalRef.current);
+      streamingIntervalRef.current = null;
+    }
+    
+    toast.info('Streaming stopped');
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (streamingIntervalRef.current) {
+        clearInterval(streamingIntervalRef.current);
+      }
+    };
+  }, []);
+
   const handleSelectHistory = (record: AnalysisRecord) => {
+    stopStreaming(); // Stop streaming when viewing history
     setSelectedHistory(record);
     setDisplayedText(record.analysis_text);
     setFullAnalysis(record.analysis_text);
@@ -374,6 +567,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   };
 
   const handleClearAnalysis = async () => {
+    stopStreaming();
     setSelectedHistory(null);
     setDisplayedText("");
     setFullAnalysis("");
@@ -431,16 +625,30 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           <div className="flex items-center gap-3">
             <div className={cn(
               "flex h-10 w-10 items-center justify-center rounded-xl transition-all",
+              isStreaming ? "bg-destructive/30 animate-pulse" :
               isAnalyzing ? "bg-primary/30 animate-pulse" : "bg-primary/20"
             )}>
-              <Brain className={cn("h-5 w-5 text-primary", isAnalyzing && "animate-spin")} />
+              {isStreaming ? (
+                <Radio className="h-5 w-5 text-destructive animate-pulse" />
+              ) : (
+                <Brain className={cn("h-5 w-5 text-primary", isAnalyzing && "animate-spin")} />
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">v11.0</span>
-                {/* Offline/Live/Cache Indicator */}
-                {isOffline ? (
+                {/* Streaming Indicator */}
+                {isStreaming ? (
+                  <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-destructive/20 text-destructive animate-pulse">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
+                    </span>
+                    <span>STREAMING</span>
+                    <span className="ml-1 px-1 py-0.5 rounded bg-destructive/30 text-[9px]">{streamUpdateCount}</span>
+                  </div>
+                ) : isOffline ? (
                   <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-destructive/20 text-destructive">
                     <WifiOff className="h-3 w-3" />
                     <span>OFFLINE</span>
@@ -818,31 +1026,105 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           </div>
         )}
 
-        {/* Analyze Button */}
-        <Button
-          onClick={runAnalysis}
-          disabled={isAnalyzing || (isOffline && !hasCache)}
-          className={cn(
-            "w-full h-11 mb-4 font-semibold",
-            isAnalyzing ? "bg-primary/50" : 
-            isOffline ? (hasCache ? "bg-gradient-to-r from-warning to-warning/80" : "bg-muted") :
-            "bg-gradient-to-r from-primary to-chart-cyan shadow-lg shadow-primary/20"
-          )}
-        >
-          {isAnalyzing ? (
-            <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Analyzing {crypto}...</>
-          ) : isOffline ? (
-            hasCache ? (
-              <><Database className="h-4 w-4 mr-2" />View Cached Analysis</>
+        {/* Analyze Buttons - Single Shot + Streaming */}
+        <div className="flex gap-2 mb-4">
+          {/* Single Analysis Button */}
+          <Button
+            onClick={() => {
+              stopStreaming();
+              runAnalysis();
+            }}
+            disabled={isAnalyzing || isStreaming || (isOffline && !hasCache)}
+            className={cn(
+              "flex-1 h-11 font-semibold",
+              isAnalyzing ? "bg-primary/50" : 
+              isOffline ? (hasCache ? "bg-gradient-to-r from-warning to-warning/80" : "bg-muted") :
+              "bg-gradient-to-r from-primary to-chart-cyan shadow-lg shadow-primary/20"
+            )}
+          >
+            {isAnalyzing ? (
+              <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Analyzing...</>
+            ) : isOffline ? (
+              hasCache ? (
+                <><Database className="h-4 w-4 mr-2" />Cached</>
+              ) : (
+                <><WifiOff className="h-4 w-4 mr-2" />Offline</>
+              )
+            ) : hasAnalyzed && !isStreaming ? (
+              <><RefreshCw className="h-4 w-4 mr-2" />Re-Analyze</>
             ) : (
-              <><WifiOff className="h-4 w-4 mr-2" />Offline - No Cache</>
-            )
-          ) : hasAnalyzed ? (
-            <><RefreshCw className="h-4 w-4 mr-2" />Re-Analyze {crypto}</>
-          ) : (
-            <><Play className="h-4 w-4 mr-2" />Analyze {crypto}</>
-          )}
-        </Button>
+              <><Play className="h-4 w-4 mr-2" />Analyze</>
+            )}
+          </Button>
+          
+          {/* Streaming Toggle Button */}
+          <Button
+            onClick={() => isStreaming ? stopStreaming() : startStreaming()}
+            disabled={isAnalyzing || isOffline}
+            className={cn(
+              "h-11 px-4 font-semibold transition-all",
+              isStreaming 
+                ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground animate-pulse" 
+                : "bg-gradient-to-r from-chart-orange to-destructive shadow-lg shadow-destructive/20"
+            )}
+          >
+            {isStreaming ? (
+              <>
+                <Square className="h-4 w-4 mr-2" />
+                Stop
+                <span className="ml-2 px-1.5 py-0.5 rounded bg-destructive-foreground/20 text-xs">
+                  {streamUpdateCount}
+                </span>
+              </>
+            ) : (
+              <>
+                <Radio className="h-4 w-4 mr-2" />
+                Stream
+              </>
+            )}
+          </Button>
+        </div>
+        
+        {/* Streaming Status Bar */}
+        {isStreaming && (
+          <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-destructive/10 via-chart-orange/10 to-warning/10 border border-destructive/30 animate-pulse">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                </span>
+                <span className="text-sm font-medium text-foreground">LIVE STREAMING</span>
+                <span className="text-xs text-muted-foreground">• {streamUpdateCount} updates</span>
+              </div>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="text-muted-foreground">
+                  {priceHistory.length} data points
+                </span>
+                <span className={cn(
+                  "px-2 py-0.5 rounded font-medium",
+                  currentChange >= 0 ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
+                )}>
+                  ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                </span>
+              </div>
+            </div>
+            {priceHistory.length >= 2 && (
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex-1 h-1.5 bg-background/50 rounded-full overflow-hidden">
+                  <div 
+                    className={cn(
+                      "h-full transition-all duration-300 rounded-full",
+                      currentPrice > priceHistory[0]?.price ? "bg-success" : "bg-destructive"
+                    )}
+                    style={{ width: `${Math.min(100, (priceHistory.length / 60) * 100)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-muted-foreground">{priceHistory.length}/60</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Analysis Output */}
         <div className="relative">
