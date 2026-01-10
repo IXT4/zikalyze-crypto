@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BarChart3 } from "lucide-react";
+import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BarChart3, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -9,7 +9,9 @@ import { useLiveMarketData } from "@/hooks/useLiveMarketData";
 import { useAnalysisCache } from "@/hooks/useAnalysisCache";
 import { useOnChainData } from "@/hooks/useOnChainData";
 import { useChartTrendData } from "@/hooks/useChartTrendData";
+import { useMultiTimeframeData, Timeframe } from "@/hooks/useMultiTimeframeData";
 import { runClientSideAnalysis, AnalysisResult } from "@/lib/zikalyze-brain";
+import { MultiTimeframeInput, TimeframeAnalysisInput } from "@/lib/zikalyze-brain/types";
 import { format } from "date-fns";
 import { Progress } from "@/components/ui/progress";
 import AISummaryCard from "./AISummaryCard";
@@ -61,6 +63,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   // 📊 Real-time 24h chart data for accurate trend analysis
   const chartTrendData = useChartTrendData(crypto);
   
+  // 📈 Multi-timeframe analysis (15m, 1h, 4h, 1d)
+  const multiTfData = useMultiTimeframeData(crypto);
   // Real-time on-chain data with whale tracking - use live price for accuracy
   const { metrics: onChainMetrics, streamStatus } = useOnChainData(
     crypto, 
@@ -254,6 +258,43 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         } : undefined
       } : undefined;
 
+      // Build multi-timeframe input
+      const adaptedMultiTfData: MultiTimeframeInput | undefined = multiTfData && !multiTfData.isLoading ? {
+        '15m': multiTfData['15m'] ? {
+          timeframe: '15m', trend: multiTfData['15m'].trend, trendStrength: multiTfData['15m'].trendStrength,
+          ema9: multiTfData['15m'].ema9, ema21: multiTfData['15m'].ema21, rsi: multiTfData['15m'].rsi,
+          support: multiTfData['15m'].support, resistance: multiTfData['15m'].resistance,
+          volumeTrend: multiTfData['15m'].volumeTrend, higherHighs: multiTfData['15m'].higherHighs,
+          higherLows: multiTfData['15m'].higherLows, lowerHighs: multiTfData['15m'].lowerHighs,
+          lowerLows: multiTfData['15m'].lowerLows, isLive: multiTfData['15m'].isLive
+        } : null,
+        '1h': multiTfData['1h'] ? {
+          timeframe: '1h', trend: multiTfData['1h'].trend, trendStrength: multiTfData['1h'].trendStrength,
+          ema9: multiTfData['1h'].ema9, ema21: multiTfData['1h'].ema21, rsi: multiTfData['1h'].rsi,
+          support: multiTfData['1h'].support, resistance: multiTfData['1h'].resistance,
+          volumeTrend: multiTfData['1h'].volumeTrend, higherHighs: multiTfData['1h'].higherHighs,
+          higherLows: multiTfData['1h'].higherLows, lowerHighs: multiTfData['1h'].lowerHighs,
+          lowerLows: multiTfData['1h'].lowerLows, isLive: multiTfData['1h'].isLive
+        } : null,
+        '4h': multiTfData['4h'] ? {
+          timeframe: '4h', trend: multiTfData['4h'].trend, trendStrength: multiTfData['4h'].trendStrength,
+          ema9: multiTfData['4h'].ema9, ema21: multiTfData['4h'].ema21, rsi: multiTfData['4h'].rsi,
+          support: multiTfData['4h'].support, resistance: multiTfData['4h'].resistance,
+          volumeTrend: multiTfData['4h'].volumeTrend, higherHighs: multiTfData['4h'].higherHighs,
+          higherLows: multiTfData['4h'].higherLows, lowerHighs: multiTfData['4h'].lowerHighs,
+          lowerLows: multiTfData['4h'].lowerLows, isLive: multiTfData['4h'].isLive
+        } : null,
+        '1d': multiTfData['1d'] ? {
+          timeframe: '1d', trend: multiTfData['1d'].trend, trendStrength: multiTfData['1d'].trendStrength,
+          ema9: multiTfData['1d'].ema9, ema21: multiTfData['1d'].ema21, rsi: multiTfData['1d'].rsi,
+          support: multiTfData['1d'].support, resistance: multiTfData['1d'].resistance,
+          volumeTrend: multiTfData['1d'].volumeTrend, higherHighs: multiTfData['1d'].higherHighs,
+          higherLows: multiTfData['1d'].higherLows, lowerHighs: multiTfData['1d'].lowerHighs,
+          lowerLows: multiTfData['1d'].lowerLows, isLive: multiTfData['1d'].isLive
+        } : null,
+        confluence: multiTfData.confluence
+      } : undefined;
+
       // Run analysis entirely client-side with real-time data status
       const result = runClientSideAnalysis({
         crypto,
@@ -268,23 +309,15 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         dataSource: actualDataSource,
         onChainData: adaptedOnChainData,
         sentimentData: adaptedSentimentData,
-        // Pass real 24h chart data for accurate trend analysis
         chartTrendData: chartTrendData ? {
-          candles: chartTrendData.candles,
-          trend24h: chartTrendData.trend24h,
-          trendStrength: chartTrendData.trendStrength,
-          higherHighs: chartTrendData.higherHighs,
-          higherLows: chartTrendData.higherLows,
-          lowerHighs: chartTrendData.lowerHighs,
-          lowerLows: chartTrendData.lowerLows,
-          ema9: chartTrendData.ema9,
-          ema21: chartTrendData.ema21,
-          rsi: chartTrendData.rsi,
-          volumeTrend: chartTrendData.volumeTrend,
-          priceVelocity: chartTrendData.priceVelocity,
-          isLive: chartTrendData.isLive,
-          source: chartTrendData.source
-        } : undefined
+          candles: chartTrendData.candles, trend24h: chartTrendData.trend24h, trendStrength: chartTrendData.trendStrength,
+          higherHighs: chartTrendData.higherHighs, higherLows: chartTrendData.higherLows,
+          lowerHighs: chartTrendData.lowerHighs, lowerLows: chartTrendData.lowerLows,
+          ema9: chartTrendData.ema9, ema21: chartTrendData.ema21, rsi: chartTrendData.rsi,
+          volumeTrend: chartTrendData.volumeTrend, priceVelocity: chartTrendData.priceVelocity,
+          isLive: chartTrendData.isLive, source: chartTrendData.source
+        } : undefined,
+        multiTimeframeData: adaptedMultiTfData
       });
 
       clearInterval(stepInterval);
@@ -446,6 +479,18 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                   <div className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-chart-orange/20 text-chart-orange font-medium" title={`24h chart: ${chartTrendData.candles.length} candles, RSI ${chartTrendData.rsi.toFixed(0)}`}>
                     <BarChart3 className="h-2.5 w-2.5" />
                     <span>24H CHART</span>
+                  </div>
+                )}
+                {/* Multi-Timeframe Status */}
+                {multiTfData && !multiTfData.isLoading && multiTfData.confluence.alignedTimeframes >= 2 && (
+                  <div className={cn(
+                    "flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium",
+                    multiTfData.confluence.overallBias === 'BULLISH' ? "bg-success/20 text-success" :
+                    multiTfData.confluence.overallBias === 'BEARISH' ? "bg-destructive/20 text-destructive" :
+                    "bg-muted/50 text-muted-foreground"
+                  )} title={`Multi-TF: ${multiTfData.confluence.recommendation}`}>
+                    <Layers className="h-2.5 w-2.5" />
+                    <span>MTF {multiTfData.confluence.alignedTimeframes}/4</span>
                   </div>
                 )}
               </div>
