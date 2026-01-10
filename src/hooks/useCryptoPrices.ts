@@ -79,6 +79,136 @@ const PRIORITY_TOKENS = [
 
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
 
+// CoinGecko ID to CoinCap ID mapping (they differ for many coins)
+const COINGECKO_TO_COINCAP: Record<string, string> = {
+  "bitcoin": "bitcoin",
+  "ethereum": "ethereum",
+  "tether": "tether",
+  "ripple": "xrp",
+  "solana": "solana",
+  "binancecoin": "binance-coin",
+  "dogecoin": "dogecoin",
+  "usd-coin": "usd-coin",
+  "cardano": "cardano",
+  "tron": "tron",
+  "avalanche-2": "avalanche",
+  "chainlink": "chainlink",
+  "the-open-network": "the-open-network",
+  "shiba-inu": "shiba-inu",
+  "sui": "sui",
+  "stellar": "stellar",
+  "polkadot": "polkadot",
+  "hedera-hashgraph": "hedera-hashgraph",
+  "bitcoin-cash": "bitcoin-cash",
+  "unus-sed-leo": "unus-sed-leo",
+  "litecoin": "litecoin",
+  "cosmos": "cosmos",
+  "uniswap": "uniswap",
+  "near": "near-protocol",
+  "ethereum-classic": "ethereum-classic",
+  "aptos": "aptos",
+  "render-token": "render-token",
+  "vechain": "vechain",
+  "internet-computer": "internet-computer",
+  "matic-network": "polygon",
+  "polygon": "polygon",
+  "crypto-com-chain": "crypto-com-coin",
+  "filecoin": "filecoin",
+  "arbitrum": "arbitrum",
+  "maker": "maker",
+  "algorand": "algorand",
+  "kaspa": "kaspa",
+  "optimism": "optimism",
+  "aave": "aave",
+  "immutable-x": "immutable-x",
+  "injective-protocol": "injective-protocol",
+  "fantom": "fantom",
+  "blockstack": "stacks",
+  "stacks": "stacks",
+  "monero": "monero",
+  "theta-token": "theta",
+  "the-graph": "the-graph",
+  "dogwifcoin": "dogwifcoin",
+  "bonk": "bonk",
+  "pepe": "pepe",
+  "floki": "floki-inu",
+  "fetch-ai": "fetch-ai",
+  "thorchain": "thorchain",
+  "the-sandbox": "the-sandbox",
+  "decentraland": "decentraland",
+  "axie-infinity": "axie-infinity",
+  "gala": "gala",
+  "apecoin": "apecoin",
+  "curve-dao-token": "curve-dao-token",
+  "synthetix-network-token": "synthetix-network-token",
+  "compound-governance-token": "compound",
+  "lido-dao": "lido-dao",
+  "ethereum-name-service": "ethereum-name-service",
+  "eos": "eos",
+  "tezos": "tezos",
+  "neo": "neo",
+  "kava": "kava",
+  "zcash": "zcash",
+  "dash": "dash",
+  "elrond-erd-2": "elrond-erd-2",
+  "flow": "flow",
+  "mina-protocol": "mina",
+  "oasis-network": "oasis-network",
+  "harmony": "harmony",
+  "zilliqa": "zilliqa",
+  "enjincoin": "enjin-coin",
+  "chiliz": "chiliz",
+  "basic-attention-token": "basic-attention-token",
+  "pancakeswap-token": "pancakeswap-token",
+  "sushi": "sushiswap",
+  "yearn-finance": "yearn-finance",
+  "wrapped-bitcoin": "wrapped-bitcoin",
+  "okb": "okb",
+  "celestia": "celestia",
+  "sei-network": "sei-network",
+  "bittensor": "bittensor",
+  "pyth-network": "pyth-network",
+  "ordi": "ordi",
+  "blur": "blur",
+  "pendle": "pendle",
+  "worldcoin-wld": "worldcoin-wld",
+  "jupiter-exchange-solana": "jupiter-exchange-solana",
+  "ondo-finance": "ondo-finance",
+  "xdc-network": "xdc-network",
+  "jasmy": "jasmy",
+  "iota": "iota",
+  "quant-network": "quant",
+  "core": "core",
+  "stepn": "green-metaverse-token",
+  "starknet": "starknet-token",
+  "notcoin": "notcoin",
+  "zksync": "zksync",
+  "eigenlayer": "eigenlayer",
+  "popcat": "popcat-sol",
+  "arweave": "arweave",
+  "storj": "storj",
+  "livepeer": "livepeer",
+  "osmosis": "osmosis",
+  "celo": "celo",
+  "klaytn": "klaytn",
+  "gmx": "gmx",
+  "balancer": "balancer",
+  "ocean-protocol": "ocean-protocol",
+  "singularitynet": "singularitynet",
+  "akash-network": "akash-network",
+  "mantle": "mantle",
+  "beam-2": "beam",
+  "ronin": "ronin",
+  "flare-networks": "flare-networks",
+  "conflux-token": "conflux-network",
+  "theta-fuel": "theta-fuel",
+  "bittorrent": "bittorrent",
+  "wink": "wink",
+  "just": "just",
+  "gomining-token": "gomining",
+  "gomining": "gomining",
+};
+
 // Cache for CoinGecko data to handle rate limits
 let cachedData: CryptoPrice[] | null = null;
 let cacheTimestamp = 0;
@@ -324,14 +454,19 @@ export const useCryptoPrices = () => {
     }
 
     try {
-      // Build CoinCap asset list from our crypto list (CoinCap uses lowercase IDs)
-      const assetIds = cryptoListRef.current.map(c => c.id).join(",");
-      const ws = new WebSocket(`wss://ws.coincap.io/prices?assets=${assetIds}`);
-      
-      // Build ID to symbol mapping
+      // Build CoinCap asset list - convert CoinGecko IDs to CoinCap IDs
+      const coincapIds: string[] = [];
       cryptoListRef.current.forEach(c => {
+        const coincapId = COINGECKO_TO_COINCAP[c.id] || c.id;
+        coincapIds.push(coincapId);
+        // Map CoinCap ID back to symbol for message processing
+        coinIdMapRef.current.set(coincapId, c.symbol.toLowerCase());
+        // Also map the original CoinGecko ID in case CoinCap uses it
         coinIdMapRef.current.set(c.id, c.symbol.toLowerCase());
       });
+      
+      const assetIds = coincapIds.join(",");
+      const ws = new WebSocket(`wss://ws.coincap.io/prices?assets=${assetIds}`);
       
       ws.onopen = () => {
         setConnectedExchanges(prev => 
