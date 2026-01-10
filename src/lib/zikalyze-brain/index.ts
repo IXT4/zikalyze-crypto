@@ -518,9 +518,10 @@ D: ${topDownAnalysis.daily.trend.padEnd(7)} ${createBar(topDownAnalysis.daily.st
 
 📍 Entry Zone: ${tightZone}
    └─ Trigger: ${precisionEntry.trigger}
+${bias === 'SHORT' ? `🎯 Target: $${(low24h - range * 0.1).toFixed(decimals)} (breakdown of 24h low)` : bias === 'LONG' ? `🎯 Target: $${(high24h + range * 0.1).toFixed(decimals)} (breakout of 24h high)` : ''}
 ✓ Confirm: ${precisionEntry.confirmation}
 ✗ Invalid: ${precisionEntry.invalidation}
-${bias === 'SHORT' ? `📈 If invalidated: Upside target $${(high24h + range * 0.15).toFixed(decimals)} → reassess for long` : bias === 'LONG' ? `📉 If invalidated: Downside target $${(low24h - range * 0.15).toFixed(decimals)} → reassess for short` : ''}
+${bias === 'SHORT' ? `📈 If invalidated: Flip long above $${(high24h + range * 0.15).toFixed(decimals)}` : bias === 'LONG' ? `📉 If invalidated: Flip short below $${(low24h - range * 0.15).toFixed(decimals)}` : ''}
 
 📊 Success: [${probBar}] ${successProb}%
    └─ ${probDescription}
