@@ -123,7 +123,7 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   // Mark source clearly for transparency
   const hasRealOnChain = !!onChainData && onChainData.source !== 'derived-deterministic';
   const onChainMetrics: OnChainMetrics = onChainData || estimateOnChainMetrics(crypto, price, change);
-  const etfFlowData: ETFFlowData = estimateETFFlowData(price, change);
+  const etfFlowData: ETFFlowData | null = estimateETFFlowData(price, change, crypto);
   
   // Log data source for debugging
   console.log(`[AI Brain] On-chain source: ${hasRealOnChain ? 'REAL-TIME' : 'DERIVED'}, Live data: ${isLiveData}`);
@@ -410,12 +410,13 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     }
   }
 
-  // ETF insight — only show if it supports the bias
-  if (Math.abs(etfFlowData.btcNetFlow24h) > 50) {
-    const flowDir = etfFlowData.btcNetFlow24h > 0 ? '+' : '';
-    const isETFBullish = etfFlowData.btcNetFlow24h > 0;
+  // ETF insight — only show for BTC/ETH (cryptos with actual ETFs) and if it supports the bias
+  if (etfFlowData && Math.abs(etfFlowData.btcNetFlow24h || etfFlowData.ethNetFlow24h) > 50) {
+    const flowValue = etfFlowData.btcNetFlow24h || etfFlowData.ethNetFlow24h;
+    const flowDir = flowValue > 0 ? '+' : '';
+    const isETFBullish = flowValue > 0;
     if ((bias === 'LONG' && isETFBullish) || (bias === 'SHORT' && !isETFBullish) || bias === 'NEUTRAL') {
-      keyInsights.push(`💼 ETF Flow: ${flowDir}$${etfFlowData.btcNetFlow24h}M (${etfFlowData.institutionalSentiment})`);
+      keyInsights.push(`💼 ETF Flow: ${flowDir}$${flowValue}M (${etfFlowData.institutionalSentiment})`);
     }
   }
 
