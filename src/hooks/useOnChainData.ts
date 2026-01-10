@@ -30,7 +30,7 @@ interface WebSocketState {
   reconnectTimeout: ReturnType<typeof setTimeout> | null;
 }
 
-const POLL_INTERVAL = 3000;
+// Real-time WebSocket constants (no polling)
 const API_TIMEOUT = 8000;
 const MAX_RECONNECT_ATTEMPTS = 3;
 const BASE_RECONNECT_DELAY = 2000;
@@ -145,7 +145,7 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
   const isLoadingRef = useRef(false);
   const whaleAlertCooldownRef = useRef<number>(0);
   const wsStateRef = useRef<WebSocketState>({ socket: null, reconnectAttempts: 0, reconnectTimeout: null });
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
 
   useEffect(() => {
     cryptoRef.current = crypto;
@@ -597,16 +597,13 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     setMetrics(null);
     setStreamStatus('connecting');
 
-    // Initial fetch
+    // Initial fetch for baseline data
     fetchRestData();
 
-    // Connect WebSocket for BTC
+    // Connect WebSocket for real-time streaming
     connectWebSocket();
 
-    // Polling fallback
-    pollIntervalRef.current = setInterval(() => {
-      if (isMountedRef.current) fetchRestData();
-    }, POLL_INTERVAL);
+    // No polling - rely on WebSocket for real-time updates
 
     return () => {
       isMountedRef.current = false;
@@ -618,10 +615,6 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
       if (wsStateRef.current.reconnectTimeout) {
         clearTimeout(wsStateRef.current.reconnectTimeout);
         wsStateRef.current.reconnectTimeout = null;
-      }
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
       }
     };
   }, [crypto]);
