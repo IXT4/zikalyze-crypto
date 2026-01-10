@@ -208,43 +208,46 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     allInsights.push(`⚡ ${institutionalVsRetail.divergenceNote}`);
   }
 
-  // Build success probability bar (higher when HTF aligned)
-  const htfBonus = topDownAnalysis.tradeableDirection !== 'NO_TRADE' ? 8 : 0;
-  const successProb = Math.min(88, 50 + (confidence - 50) * 0.5 + (precisionEntry.timing === 'NOW' ? 10 : 0) + htfBonus);
+  // Build success probability based on confluence (deterministic)
+  const confluenceBonus = Math.round(topDownAnalysis.confluenceScore * 0.3);
+  const timingBonus = precisionEntry.timing === 'NOW' ? 12 : precisionEntry.timing === 'WAIT_PULLBACK' ? 5 : 0;
+  const biasBonus = bias !== 'NEUTRAL' ? 8 : 0;
+  const successProb = Math.min(90, 40 + confluenceBonus + timingBonus + biasBonus);
   const filledBlocks = Math.round(successProb / 10);
   const probBar = '█'.repeat(filledBlocks) + '░'.repeat(10 - filledBlocks);
 
-  // Build HTF alignment status
-  const htfStatus = `W:${topDownAnalysis.weekly.trend.charAt(0)} D:${topDownAnalysis.daily.trend.charAt(0)} 4H:${topDownAnalysis.h4.trend.charAt(0)} 1H:${topDownAnalysis.h1.trend.charAt(0)} 15M:${topDownAnalysis.m15.trend.charAt(0)}`;
+  // Build HTF alignment visual
+  const getTrendIcon = (trend: string) => trend === 'BULLISH' ? '🟢' : trend === 'BEARISH' ? '🔴' : '⚪';
+  const htfVisual = `${getTrendIcon(topDownAnalysis.weekly.trend)}W ${getTrendIcon(topDownAnalysis.daily.trend)}D ${getTrendIcon(topDownAnalysis.h4.trend)}4H ${getTrendIcon(topDownAnalysis.h1.trend)}1H ${getTrendIcon(topDownAnalysis.m15.trend)}15M`;
 
-  // Build final analysis text with TOP-DOWN section
+  // Build final analysis text with improved TOP-DOWN section
   const analysis = `📊 ${crypto.toUpperCase()} ${t.quickAnalysis}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💰 ${t.price}: $${price.toLocaleString()} ${trendEmoji} ${Math.abs(change).toFixed(2)}%
+💰 ${t.price}: $${price.toLocaleString()} ${trendEmoji} ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
 📈 ${t.range24h}: $${low24h.toLocaleString()} - $${high24h.toLocaleString()}
-${volumeSpike.isSpike ? `📊 Volume: ${volumeSpike.magnitude} SPIKE (+${volumeSpike.percentageAboveAvg.toFixed(0)}% vs avg)` : ''}
-
+${volumeSpike.isSpike ? `📊 Volume: ${volumeSpike.magnitude} SPIKE (+${volumeSpike.percentageAboveAvg.toFixed(0)}% vs avg)\n` : ''}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔭 TOP-DOWN ANALYSIS (HTF → LTF)
+🔭 TOP-DOWN MULTI-TIMEFRAME ANALYSIS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📅 WEEKLY:  ${topDownAnalysis.weekly.trend} (${topDownAnalysis.weekly.strength.toFixed(0)}%)
-📆 DAILY:   ${topDownAnalysis.daily.trend} (${topDownAnalysis.daily.strength.toFixed(0)}%)
-⏰ 4H:      ${topDownAnalysis.h4.trend} (${topDownAnalysis.h4.strength.toFixed(0)}%)
-🕐 1H:      ${topDownAnalysis.h1.trend} (${topDownAnalysis.h1.strength.toFixed(0)}%)
-⏱️ 15M:     ${topDownAnalysis.m15.trend} (${topDownAnalysis.m15.strength.toFixed(0)}%)
+${htfVisual}
 
-📊 Confluence: ${topDownAnalysis.confluenceScore.toFixed(0)}% | Direction: ${topDownAnalysis.tradeableDirection}
-${htfStatus}
+📅 WEEKLY:  ${topDownAnalysis.weekly.trend.padEnd(8)} | Strength: ${topDownAnalysis.weekly.strength.toFixed(0)}%
+📆 DAILY:   ${topDownAnalysis.daily.trend.padEnd(8)} | Strength: ${topDownAnalysis.daily.strength.toFixed(0)}%
+⏰ 4H:      ${topDownAnalysis.h4.trend.padEnd(8)} | Strength: ${topDownAnalysis.h4.strength.toFixed(0)}%
+🕐 1H:      ${topDownAnalysis.h1.trend.padEnd(8)} | Strength: ${topDownAnalysis.h1.strength.toFixed(0)}%
+⏱️ 15M:     ${topDownAnalysis.m15.trend.padEnd(8)} | Strength: ${topDownAnalysis.m15.strength.toFixed(0)}%
+
+🎯 CONFLUENCE: ${topDownAnalysis.confluenceScore}% ${topDownAnalysis.confluenceScore >= 70 ? '(STRONG)' : topDownAnalysis.confluenceScore >= 50 ? '(MODERATE)' : '(WEAK)'}
+📍 DIRECTION: ${topDownAnalysis.tradeableDirection}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🎯 ${t.verdict}: ${bias === 'LONG' ? `🟢 ${t.bullish}` : bias === 'SHORT' ? `🔴 ${t.bearish}` : `⚪ ${t.neutral}`}
-📊 ${t.confidence}: ${confidence}%
+📊 ${t.confidence}: ${confidence.toFixed(0)}%
 
-${macroFlag ? `\n${macroFlag}\n` : ''}
-${volumeSpikeFlag ? `${volumeSpikeFlag}\n` : ''}
+${macroFlag ? `${macroFlag}\n` : ''}${volumeSpikeFlag ? `${volumeSpikeFlag}\n` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 ${t.precisionEntry}
