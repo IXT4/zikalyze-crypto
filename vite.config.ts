@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
+      injectRegister: false, // Manual registration in main.tsx prevents render-blocking
       includeAssets: ["favicon.ico", "offline.html"],
       manifest: {
         name: "Zikalyze - AI Crypto Trading Analysis",
