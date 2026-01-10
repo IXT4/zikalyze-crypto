@@ -209,51 +209,39 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
   const [isLoading, setIsLoading] = useState(true);
   const mountedRef = useRef(true);
   const refreshIntervalRef = useRef<number | null>(null);
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 3;
   
-  const fetchData = useCallback(async () => {
-    const upperSymbol = symbol.toUpperCase();
-    const coinCapId = COINCAP_ID_MAP[upperSymbol];
-    
-    if (!coinCapId) {
-      // Try dynamic lookup
-      try {
-        const searchRes = await fetch(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=1`);
-        const searchData = await searchRes.json();
-        if (!searchData.data?.[0]?.id) {
-          console.log(`[ChartTrend] No CoinCap ID found for ${symbol}`);
-          return;
-        }
-        // Use found ID
-        await fetchWithId(searchData.data[0].id);
-      } catch (err) {
-        console.log(`[ChartTrend] Search failed for ${symbol}:`, err);
-      }
-      return;
+  const fetchWithTimeout = async (url: string, timeoutMs = 10000): Promise<Response> => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
     }
-    
-    await fetchWithId(coinCapId);
-  }, [symbol]);
+  };
   
-  const fetchWithId = async (coinCapId: string) => {
+  const fetchWithId = useCallback(async (coinCapId: string): Promise<boolean> => {
     try {
       // Fetch 24h of hourly candles for trend analysis
       const end = Date.now();
       const start = end - 24 * 60 * 60 * 1000; // 24 hours ago
       
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=h1&start=${start}&end=${end}`
       );
       
       if (!response.ok) {
         console.log(`[ChartTrend] CoinCap fetch failed: ${response.status}`);
-        return;
+        return false;
       }
       
       const result = await response.json();
       
       if (!result.data || result.data.length < 5) {
         console.log(`[ChartTrend] Insufficient data points: ${result.data?.length || 0}`);
-        return;
+        return false;
       }
       
       // Convert to candle format (CoinCap provides price points, simulate OHLC)
@@ -274,18 +262,24 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
       });
       
       // Also try to get actual volume data
-      const assetRes = await fetch(`https://api.coincap.io/v2/assets/${coinCapId}`);
-      const assetData = await assetRes.json();
-      const volume24h = parseFloat(assetData.data?.volumeUsd24Hr || '0');
-      
-      // Distribute volume across candles
-      const volumePerCandle = volume24h / candles.length;
-      candles.forEach(c => c.volume = volumePerCandle * (0.8 + Math.random() * 0.4));
+      try {
+        const assetRes = await fetchWithTimeout(`https://api.coincap.io/v2/assets/${coinCapId}`);
+        if (assetRes.ok) {
+          const assetData = await assetRes.json();
+          const volume24h = parseFloat(assetData.data?.volumeUsd24Hr || '0');
+          
+          // Distribute volume across candles
+          const volumePerCandle = volume24h / candles.length;
+          candles.forEach(c => c.volume = volumePerCandle * (0.8 + Math.random() * 0.4));
+        }
+      } catch {
+        // Volume data is optional, continue without it
+      }
       
       const closes = candles.map(c => c.close);
       const swings = detectSwingPoints(candles);
       
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) return true;
       
       setData({
         candles,
@@ -306,13 +300,57 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
       });
       
       setIsLoading(false);
+      retryCountRef.current = 0; // Reset on success
       console.log(`[ChartTrend] ${symbol} loaded: ${candles.length} candles, trend: ${analyzeTrend(candles)}`);
+      return true;
       
     } catch (err) {
-      console.error(`[ChartTrend] Error fetching ${symbol}:`, err);
+      console.log(`[ChartTrend] Error fetching ${symbol}:`, err);
+      return false;
+    }
+  }, [symbol]);
+  
+  const fetchData = useCallback(async () => {
+    const upperSymbol = symbol.toUpperCase();
+    let coinCapId = COINCAP_ID_MAP[upperSymbol];
+    
+    if (!coinCapId) {
+      // Try dynamic lookup
+      try {
+        const searchRes = await fetchWithTimeout(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=1`);
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          if (searchData.data?.[0]?.id) {
+            coinCapId = searchData.data[0].id;
+          }
+        }
+      } catch {
+        // Dynamic lookup failed, will use fallback
+      }
+    }
+    
+    if (!coinCapId) {
+      console.log(`[ChartTrend] No CoinCap ID found for ${symbol}`);
+      setIsLoading(false);
+      return;
+    }
+    
+    const success = await fetchWithId(coinCapId);
+    
+    // Retry logic with exponential backoff
+    if (!success && retryCountRef.current < MAX_RETRIES) {
+      retryCountRef.current++;
+      const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 10000);
+      console.log(`[ChartTrend] Retry ${retryCountRef.current}/${MAX_RETRIES} for ${symbol} in ${delay}ms`);
+      setTimeout(() => {
+        if (mountedRef.current) {
+          fetchWithId(coinCapId!);
+        }
+      }, delay);
+    } else if (!success) {
       setIsLoading(false);
     }
-  };
+  }, [symbol, fetchWithId]);
   
   useEffect(() => {
     mountedRef.current = true;
