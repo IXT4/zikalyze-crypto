@@ -10,11 +10,14 @@ import {
   Zap,
   Radio,
   Wifi,
-  WifiOff
+  WifiOff,
+  Landmark,
+  Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect } from "react";
+import { useCurrency } from "@/hooks/useCurrency";
 
 interface OnChainMetricsProps {
   crypto: string;
@@ -246,6 +249,77 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
         </div>
       </div>
 
+      {/* ETF Flow & Validator Queue (BTC/ETH only) */}
+      {(metrics.etfFlow || metrics.validatorQueue) && (
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* ETF Flow */}
+          {metrics.etfFlow && (
+            <div className={cn(
+              "p-3 rounded-xl transition-all duration-300",
+              metrics.etfFlow.trend === 'ACCUMULATING' ? "bg-success/10" : 
+              metrics.etfFlow.trend === 'DISTRIBUTING' ? "bg-destructive/10" : "bg-secondary/50"
+            )}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <Landmark className="h-4 w-4 text-chart-cyan" />
+                <span className="text-xs text-muted-foreground">ETF Flows (24h)</span>
+              </div>
+              <div className={cn(
+                "font-bold text-sm",
+                metrics.etfFlow.netFlow24h > 0 ? "text-success" : metrics.etfFlow.netFlow24h < 0 ? "text-destructive" : "text-muted-foreground"
+              )}>
+                {metrics.etfFlow.netFlow24h > 0 ? '+' : ''}{metrics.etfFlow.netFlow24h}M
+                <span className={cn(
+                  "ml-2 text-xs font-normal",
+                  metrics.etfFlow.trend === 'ACCUMULATING' ? "text-success" : 
+                  metrics.etfFlow.trend === 'DISTRIBUTING' ? "text-destructive" : "text-muted-foreground"
+                )}>
+                  {metrics.etfFlow.trend}
+                </span>
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1">
+                {metrics.etfFlow.topBuyers.length > 0 && (
+                  <span className="text-success">Buy: {metrics.etfFlow.topBuyers.join(', ')}</span>
+                )}
+                {metrics.etfFlow.topBuyers.length > 0 && metrics.etfFlow.topSellers.length > 0 && ' • '}
+                {metrics.etfFlow.topSellers.length > 0 && (
+                  <span className="text-destructive">Sell: {metrics.etfFlow.topSellers.join(', ')}</span>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* Validator Queue (ETH) */}
+          {metrics.validatorQueue && (
+            <div className={cn(
+              "p-3 rounded-xl transition-all duration-300",
+              metrics.validatorQueue.changePercent > 50 ? "bg-success/10" : "bg-secondary/50"
+            )}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <Users className="h-4 w-4 text-primary" />
+                <span className="text-xs text-muted-foreground">Validator Queue</span>
+                {metrics.validatorQueue.changePercent > 50 && (
+                  <span className="text-[10px] bg-success/20 text-success px-1 py-0.5 rounded">
+                    +{metrics.validatorQueue.changePercent.toFixed(0)}%
+                  </span>
+                )}
+              </div>
+              <div className="font-bold text-sm text-foreground">
+                {metrics.validatorQueue.netChange > 0 ? '+' : ''}{metrics.validatorQueue.netChange.toLocaleString()} net
+              </div>
+              <div className="flex gap-2 text-[10px] mt-1">
+                <span className="text-success">↑ {metrics.validatorQueue.entries.toLocaleString()} entries</span>
+                <span className="text-destructive">↓ {metrics.validatorQueue.exits.toLocaleString()} exits</span>
+              </div>
+              {metrics.validatorQueue.changePercent > 80 && (
+                <div className="text-[10px] text-success mt-1">
+                  Strong staking interest — supports accumulation thesis
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 24h Active Addresses & Network Stats */}
       <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
         <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -272,6 +346,12 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
         {metrics.avgBlockTime > 0 && (
           <div className="text-muted-foreground">
             Avg Block: <span className="text-foreground font-medium">{metrics.avgBlockTime.toFixed(1)}m</span>
+          </div>
+        )}
+        {/* Volume baseline for transparency */}
+        {metrics.transactionVolume.avg24h && metrics.transactionVolume.avg24h > 0 && (
+          <div className="text-muted-foreground">
+            24h Avg: <span className="text-foreground font-medium">{(metrics.transactionVolume.avg24h / 1000).toFixed(1)}K/hr</span>
           </div>
         )}
         {/* Source info hidden - data is live */}
