@@ -788,14 +788,8 @@ export const useCryptoPrices = () => {
     setIsLive(connectedExchanges.length > 0);
   }, [connectedExchanges]);
 
-  // Periodic refresh from CoinGecko for market cap and other data
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchPrices();
-    }, 60000); // Every 60 seconds
-    
-    return () => clearInterval(interval);
-  }, [fetchPrices]);
+  // No polling - rely on real-time WebSocket data for 24h updates
+  // Initial fetch provides market cap and other static data
 
   const getPriceBySymbol = useCallback((symbol: string): CryptoPrice | undefined => {
     return prices.find((p) => p.symbol.toUpperCase() === symbol.toUpperCase());
