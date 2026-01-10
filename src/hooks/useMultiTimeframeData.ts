@@ -70,17 +70,22 @@ const BINANCE_SYMBOL_MAP: Record<string, string> = {
   CFX: 'CFXUSDT', QNT: 'QNTUSDT', WLD: 'WLDUSDT', JUP: 'JUPUSDT',
 };
 
-// Kraken symbol mapping (FALLBACK - more reliable than CoinCap)
-const KRAKEN_SYMBOL_MAP: Record<string, string> = {
-  BTC: 'XBTUSD', ETH: 'ETHUSD', SOL: 'SOLUSD', XRP: 'XRPUSD', DOGE: 'DOGEUSD',
-  ADA: 'ADAUSD', DOT: 'DOTUSD', LINK: 'LINKUSD', UNI: 'UNIUSD', ATOM: 'ATOMUSD',
-  LTC: 'LTCUSD', BCH: 'BCHUSD', AVAX: 'AVAXUSD', MATIC: 'MATICUSD',
-  ALGO: 'ALGOUSD', XLM: 'XLMUSD', ETC: 'ETCUSD', FIL: 'FILUSD',
-  AAVE: 'AAVEUSD', MKR: 'MKRUSD', GRT: 'GRTUSD', SNX: 'SNXUSD',
-  COMP: 'COMPUSD', BAT: 'BATUSD', ZEC: 'ZECUSD', DASH: 'DASHUSD',
-  XMR: 'XMRUSD', EOS: 'EOSUSD', XTZ: 'XTZUSD', TRX: 'TRXUSD',
-  MANA: 'MANAUSD', SAND: 'SANDUSD', ENJ: 'ENJUSD', CHZ: 'CHZUSD',
-  CRV: 'CRVUSD', SHIB: 'SHIBUSD', PEPE: 'PEPEUSD', APE: 'APEUSD',
+// CoinCap ID mapping (BROWSER-FRIENDLY - no CORS issues)
+const COINCAP_ID_MAP: Record<string, string> = {
+  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'xrp', DOGE: 'dogecoin',
+  BNB: 'binance-coin', ADA: 'cardano', AVAX: 'avalanche', DOT: 'polkadot',
+  MATIC: 'polygon', LINK: 'chainlink', UNI: 'uniswap', ATOM: 'cosmos',
+  LTC: 'litecoin', BCH: 'bitcoin-cash', NEAR: 'near-protocol', APT: 'aptos',
+  FIL: 'filecoin', ARB: 'arbitrum', OP: 'optimism', INJ: 'injective-protocol',
+  SUI: 'sui', TIA: 'celestia', SEI: 'sei-network', PEPE: 'pepe', SHIB: 'shiba-inu',
+  TON: 'the-open-network', KAS: 'kaspa', TAO: 'bittensor', RENDER: 'render-token',
+  TRX: 'tron', XLM: 'stellar', HBAR: 'hedera-hashgraph', VET: 'vechain',
+  ALGO: 'algorand', ICP: 'internet-computer', FTM: 'fantom', ETC: 'ethereum-classic',
+  AAVE: 'aave', MKR: 'maker', GRT: 'the-graph', RUNE: 'thorchain',
+  STX: 'stacks', MINA: 'mina', FLOW: 'flow', XTZ: 'tezos', EOS: 'eos',
+  NEO: 'neo', THETA: 'theta', EGLD: 'elrond-erd-2', ROSE: 'oasis-network',
+  ZEC: 'zcash', KAVA: 'kava', XMR: 'monero', SAND: 'the-sandbox',
+  MANA: 'decentraland', ENJ: 'enjin-coin', CHZ: 'chiliz', BAT: 'basic-attention-token',
 };
 
 // Binance interval mapping
@@ -91,20 +96,20 @@ const BINANCE_INTERVALS: Record<Timeframe, string> = {
   '1d': '1d',
 };
 
-// Kraken interval mapping
-const KRAKEN_INTERVALS: Record<Timeframe, number> = {
-  '15m': 15,
-  '1h': 60,
-  '4h': 240,
-  '1d': 1440,
+// CoinCap interval mapping
+const COINCAP_INTERVALS: Record<Timeframe, string> = {
+  '15m': 'm15',
+  '1h': 'h1',
+  '4h': 'h1', // Will group into 4h
+  '1d': 'd1',
 };
 
 // Timeframe configs
-const TIMEFRAME_CONFIG: Record<Timeframe, { candleCount: number }> = {
-  '15m': { candleCount: 48 }, // 12 hours
-  '1h': { candleCount: 24 }, // 24 hours
-  '4h': { candleCount: 24 }, // 4 days
-  '1d': { candleCount: 30 }, // 30 days
+const TIMEFRAME_CONFIG: Record<Timeframe, { duration: number; candleCount: number }> = {
+  '15m': { duration: 12 * 60 * 60 * 1000, candleCount: 48 }, // 12 hours
+  '1h': { duration: 24 * 60 * 60 * 1000, candleCount: 24 }, // 24 hours
+  '4h': { duration: 4 * 24 * 60 * 60 * 1000, candleCount: 24 }, // 4 days
+  '1d': { duration: 30 * 24 * 60 * 60 * 1000, candleCount: 30 }, // 30 days
 };
 
 // Calculate EMA
@@ -338,46 +343,52 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
     }
   }, []);
 
-  // Fetch from Kraken API (FALLBACK - more reliable than CoinCap)
-  const fetchFromKraken = useCallback(async (
+  // Fetch from CoinCap API (BROWSER-FRIENDLY - no CORS issues)
+  const fetchFromCoinCap = useCallback(async (
     symbol: string,
     timeframe: Timeframe
   ): Promise<CandleData[] | null> => {
     try {
-      const krakenSymbol = KRAKEN_SYMBOL_MAP[symbol.toUpperCase()];
-      if (!krakenSymbol) return null;
+      const coinCapId = COINCAP_ID_MAP[symbol.toUpperCase()];
+      if (!coinCapId) return null;
       
-      const interval = KRAKEN_INTERVALS[timeframe];
       const config = TIMEFRAME_CONFIG[timeframe];
+      const end = Date.now();
+      const start = end - config.duration;
+      const interval = COINCAP_INTERVALS[timeframe];
       
       const response = await safeFetch(
-        `https://api.kraken.com/0/public/OHLC?pair=${krakenSymbol}&interval=${interval}`,
-        { timeoutMs: 10000, maxRetries: 2 }
+        `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=${interval}&start=${start}&end=${end}`,
+        { timeoutMs: 12000, maxRetries: 3 }
       );
       
       if (!response?.ok) return null;
       
       const result = await response.json();
-      if (result.error && result.error.length > 0) return null;
+      if (!result.data || !Array.isArray(result.data) || result.data.length < 5) return null;
       
-      // Kraken returns data in format: { result: { PAIR: [[time, open, high, low, close, vwap, volume, count], ...] } }
-      const pairs = Object.keys(result.result).filter(k => k !== 'last');
-      if (pairs.length === 0) return null;
+      // Convert CoinCap price points to OHLC candles
+      let candles: CandleData[] = result.data.map((point: any, index: number, arr: any[]) => {
+        const price = parseFloat(point.priceUsd);
+        const prevPrice = index > 0 ? parseFloat(arr[index - 1].priceUsd) : price;
+        const volatilityFactor = 0.002;
+        
+        return {
+          timestamp: new Date(point.time).getTime(),
+          open: prevPrice,
+          high: Math.max(price, prevPrice) * (1 + volatilityFactor),
+          low: Math.min(price, prevPrice) * (1 - volatilityFactor),
+          close: price,
+          volume: parseFloat(point.circulatingSupply || '0') * price * 0.005,
+        };
+      });
       
-      const ohlcData = result.result[pairs[0]];
-      if (!Array.isArray(ohlcData) || ohlcData.length < 5) return null;
+      // Group into 4h candles if needed
+      if (timeframe === '4h') {
+        candles = groupInto4hCandles(candles);
+      }
       
-      // Take last N candles based on config
-      const candles: CandleData[] = ohlcData.slice(-config.candleCount).map((k: any[]) => ({
-        timestamp: k[0] * 1000, // Kraken uses seconds
-        open: parseFloat(k[1]),
-        high: parseFloat(k[2]),
-        low: parseFloat(k[3]),
-        close: parseFloat(k[4]),
-        volume: parseFloat(k[6]),
-      }));
-      
-      return candles;
+      return candles.slice(-config.candleCount);
     } catch {
       return null;
     }
@@ -392,19 +403,19 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
       let candles: CandleData[] | null = null;
       let source = 'unknown';
       
-      // 1. Try Binance first (most reliable)
+      // 1. Try Binance first (most reliable, but may have CORS issues)
       candles = await fetchFromBinance(symbol, timeframe);
       if (candles && candles.length >= 5) {
         source = 'binance';
         console.log(`[MTF] ${timeframe} loaded from Binance: ${candles.length} candles`);
       }
       
-      // 2. Fallback to Kraken (more reliable than CoinCap)
+      // 2. Fallback to CoinCap (browser-friendly, no CORS)
       if (!candles || candles.length < 5) {
-        candles = await fetchFromKraken(symbol, timeframe);
+        candles = await fetchFromCoinCap(symbol, timeframe);
         if (candles && candles.length >= 5) {
-          source = 'kraken';
-          console.log(`[MTF] ${timeframe} loaded from Kraken: ${candles.length} candles`);
+          source = 'coincap';
+          console.log(`[MTF] ${timeframe} loaded from CoinCap: ${candles.length} candles`);
         }
       }
       
@@ -441,7 +452,7 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
       console.log(`[MTF] ${timeframe} fetch error for ${symbol}:`, e);
       return null;
     }
-  }, [fetchFromBinance, fetchFromKraken]);
+  }, [fetchFromBinance, fetchFromCoinCap]);
 
   const calculateConfluence = (analyses: Record<Timeframe, TimeframeAnalysis | null>) => {
     const valid = Object.values(analyses).filter(a => a !== null) as TimeframeAnalysis[];
