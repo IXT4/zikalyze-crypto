@@ -222,14 +222,14 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   const getTrendIcon = (trend: string) => trend === 'BULLISH' ? '🟢' : trend === 'BEARISH' ? '🔴' : '⚪';
   const htfVisual = `${getTrendIcon(topDownAnalysis.weekly.trend)}W ${getTrendIcon(topDownAnalysis.daily.trend)}D ${getTrendIcon(topDownAnalysis.h4.trend)}4H ${getTrendIcon(topDownAnalysis.h1.trend)}1H ${getTrendIcon(topDownAnalysis.m15.trend)}15M`;
 
-  // Data source indicator
-  const dataStatusEmoji = isLiveData ? '🔴' : '⏸️';
-  const dataStatusLabel = isLiveData ? 'REAL-TIME' : 'CACHED';
+  // Data source indicator - clear real-time vs fallback status
+  const dataStatusEmoji = isLiveData ? '🔴 LIVE' : '⏸️ DELAYED';
+  const dataSourceDisplay = dataSource && dataSource !== 'Fallback' ? dataSource : 'Market Data';
 
-  // Build final analysis text with improved TOP-DOWN section
+  // Build final analysis text with real-time data status
   const analysis = `📊 ${crypto.toUpperCase()} ${t.quickAnalysis}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${dataStatusEmoji} Data: ${dataStatusLabel} ${dataSource ? `(${dataSource})` : ''}
+${dataStatusEmoji} | ${dataSourceDisplay}
 
 💰 ${t.price}: $${price.toLocaleString()} ${trendEmoji} ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
 📈 ${t.range24h}: $${low24h.toLocaleString()} - $${high24h.toLocaleString()}
