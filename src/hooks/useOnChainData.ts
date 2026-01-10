@@ -30,7 +30,7 @@ interface WebSocketState {
   reconnectTimeout: ReturnType<typeof setTimeout> | null;
 }
 
-const POLL_INTERVAL = 1000;
+const POLL_INTERVAL = 3000;
 const API_TIMEOUT = 8000;
 const MAX_RECONNECT_ATTEMPTS = 3;
 const BASE_RECONNECT_DELAY = 2000;
@@ -179,7 +179,7 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
   // Fetch chain-specific data via REST APIs
   const fetchRestData = useCallback(async () => {
     const now = Date.now();
-    if (isLoadingRef.current || (now - lastFetchRef.current < 800)) return;
+    if (isLoadingRef.current || (now - lastFetchRef.current < 2500)) return;
     
     isLoadingRef.current = true;
     lastFetchRef.current = now;
