@@ -232,7 +232,8 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         if (blockData?.result) {
           blockHeight = parseInt(blockData.result, 16) || 0;
         }
-        avgBlockTime = 12;
+        // Use minutes in UI; Ethereum blocks ~12s
+        avgBlockTime = 12 / 60;
         transactionVolume.tps = 15;
         source = 'eth-api';
       }
@@ -250,7 +251,8 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         if (blockInfo?.blueScore) {
           blockHeight = blockInfo.blueScore;
         }
-        avgBlockTime = 1; // Kaspa 1 second blocks
+        // Use minutes in UI; Kaspa ~1s blocks
+        avgBlockTime = 1 / 60;
         transactionVolume.tps = 100;
         source = 'kaspa-api';
       }

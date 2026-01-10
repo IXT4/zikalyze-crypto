@@ -83,10 +83,17 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
 
   const isConnected = streamStatus === 'connected';
   const isConnecting = streamStatus === 'connecting';
+  const isPolling = streamStatus === 'polling';
 
-  const StatusIcon = isConnected ? Radio : isConnecting ? Wifi : WifiOff;
-  const statusColor = isConnected ? 'text-success' : isConnecting ? 'text-primary animate-pulse' : 'text-muted-foreground';
-  const statusLabel = isConnected ? 'LIVE' : isConnecting ? 'CONNECTING' : 'RECONNECTING';
+  const StatusIcon = isConnected || isPolling ? Radio : isConnecting ? Wifi : WifiOff;
+  const statusColor = isConnected
+    ? 'text-success'
+    : isPolling
+      ? 'text-warning'
+      : isConnecting
+        ? 'text-primary animate-pulse'
+        : 'text-muted-foreground';
+  const statusLabel = isConnected ? 'LIVE' : isPolling ? 'LIVE (POLLING)' : isConnecting ? 'CONNECTING' : 'RECONNECTING';
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 relative overflow-hidden">
@@ -111,7 +118,7 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
             metrics.whaleActivity.recentLargeTx.type === 'OUT' ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
           )}
         >
-          🐋 {metrics.whaleActivity.recentLargeTx.value.toFixed(2)} BTC {metrics.whaleActivity.recentLargeTx.type === 'OUT' ? '→ Cold' : '→ Exchange'}
+          🐋 {metrics.whaleActivity.recentLargeTx.value.toFixed(2)} {crypto.toUpperCase()} {metrics.whaleActivity.recentLargeTx.type === 'OUT' ? '→ Cold' : '→ Exchange'}
         </div>
       )}
 
@@ -130,7 +137,7 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
           </span>
           <div className={cn(
             "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium",
-            isConnected ? "bg-success/20 text-success" : isConnecting ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+            isConnected ? "bg-success/20 text-success" : isPolling ? "bg-warning/20 text-warning" : isConnecting ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
           )}>
             <StatusIcon className="h-3 w-3" />
             {statusLabel}
