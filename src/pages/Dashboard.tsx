@@ -4,7 +4,7 @@ import { Search, User } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import CryptoTicker from "@/components/dashboard/CryptoTicker";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
-import { useCurrency } from "@/hooks/useCurrency";
+
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,7 +39,6 @@ const Dashboard = () => {
   const [userName, setUserName] = useState<string | null>(null);
   const { prices, loading, getPriceBySymbol } = useCryptoPrices();
   const { t } = useTranslation();
-  const { formatPrice, symbol: currencySymbol } = useCurrency();
 
   useEffect(() => {
     const session = localStorage.getItem("wallet_session");
@@ -49,21 +48,7 @@ const Dashboard = () => {
     }
   }, []);
 
-  // Use ONLY live data from CoinGecko/WebSocket - no hardcoded fallback prices
-  const getLivePrice = (symbol: string) => {
-    const data = getPriceBySymbol(symbol);
-    return data ? { 
-      name: data.name, 
-      price: data.current_price, 
-      change: data.price_change_percentage_24h,
-      high24h: data.high_24h,
-      low24h: data.low_24h,
-      volume: data.total_volume,
-      marketCap: data.market_cap
-    } : null;
-  };
-
-  // Get selected crypto from live prices only
+  // Get selected crypto from live prices
   const liveData = getPriceBySymbol(selectedCrypto);
   const selected = liveData 
     ? { 
@@ -125,56 +110,6 @@ const Dashboard = () => {
                 {time}
               </button>
             ))}
-          </div>
-
-          {/* Selected Crypto Info */}
-          <div className="rounded-xl border border-border bg-card glass-card p-4 sm:rounded-2xl sm:p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 sm:gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-warning/20 text-warning font-bold text-sm sm:h-12 sm:w-12 sm:text-base">
-                  {selectedCrypto.slice(0, 1)}
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-foreground sm:text-lg md:text-xl">{selected.name}</h2>
-                  <span className="text-xs text-muted-foreground sm:text-sm">{selectedCrypto}/USD</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className={`h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2 ${loading ? "bg-warning" : "bg-success"} animate-pulse`} />
-                <span className="text-xs text-muted-foreground sm:text-sm">{loading ? t("common.loading") : t("common.live")}</span>
-              </div>
-            </div>
-
-            <div className="mt-4 sm:mt-6">
-              <div className="text-2xl font-bold text-foreground sm:text-3xl md:text-4xl gradient-text">
-                {formatPrice(selected.price)}
-              </div>
-              <div className="mt-1.5 flex items-center gap-2 sm:mt-2">
-                <span className={`text-sm font-medium sm:text-base ${selected.change >= 0 ? "text-success" : "text-destructive"}`}>
-                  {selected.change >= 0 ? "↗" : "↘"} {Math.abs(selected.change).toFixed(2)}%
-                </span>
-                <span className="text-xs text-muted-foreground sm:text-sm">{t("dashboard.change24h")}</span>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:grid-cols-4 sm:gap-4">
-              <div className="rounded-lg bg-secondary/50 p-2.5 sm:bg-transparent sm:p-0">
-                <div className="text-[10px] text-muted-foreground sm:text-xs md:text-sm">{t("dashboard.high24h")}</div>
-                <div className="font-semibold text-foreground text-xs sm:text-sm md:text-base">{liveData?.high_24h ? formatPrice(liveData.high_24h) : "---"}</div>
-              </div>
-              <div className="rounded-lg bg-secondary/50 p-2.5 sm:bg-transparent sm:p-0">
-                <div className="text-[10px] text-muted-foreground sm:text-xs md:text-sm">{t("dashboard.low24h")}</div>
-                <div className="font-semibold text-foreground text-xs sm:text-sm md:text-base">{liveData?.low_24h ? formatPrice(liveData.low_24h) : "---"}</div>
-              </div>
-              <div className="rounded-lg bg-secondary/50 p-2.5 sm:bg-transparent sm:p-0">
-                <div className="text-[10px] text-muted-foreground sm:text-xs md:text-sm">{t("dashboard.volume24h")}</div>
-                <div className="font-semibold text-foreground text-xs sm:text-sm md:text-base">{currencySymbol}{liveData?.total_volume ? (liveData.total_volume / 1e9).toFixed(2) + "B" : "---"}</div>
-              </div>
-              <div className="rounded-lg bg-secondary/50 p-2.5 sm:bg-transparent sm:p-0">
-                <div className="text-[10px] text-muted-foreground sm:text-xs md:text-sm">{t("dashboard.marketCap")}</div>
-                <div className="font-semibold text-foreground text-xs sm:text-sm md:text-base">{currencySymbol}{liveData?.market_cap ? (liveData.market_cap / 1e9).toFixed(2) + "B" : "---"}</div>
-              </div>
-            </div>
           </div>
 
           {/* Live On-Chain Data */}
