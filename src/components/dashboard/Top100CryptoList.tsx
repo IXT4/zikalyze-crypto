@@ -314,7 +314,7 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                               : "text-foreground"
                         }`}
                       >
-                        {crypto.current_price > 0 ? formatPrice(crypto.current_price) : "—"}
+                        {formatPrice(crypto.current_price)}
                       </span>
                     </td>
                     <td className="py-3 text-right">
