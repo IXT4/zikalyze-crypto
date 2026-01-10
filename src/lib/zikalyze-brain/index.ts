@@ -252,20 +252,20 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   
   if (bias === 'NEUTRAL') {
     // No trade signal — low confidence
-    confidence = Math.max(40, Math.min(55, confluenceBase * 0.6)) - macroPenalty;
+    confidence = Math.max(40, Math.min(55, confluenceBase * 0.55)) - macroPenalty;
   } else if (fundamentalAlignment) {
-    // Technical + fundamental agree — STRONG signal
-    confidence = Math.max(60, Math.min(88, (confluenceBase * 0.7 + rawConfidence * 0.3))) - macroPenalty;
+    // Technical + fundamental agree — moderate-high signal (capped lower for humility)
+    confidence = Math.max(55, Math.min(75, (confluenceBase * 0.6 + rawConfidence * 0.25))) - macroPenalty;
   } else if (fundamentalConflict) {
-    // Technical vs fundamental conflict — reduce confidence
-    confidence = Math.max(45, Math.min(65, confluenceBase * 0.6)) - macroPenalty;
+    // Technical vs fundamental conflict — reduce confidence significantly
+    confidence = Math.max(42, Math.min(58, confluenceBase * 0.5)) - macroPenalty;
   } else {
     // Technical clear, fundamental neutral — moderate confidence
-    confidence = Math.max(52, Math.min(78, confluenceBase * 0.8)) - macroPenalty;
+    confidence = Math.max(48, Math.min(68, confluenceBase * 0.65)) - macroPenalty;
   }
   
-  // Clamp final confidence
-  confidence = Math.max(35, Math.min(88, confidence));
+  // Clamp final confidence — lower ceiling for epistemic humility
+  confidence = Math.max(35, Math.min(78, confidence));
 
   // Market structure
   const structure = analyzeMarketStructure(price, high24h, low24h, change);
@@ -424,22 +424,22 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     keyInsights.push(`⚡ ${institutionalVsRetail.divergenceNote}`);
   }
 
-  // Success probability — based on confluence and setup quality
-  const confluenceBonus = Math.round(topDownAnalysis.confluenceScore * 0.35);
-  const timingBonus = precisionEntry.timing === 'NOW' ? 10 : precisionEntry.timing === 'WAIT_PULLBACK' ? 4 : 0;
-  const biasBonus = bias !== 'NEUTRAL' ? 6 : 0;
-  const volumeBonus = volumeSpike.isSpike && volumeSpike.magnitude === 'HIGH' ? 4 : volumeSpike.isSpike ? 2 : 0;
-  const successProb = Math.min(88, 40 + confluenceBonus + timingBonus + biasBonus + volumeBonus);
+  // Success probability — based on confluence and setup quality (tempered for realism)
+  const confluenceBonus = Math.round(topDownAnalysis.confluenceScore * 0.28);
+  const timingBonus = precisionEntry.timing === 'NOW' ? 6 : precisionEntry.timing === 'WAIT_PULLBACK' ? 3 : 0;
+  const biasBonus = bias !== 'NEUTRAL' ? 4 : 0;
+  const volumeBonus = volumeSpike.isSpike && volumeSpike.magnitude === 'HIGH' ? 3 : volumeSpike.isSpike ? 1 : 0;
+  const successProb = Math.min(72, 38 + confluenceBonus + timingBonus + biasBonus + volumeBonus);
   const probBar = createBar(successProb, 100, '▓', '░', 12);
   
-  // Qualitative description based on probability tier
-  const probDescription = successProb >= 75 
-    ? 'HIGH — Strong confluence across timeframes'
-    : successProb >= 65 
-      ? 'GOOD — Multiple confirmations present' 
-      : successProb >= 55 
-        ? 'MODERATE — Proceed with caution'
-        : 'LOW — Weak setup, reduce size';
+  // Qualitative description based on probability tier (more measured language)
+  const probDescription = successProb >= 65 
+    ? 'FAVORABLE — Good confluence, manage risk'
+    : successProb >= 55 
+      ? 'MODERATE — Some confirmations, stay nimble' 
+      : successProb >= 48 
+        ? 'UNCERTAIN — Mixed signals, reduce size'
+        : 'WEAK — Low conviction, consider sitting out';
 
   // HTF visual with alignment
   const getTrendIcon = (trend: string) => trend === 'BULLISH' ? '🟢' : trend === 'BEARISH' ? '🔴' : '⚪';
@@ -461,25 +461,25 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   const macroSection = buildMacroSection(macroPenalty > 0);
 
   // Build TL;DR headline — one-liner summary for quick scanning
-  // Confidence-adjusted bias labels: "Lean bearish" for low confidence, "BEARISH" for high
+  // Confidence-adjusted bias labels: softer language for humility
   const getBiasLabel = (b: 'LONG' | 'SHORT' | 'NEUTRAL', conf: number): string => {
     if (b === 'NEUTRAL') return 'Neutral';
     const baseWord = b === 'LONG' ? 'bullish' : 'bearish';
-    if (conf >= 65) return baseWord.toUpperCase(); // Strong conviction
-    if (conf >= 50) return baseWord.charAt(0).toUpperCase() + baseWord.slice(1); // Moderate: "Bullish"
-    return `Lean ${baseWord}`; // Low confidence: "Lean bearish"
+    if (conf >= 68) return `Favoring ${baseWord}`; // Softer than all-caps
+    if (conf >= 55) return `Leaning ${baseWord}`; // Moderate
+    return `Slight ${baseWord} tilt`; // Low confidence
   };
   const biasWord = getBiasLabel(bias, confidence);
-  const structureWord = topDownAnalysis.confluenceScore >= 70 ? 'strong' : topDownAnalysis.confluenceScore >= 50 ? 'moderate' : 'weak';
+  const structureWord = topDownAnalysis.confluenceScore >= 70 ? 'decent' : topDownAnalysis.confluenceScore >= 50 ? 'mixed' : 'weak';
   const marketPhase = pricePosition > 70 ? 'extended' : pricePosition < 30 ? 'discount' : 'mid-range';
   const actionWord = precisionEntry.timing === 'NOW' 
-    ? (bias === 'LONG' ? 'Buy zone active' : bias === 'SHORT' ? 'Sell zone active' : 'Range-bound')
+    ? (bias === 'LONG' ? 'Potential buy zone' : bias === 'SHORT' ? 'Potential sell zone' : 'Range-bound')
     : precisionEntry.timing === 'WAIT_PULLBACK' 
       ? 'Await pullback' 
       : precisionEntry.timing === 'WAIT_BREAKOUT'
         ? 'Await breakout'
         : 'No clear entry';
-  const tldr = `${biasWord} bias (${structureWord} confluence) | ${marketPhase.charAt(0).toUpperCase() + marketPhase.slice(1)} zone | ${actionWord}`;
+  const tldr = `${biasWord} (${structureWord} confluence) | ${marketPhase.charAt(0).toUpperCase() + marketPhase.slice(1)} zone | ${actionWord}`;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // BUILD FINAL ANALYSIS — Dense, Visual, Actionable
@@ -495,7 +495,7 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
 ${historicalContext}
 ${volumeSpike.isSpike ? `📊 VOLUME SPIKE: +${volumeSpike.percentageAboveAvg.toFixed(0)}% above 24h avg (${volumeSpike.magnitude}) [Spot via aggregator]\n` : ''}📈 Volume: ${volume > avgVolume ? `+${((volume / avgVolume - 1) * 100).toFixed(0)}% above` : volume < avgVolume * 0.8 ? `${((1 - volume / avgVolume) * 100).toFixed(0)}% below` : 'near'} 24h avg | Futures OI ${change > 2 ? 'rising (longs building)' : change < -2 ? 'declining (shorts closing)' : 'stable'}
 ┌─────────────────────────────────────────────────┐
-│  🎯 VERDICT: ${bias === 'LONG' ? (confidence >= 65 ? '🟢 BULLISH' : confidence >= 50 ? '🟢 Bullish' : '🟢 Lean bullish') : bias === 'SHORT' ? (confidence >= 65 ? '🔴 BEARISH' : confidence >= 50 ? '🔴 Bearish' : '🔴 Lean bearish') : '⚪ NEUTRAL'}  │  Confidence: ${confidence.toFixed(0)}%
+│  🎯 VERDICT: ${bias === 'LONG' ? (confidence >= 68 ? '🟢 Favoring Bullish' : confidence >= 55 ? '🟢 Leaning Bullish' : '🟢 Slight Bull Tilt') : bias === 'SHORT' ? (confidence >= 68 ? '🔴 Favoring Bearish' : confidence >= 55 ? '🔴 Leaning Bearish' : '🔴 Slight Bear Tilt') : '⚪ NEUTRAL'}  │  Confidence: ${confidence.toFixed(0)}%
 └─────────────────────────────────────────────────┘
 
 ━━━ 📊 MARKET PULSE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -539,11 +539,19 @@ ${bias === 'SHORT' ? `📈 If invalidated: Flip long above $${(high24h + range *
 
 ${keyInsights.slice(0, 5).map(i => `• ${i}`).join('\n')}
 
-━━━ 🔮 SCENARIOS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━ 🔮 SCENARIOS (Both Directions) ━━━━━━━━━━━━━━
 
 ${scenarios.slice(0, 2).map(s => `${s.condition}
   → ${s.outcome}
   📋 ${s.action}`).join('\n\n')}
+
+${bias === 'SHORT' ? `📈 UPSIDE SCENARIO: If price reclaims $${(high24h - range * 0.1).toFixed(decimals)} with volume
+  → Bears trapped, momentum shift likely
+  📋 Consider flipping long or exiting shorts` : bias === 'LONG' ? `📉 DOWNSIDE SCENARIO: If price loses $${(low24h + range * 0.1).toFixed(decimals)} with volume
+  → Bulls trapped, breakdown in play
+  📋 Consider flipping short or exiting longs` : `↔️ BREAKOUT SCENARIO: Watch $${high24h.toFixed(decimals)} (up) / $${low24h.toFixed(decimals)} (down)
+  → First to break with volume defines direction
+  📋 React to the breakout, don't predict`}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧠 Zikalyze AI v11.0 • ${isLiveData ? '🟢 REAL-TIME DATA' : '⚪ DERIVED DATA'}
