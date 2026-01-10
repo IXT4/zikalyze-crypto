@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { fetchWithRetry, safeFetch } from "@/lib/fetchWithRetry";
 
 export interface CryptoPrice {
   id: string;
@@ -325,96 +326,149 @@ export const useCryptoPrices = () => {
     }));
   }, []);
 
-  const fetchPrices = useCallback(async (retryCount = 0) => {
+  const TOP100_CACHE_KEY = "zikalyze_top100_cache_v1";
+  const TOP100_CACHE_TTL_MS = 60 * 60 * 1000; // 1h
+
+  const loadCachedTop100 = (): CoinGeckoCoin[] | null => {
+    try {
+      const raw = localStorage.getItem(TOP100_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { ts: number; data: CoinGeckoCoin[] };
+      if (!parsed?.ts || !Array.isArray(parsed.data)) return null;
+      if (Date.now() - parsed.ts > TOP100_CACHE_TTL_MS) return null;
+      return parsed.data;
+    } catch {
+      return null;
+    }
+  };
+
+  const saveCachedTop100 = (data: CoinGeckoCoin[]) => {
+    try {
+      localStorage.setItem(TOP100_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const fetchPrices = useCallback(async () => {
     // Initialize with fallback data immediately so UI is responsive
     if (prices.length === 0) {
-      const fallbackWithTimestamp = FALLBACK_CRYPTOS.map(c => ({ ...c, lastUpdate: Date.now() }));
+      const fallbackWithTimestamp = FALLBACK_CRYPTOS.map((c) => ({ ...c, lastUpdate: Date.now() }));
       setPrices(fallbackWithTimestamp);
-      fallbackWithTimestamp.forEach(p => pricesRef.current.set(p.symbol, p));
-      cryptoListRef.current = fallbackWithTimestamp.map(coin => ({
+      fallbackWithTimestamp.forEach((p) => pricesRef.current.set(p.symbol, p));
+      cryptoListRef.current = fallbackWithTimestamp.map((coin) => ({
         symbol: coin.symbol.toUpperCase(),
         name: coin.name,
-        id: coin.id
+        id: coin.id,
       }));
     }
 
-    try {
-      setLoading(true);
-      
-      // Use AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
-      // Fetch top 150 from CoinGecko for metadata (images, names, market cap)
-      const response = await fetch(
-        `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=150&page=1&sparkline=false`,
-        { signal: controller.signal }
+    const buildTop100 = (coins: CoinGeckoCoin[], source: string) => {
+      const cleanData = coins.filter(
+        (coin) =>
+          !STABLECOINS.includes(coin.symbol.toLowerCase()) &&
+          !STABLECOINS.includes(coin.id.toLowerCase()) &&
+          !isUsdPrefixed(coin.symbol)
       );
-      
-      clearTimeout(timeoutId);
-      
-      if (response.status === 429) {
-        // Rate limited - continue with fallback, WebSocket will update prices
-        console.log('[CoinGecko] Rate limited, using fallback data');
-        setLoading(false);
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error("Failed to fetch from CoinGecko");
-      }
-      
-      const data: CoinGeckoCoin[] = await response.json();
-      
-      // Filter out stablecoins, restake assets, and USD-prefixed tokens
-      const cleanData = data.filter(coin => 
-        !STABLECOINS.includes(coin.symbol.toLowerCase()) && 
-        !STABLECOINS.includes(coin.id.toLowerCase()) &&
-        !isUsdPrefixed(coin.symbol)
-      );
-      
-      // Sort by market cap descending to maintain accurate ranking
+
       const sortedData = cleanData.sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
-      
-      // Take top 100 by market cap
       const filteredData = sortedData.slice(0, 100);
-      
-      // Store the crypto list for WebSocket connections
-      cryptoListRef.current = filteredData.map(coin => ({
+
+      cryptoListRef.current = filteredData.map((coin) => ({
         symbol: coin.symbol.toUpperCase(),
         name: coin.name,
-        id: coin.id
+        id: coin.id,
       }));
-      
+
       const cryptoPrices: CryptoPrice[] = filteredData.map((coin, index) => ({
         id: coin.id,
         symbol: coin.symbol.toLowerCase(),
         name: coin.name,
         image: coin.image,
-        current_price: coin.current_price || 0,
-        price_change_percentage_24h: coin.price_change_percentage_24h || 0,
-        high_24h: coin.high_24h || 0,
-        low_24h: coin.low_24h || 0,
-        total_volume: coin.total_volume || 0,
-        market_cap: coin.market_cap || 0,
-        market_cap_rank: coin.market_cap_rank || (index + 1),
-        circulating_supply: coin.circulating_supply || 0,
+        current_price: coin.current_price ?? 0,
+        price_change_percentage_24h: coin.price_change_percentage_24h ?? 0,
+        high_24h: coin.high_24h ?? 0,
+        low_24h: coin.low_24h ?? 0,
+        total_volume: coin.total_volume ?? 0,
+        market_cap: coin.market_cap ?? 0,
+        market_cap_rank: coin.market_cap_rank ?? index + 1,
+        circulating_supply: coin.circulating_supply ?? 0,
         lastUpdate: Date.now(),
-        source: "CoinGecko",
+        source,
       }));
-      
-      // Initialize price map - WebSocket will update with real-time prices
-      cryptoPrices.forEach(p => pricesRef.current.set(p.symbol, p));
-      
+
+      cryptoPrices.forEach((p) => pricesRef.current.set(p.symbol, p));
       setPrices(cryptoPrices);
       setError(null);
-      console.log('[CoinGecko] ✓ Loaded metadata for', cryptoPrices.length, 'coins');
+      console.log(`[Top100] ✓ Loaded ${cryptoPrices.length} coins from ${source}`);
+    };
+
+    try {
+      setLoading(true);
+
+      // Fetch enough rows so that after filtering stablecoins/restakes we still have 100
+      const page1Url = `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false`;
+      const page2Url = `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=false`;
+
+      const res1 = await safeFetch(page1Url, { timeoutMs: 12000, maxRetries: 2 });
+
+      if (!res1) {
+        const cached = loadCachedTop100();
+        if (cached) {
+          buildTop100(cached, "Cache");
+        } else {
+          console.log("[CoinGecko] Fetch failed and no cache available");
+        }
+        return;
+      }
+
+      if (res1.status === 429) {
+        const cached = loadCachedTop100();
+        if (cached) {
+          console.log("[CoinGecko] Rate limited, using cache");
+          buildTop100(cached, "Cache");
+        } else {
+          console.log("[CoinGecko] Rate limited and no cache available");
+        }
+        return;
+      }
+
+      if (!res1.ok) {
+        throw new Error(`CoinGecko HTTP ${res1.status}`);
+      }
+
+      const data1: CoinGeckoCoin[] = await res1.json();
+
+      // If filtering would reduce below 100, grab page 2 too.
+      const tentativeClean = data1.filter(
+        (coin) =>
+          !STABLECOINS.includes(coin.symbol.toLowerCase()) &&
+          !STABLECOINS.includes(coin.id.toLowerCase()) &&
+          !isUsdPrefixed(coin.symbol)
+      );
+
+      let merged = data1;
+      if (tentativeClean.length < 120) {
+        const res2 = await safeFetch(page2Url, { timeoutMs: 12000, maxRetries: 2 });
+        if (res2?.ok) {
+          const data2: CoinGeckoCoin[] = await res2.json();
+          merged = [...data1, ...data2];
+        }
+      }
+
+      saveCachedTop100(merged);
+      buildTop100(merged, "CoinGecko");
     } catch (err) {
-      console.log('[CoinGecko] Fetch failed, using fallback data');
+      const cached = loadCachedTop100();
+      if (cached) {
+        buildTop100(cached, "Cache");
+      } else {
+        console.log("[CoinGecko] Fetch failed, using fallback data");
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [prices.length]);
 
   // Connect to CoinCap WebSocket - FREE, supports ALL cryptocurrencies
   const connectCoinCap = useCallback(() => {
