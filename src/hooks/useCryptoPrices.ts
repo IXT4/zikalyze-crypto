@@ -224,28 +224,26 @@ const FALLBACK_CRYPTOS: CryptoPrice[] = [
   { id: "ripple", symbol: "xrp", name: "XRP", image: "https://assets.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png", current_price: 0, price_change_percentage_24h: 0, high_24h: 0, low_24h: 0, total_volume: 0, market_cap: 0, market_cap_rank: 5, circulating_supply: 57000000000, lastUpdate: Date.now(), source: "Loading" },
 ];
 
-// Exchange WebSocket endpoints
+// Exchange WebSocket endpoints - prioritize most reliable free sources
 const EXCHANGES = {
-  coincap: {
-    url: "wss://ws.coincap.io/prices?assets=ALL",
-    name: "CoinCap",
-  },
+  // Binance combined stream - most reliable, handles 100+ symbols
   binance: {
-    url: "wss://stream.binance.com:9443/stream?streams=",
+    url: "wss://stream.binance.com:9443/ws",
+    combinedUrl: "wss://stream.binance.com:9443/stream?streams=",
     name: "Binance",
   },
-  bybit: {
-    url: "wss://stream.bybit.com/v5/public/spot",
-    name: "Bybit",
+  // Binance.US fallback for US users
+  binanceUs: {
+    url: "wss://stream.binance.us:9443/ws",
+    combinedUrl: "wss://stream.binance.us:9443/stream?streams=",
+    name: "BinanceUS",
   },
-  okx: {
-    url: "wss://ws.okx.com:8443/ws/v5/public",
-    name: "OKX",
+  // CoinCap - free, supports many altcoins
+  coincap: {
+    url: "wss://ws.coincap.io/prices?assets=",
+    name: "CoinCap",
   },
-  coinbase: {
-    url: "wss://ws-feed.exchange.coinbase.com",
-    name: "Coinbase",
-  },
+  // Kraken - reliable for major pairs
   kraken: {
     url: "wss://ws.kraken.com",
     name: "Kraken",
@@ -259,12 +257,9 @@ export const useCryptoPrices = () => {
   const [connectedExchanges, setConnectedExchanges] = useState<string[]>([]);
   const [isLive, setIsLive] = useState(false);
   
-  // WebSocket refs for each exchange
+  // WebSocket refs - simplified to most reliable free sources
+  const binanceWsRef = useRef<WebSocket | null>(null);
   const coincapWsRef = useRef<WebSocket | null>(null);
-  const binanceWsRefs = useRef<WebSocket[]>([]);
-  const bybitWsRef = useRef<WebSocket | null>(null);
-  const okxWsRef = useRef<WebSocket | null>(null);
-  const coinbaseWsRef = useRef<WebSocket | null>(null);
   const krakenWsRef = useRef<WebSocket | null>(null);
   
   const reconnectTimeoutsRef = useRef<Record<string, number>>({});
@@ -528,327 +523,128 @@ export const useCryptoPrices = () => {
     }
   }, [updatePrice]);
 
-  // Connect to Binance WebSocket with improved retry logic
+  // Connect to Binance WebSocket - Most reliable free source
   const connectBinance = useCallback(() => {
     if (cryptoListRef.current.length === 0) return;
 
-    // Close existing connections
-    binanceWsRefs.current.forEach(ws => {
-      try { ws.close(); } catch (e) {}
-    });
-    binanceWsRefs.current = [];
+    // Close existing connection
+    if (binanceWsRef.current) {
+      try { binanceWsRef.current.close(); } catch (e) {}
+    }
 
     const cryptoList = cryptoListRef.current;
     
-    // Split into chunks of 50 for Binance limits
-    const chunks = [
-      cryptoList.slice(0, 50),
-      cryptoList.slice(50, 100),
-    ].filter(chunk => chunk.length > 0);
-
-    chunks.forEach((chunk, index) => {
-      const streams = chunk.map(c => `${c.symbol.toLowerCase()}usdt@ticker`).join("/");
+    // Build combined stream for all symbols (Binance supports up to 1024 streams)
+    const streams = cryptoList.slice(0, 100).map(c => `${c.symbol.toLowerCase()}usdt@ticker`).join("/");
+    
+    try {
+      const ws = new WebSocket(`${EXCHANGES.binance.combinedUrl}${streams}`);
       
-      try {
-        const ws = new WebSocket(`${EXCHANGES.binance.url}${streams}`);
-        
-        // Connection timeout
-        const connectTimeout = setTimeout(() => {
-          if (ws.readyState !== WebSocket.OPEN) {
-            ws.close();
-          }
-        }, 10000);
-        
-        ws.onopen = () => {
-          clearTimeout(connectTimeout);
-          console.log(`[Binance] Connected (chunk ${index + 1})`);
-          setConnectedExchanges(prev => 
-            prev.includes("Binance") ? prev : [...prev, "Binance"]
-          );
-          setIsLive(true);
-        };
-        
-        ws.onmessage = (event) => {
-          try {
-            const message = JSON.parse(event.data);
-            if (message.data) {
-              const ticker = message.data;
-              const symbol = ticker.s.replace("USDT", "");
-              
+      const connectTimeout = setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          console.log(`[Binance] Connection timeout, trying fallback...`);
+          ws.close();
+          // Try Binance.US as fallback
+          connectBinanceUS();
+        }
+      }, 8000);
+      
+      ws.onopen = () => {
+        clearTimeout(connectTimeout);
+        console.log(`[Binance] ✓ Connected successfully`);
+        setConnectedExchanges(prev => 
+          prev.includes("Binance") ? prev : [...prev, "Binance"]
+        );
+        setIsLive(true);
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.data) {
+            const ticker = message.data;
+            const symbol = ticker.s?.replace("USDT", "");
+            
+            if (symbol && ticker.c) {
               updatePrice(symbol, {
                 current_price: parseFloat(ticker.c),
-                price_change_percentage_24h: parseFloat(ticker.P),
-                high_24h: parseFloat(ticker.h),
-                low_24h: parseFloat(ticker.l),
-                total_volume: parseFloat(ticker.q),
+                price_change_percentage_24h: parseFloat(ticker.P || 0),
+                high_24h: parseFloat(ticker.h || 0),
+                low_24h: parseFloat(ticker.l || 0),
+                total_volume: parseFloat(ticker.q || 0),
               }, "Binance");
             }
-          } catch (e) {
-            // Silent parse errors
           }
-        };
+        } catch (e) {
+          // Silent parse errors
+        }
+      };
+      
+      ws.onerror = () => {
+        clearTimeout(connectTimeout);
+      };
+      
+      ws.onclose = () => {
+        clearTimeout(connectTimeout);
+        setConnectedExchanges(prev => prev.filter(e => e !== "Binance"));
         
-        ws.onerror = (e) => {
-          clearTimeout(connectTimeout);
-          console.log(`[Binance] WebSocket error, will retry...`);
-        };
-        
-        ws.onclose = () => {
-          clearTimeout(connectTimeout);
-          setConnectedExchanges(prev => prev.filter(e => e !== "Binance"));
-          
-          // Exponential backoff reconnect
-          const delay = Math.min(5000 + Math.random() * 2000, 10000);
-          if (reconnectTimeoutsRef.current.binance) {
-            clearTimeout(reconnectTimeoutsRef.current.binance);
-          }
-          reconnectTimeoutsRef.current.binance = window.setTimeout(() => {
-            connectBinance();
-          }, delay);
-        };
-        
-        binanceWsRefs.current.push(ws);
-      } catch (err) {
-        console.log(`[Binance] Connection failed, retrying...`);
-        setTimeout(() => connectBinance(), 3000);
-      }
-    });
+        const delay = 3000 + Math.random() * 2000;
+        if (reconnectTimeoutsRef.current.binance) {
+          clearTimeout(reconnectTimeoutsRef.current.binance);
+        }
+        reconnectTimeoutsRef.current.binance = window.setTimeout(() => {
+          connectBinance();
+        }, delay);
+      };
+      
+      binanceWsRef.current = ws;
+    } catch (err) {
+      console.log(`[Binance] Connection failed, trying fallback...`);
+      connectBinanceUS();
+    }
   }, [updatePrice]);
 
-  // Connect to Bybit WebSocket with improved retry
-  const connectBybit = useCallback(() => {
+  // Binance.US fallback
+  const connectBinanceUS = useCallback(() => {
     if (cryptoListRef.current.length === 0) return;
-    
-    if (bybitWsRef.current) {
-      try { bybitWsRef.current.close(); } catch (e) {}
-    }
 
+    const cryptoList = cryptoListRef.current;
+    const streams = cryptoList.slice(0, 50).map(c => `${c.symbol.toLowerCase()}usd@ticker`).join("/");
+    
     try {
-      const ws = new WebSocket(EXCHANGES.bybit.url);
-      
-      const connectTimeout = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          ws.close();
-        }
-      }, 10000);
+      const ws = new WebSocket(`${EXCHANGES.binanceUs.combinedUrl}${streams}`);
       
       ws.onopen = () => {
-        clearTimeout(connectTimeout);
-        console.log(`[Bybit] Connected successfully`);
+        console.log(`[BinanceUS] ✓ Connected as fallback`);
         setConnectedExchanges(prev => 
-          prev.includes("Bybit") ? prev : [...prev, "Bybit"]
+          prev.includes("BinanceUS") ? prev : [...prev, "BinanceUS"]
         );
         setIsLive(true);
-        
-        const symbols = cryptoListRef.current.slice(0, 50).map(c => `tickers.${c.symbol}USDT`);
-        ws.send(JSON.stringify({
-          op: "subscribe",
-          args: symbols,
-        }));
       };
       
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          if (message.topic && message.topic.startsWith("tickers.") && message.data) {
+          if (message.data) {
             const ticker = message.data;
-            const symbol = ticker.symbol?.replace("USDT", "") || message.topic.replace("tickers.", "").replace("USDT", "");
+            const symbol = ticker.s?.replace("USD", "");
             
-            if (ticker.lastPrice) {
+            if (symbol && ticker.c) {
               updatePrice(symbol, {
-                current_price: parseFloat(ticker.lastPrice),
-                price_change_percentage_24h: parseFloat(ticker.price24hPcnt || 0) * 100,
-                high_24h: parseFloat(ticker.highPrice24h || 0),
-                low_24h: parseFloat(ticker.lowPrice24h || 0),
-                total_volume: parseFloat(ticker.turnover24h || 0),
-              }, "Bybit");
+                current_price: parseFloat(ticker.c),
+                price_change_percentage_24h: parseFloat(ticker.P || 0),
+                high_24h: parseFloat(ticker.h || 0),
+                low_24h: parseFloat(ticker.l || 0),
+              }, "BinanceUS");
             }
           }
-        } catch (e) {
-          // Silent parse errors
-        }
-      };
-      
-      ws.onerror = () => {
-        clearTimeout(connectTimeout);
+        } catch (e) {}
       };
       
       ws.onclose = () => {
-        clearTimeout(connectTimeout);
-        setConnectedExchanges(prev => prev.filter(e => e !== "Bybit"));
-        
-        const delay = Math.min(4000 + Math.random() * 2000, 10000);
-        if (reconnectTimeoutsRef.current.bybit) {
-          clearTimeout(reconnectTimeoutsRef.current.bybit);
-        }
-        reconnectTimeoutsRef.current.bybit = window.setTimeout(() => {
-          connectBybit();
-        }, delay);
+        setConnectedExchanges(prev => prev.filter(e => e !== "BinanceUS"));
       };
-      
-      bybitWsRef.current = ws;
-    } catch (err) {
-      setTimeout(() => connectBybit(), 4000);
-    }
-  }, [updatePrice]);
-
-  // Connect to OKX WebSocket with improved retry
-  const connectOKX = useCallback(() => {
-    if (cryptoListRef.current.length === 0) return;
-    
-    if (okxWsRef.current) {
-      try { okxWsRef.current.close(); } catch (e) {}
-    }
-
-    try {
-      const ws = new WebSocket(EXCHANGES.okx.url);
-      
-      const connectTimeout = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          ws.close();
-        }
-      }, 10000);
-      
-      ws.onopen = () => {
-        clearTimeout(connectTimeout);
-        console.log(`[OKX] Connected successfully`);
-        setConnectedExchanges(prev => 
-          prev.includes("OKX") ? prev : [...prev, "OKX"]
-        );
-        setIsLive(true);
-        
-        const args = cryptoListRef.current.slice(0, 50).map(c => ({
-          channel: "tickers",
-          instId: `${c.symbol}-USDT`,
-        }));
-        
-        ws.send(JSON.stringify({
-          op: "subscribe",
-          args,
-        }));
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          if (message.data && Array.isArray(message.data)) {
-            message.data.forEach((ticker: any) => {
-              if (ticker.instId) {
-                const symbol = ticker.instId.replace("-USDT", "");
-                
-                updatePrice(symbol, {
-                  current_price: parseFloat(ticker.last || 0),
-                  price_change_percentage_24h: parseFloat(ticker.sodUtc8 || 0) 
-                    ? ((parseFloat(ticker.last) - parseFloat(ticker.sodUtc8)) / parseFloat(ticker.sodUtc8)) * 100 
-                    : 0,
-                  high_24h: parseFloat(ticker.high24h || 0),
-                  low_24h: parseFloat(ticker.low24h || 0),
-                  total_volume: parseFloat(ticker.volCcy24h || 0),
-                }, "OKX");
-              }
-            });
-          }
-        } catch (e) {
-          // Silent parse errors
-        }
-      };
-      
-      ws.onerror = () => {
-        clearTimeout(connectTimeout);
-      };
-      
-      ws.onclose = () => {
-        clearTimeout(connectTimeout);
-        setConnectedExchanges(prev => prev.filter(e => e !== "OKX"));
-        
-        const delay = Math.min(4000 + Math.random() * 2000, 10000);
-        if (reconnectTimeoutsRef.current.okx) {
-          clearTimeout(reconnectTimeoutsRef.current.okx);
-        }
-        reconnectTimeoutsRef.current.okx = window.setTimeout(() => {
-          connectOKX();
-        }, delay);
-      };
-      
-      okxWsRef.current = ws;
-    } catch (err) {
-      setTimeout(() => connectOKX(), 4000);
-    }
-  }, [updatePrice]);
-
-  // Connect to Coinbase WebSocket with improved retry
-  const connectCoinbase = useCallback(() => {
-    if (cryptoListRef.current.length === 0) return;
-    
-    if (coinbaseWsRef.current) {
-      try { coinbaseWsRef.current.close(); } catch (e) {}
-    }
-
-    try {
-      const ws = new WebSocket(EXCHANGES.coinbase.url);
-      
-      const connectTimeout = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          ws.close();
-        }
-      }, 10000);
-      
-      ws.onopen = () => {
-        clearTimeout(connectTimeout);
-        console.log(`[Coinbase] Connected successfully`);
-        setConnectedExchanges(prev => 
-          prev.includes("Coinbase") ? prev : [...prev, "Coinbase"]
-        );
-        setIsLive(true);
-        
-        const productIds = cryptoListRef.current.slice(0, 30).map(c => `${c.symbol}-USD`);
-        
-        ws.send(JSON.stringify({
-          type: "subscribe",
-          product_ids: productIds,
-          channels: ["ticker"],
-        }));
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          if (message.type === "ticker" && message.product_id) {
-            const symbol = message.product_id.replace("-USD", "");
-            
-            updatePrice(symbol, {
-              current_price: parseFloat(message.price || 0),
-              high_24h: parseFloat(message.high_24h || 0),
-              low_24h: parseFloat(message.low_24h || 0),
-              total_volume: parseFloat(message.volume_24h || 0) * parseFloat(message.price || 0),
-            }, "Coinbase");
-          }
-        } catch (e) {
-          // Silent parse errors
-        }
-      };
-      
-      ws.onerror = () => {
-        clearTimeout(connectTimeout);
-      };
-      
-      ws.onclose = () => {
-        clearTimeout(connectTimeout);
-        setConnectedExchanges(prev => prev.filter(e => e !== "Coinbase"));
-        
-        const delay = Math.min(4000 + Math.random() * 2000, 10000);
-        if (reconnectTimeoutsRef.current.coinbase) {
-          clearTimeout(reconnectTimeoutsRef.current.coinbase);
-        }
-        reconnectTimeoutsRef.current.coinbase = window.setTimeout(() => {
-          connectCoinbase();
-        }, delay);
-      };
-      
-      coinbaseWsRef.current = ws;
-    } catch (err) {
-      setTimeout(() => connectCoinbase(), 4000);
-    }
+    } catch (err) {}
   }, [updatePrice]);
 
   // Connect to Kraken WebSocket with improved retry
@@ -941,44 +737,34 @@ export const useCryptoPrices = () => {
     fetchPrices();
   }, [fetchPrices]);
 
-  // Connect to all exchanges when crypto list is populated (runs only once)
+  // Connect to reliable free WebSockets when crypto list is populated
   useEffect(() => {
-    // Check if we should connect (only when cryptoListRef has data)
     const checkAndConnect = () => {
       if (cryptoListRef.current.length > 0 && !exchangesConnectedRef.current) {
         exchangesConnectedRef.current = true;
         
-        // Connect CoinCap first - it supports ALL cryptos
-        connectCoinCap();
-        
-        // Stagger other connections for additional data points
-        setTimeout(() => connectBinance(), 500);
-        setTimeout(() => connectBybit(), 1000);
-        setTimeout(() => connectOKX(), 1500);
-        setTimeout(() => connectCoinbase(), 2000);
-        setTimeout(() => connectKraken(), 2500);
+        // Priority: Binance first (most reliable), then CoinCap, then Kraken
+        console.log('[WebSocket] Starting connections to free live feeds...');
+        connectBinance();
+        setTimeout(() => connectCoinCap(), 500);
+        setTimeout(() => connectKraken(), 1000);
       }
     };
     
-    // Check immediately and also after a small delay (in case fetch is still in progress)
     checkAndConnect();
     const timeoutId = setTimeout(checkAndConnect, 1000);
     
     return () => {
       clearTimeout(timeoutId);
-      // Cleanup all connections
       Object.values(reconnectTimeoutsRef.current).forEach(timeout => {
         clearTimeout(timeout);
       });
       
+      if (binanceWsRef.current) binanceWsRef.current.close();
       if (coincapWsRef.current) coincapWsRef.current.close();
-      binanceWsRefs.current.forEach(ws => ws.close());
-      if (bybitWsRef.current) bybitWsRef.current.close();
-      if (okxWsRef.current) okxWsRef.current.close();
-      if (coinbaseWsRef.current) coinbaseWsRef.current.close();
       if (krakenWsRef.current) krakenWsRef.current.close();
     };
-  }, [connectCoinCap, connectBinance, connectBybit, connectOKX, connectCoinbase, connectKraken]);
+  }, [connectBinance, connectCoinCap, connectKraken]);
 
   // Track live status
   useEffect(() => {
