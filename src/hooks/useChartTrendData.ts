@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { safeFetch } from '@/lib/fetchWithRetry';
 
 export interface CandleData {
@@ -221,35 +222,26 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
   const mountedRef = useRef(true);
   const refreshIntervalRef = useRef<number | null>(null);
   
-  // Fetch from Binance (PRIMARY)
-  const fetchFromBinance = useCallback(async (): Promise<CandleData[] | null> => {
-    const binanceSymbol = BINANCE_SYMBOL_MAP[symbol.toUpperCase()];
-    if (!binanceSymbol) return null;
-    
+  // Fetch from Edge Function (PRIMARY - bypasses CORS, uses Binance/Bybit/OKX)
+  const fetchFromEdgeFunction = useCallback(async (): Promise<CandleData[] | null> => {
     try {
-      const endpoints = [
-        `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=1h&limit=24`,
-        `https://api.binance.us/api/v3/klines?symbol=${binanceSymbol}&interval=1h&limit=24`,
-      ];
+      const { data, error } = await supabase.functions.invoke('crypto-candles', {
+        body: { symbol, interval: '1h', limit: 24 }
+      });
       
-      for (const url of endpoints) {
-        const response = await safeFetch(url, { timeoutMs: 8000, maxRetries: 2 });
-        if (response?.ok) {
-          const data = await response.json();
-          if (Array.isArray(data) && data.length >= 5) {
-            return data.map((k: any[]) => ({
-              timestamp: k[0],
-              open: parseFloat(k[1]),
-              high: parseFloat(k[2]),
-              low: parseFloat(k[3]),
-              close: parseFloat(k[4]),
-              volume: parseFloat(k[5]),
-            }));
-          }
-        }
+      if (error) {
+        console.log(`[ChartTrend] Edge function error for ${symbol}:`, error);
+        return null;
       }
+      
+      if (data?.candles && Array.isArray(data.candles) && data.candles.length >= 5) {
+        console.log(`[ChartTrend] ${symbol} loaded from ${data.source}: ${data.candles.length} candles`);
+        return data.candles;
+      }
+      
       return null;
-    } catch {
+    } catch (e) {
+      console.log(`[ChartTrend] Edge function failed for ${symbol}:`, e);
       return null;
     }
   }, [symbol]);
@@ -299,11 +291,10 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
     let candles: CandleData[] | null = null;
     let source = 'unknown';
     
-    // 1. Try Binance first (may have CORS issues in browser)
-    candles = await fetchFromBinance();
+    // 1. Try Edge Function first (bypasses CORS, uses Binance/Bybit/OKX)
+    candles = await fetchFromEdgeFunction();
     if (candles && candles.length >= 5) {
-      source = 'Binance 24h';
-      console.log(`[ChartTrend] ${symbol} loaded from Binance: ${candles.length} candles`);
+      source = 'Server 24h';
     }
     
     // 2. Fallback to CoinCap (browser-friendly, no CORS)
@@ -311,7 +302,7 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
       candles = await fetchFromCoinCap();
       if (candles && candles.length >= 5) {
         source = 'CoinCap 24h';
-        console.log(`[ChartTrend] ${symbol} loaded from CoinCap: ${candles.length} candles`);
+        console.log(`[ChartTrend] ${symbol} loaded from CoinCap fallback: ${candles.length} candles`);
       }
     }
     
@@ -346,7 +337,7 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
     });
     
     setIsLoading(false);
-  }, [symbol, fetchFromBinance, fetchFromCoinCap]);
+  }, [symbol, fetchFromEdgeFunction, fetchFromCoinCap]);
   
   useEffect(() => {
     mountedRef.current = true;
