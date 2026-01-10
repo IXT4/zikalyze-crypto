@@ -96,6 +96,10 @@ const FALLBACK_CRYPTOS: CryptoPrice[] = [
 
 // Exchange WebSocket endpoints
 const EXCHANGES = {
+  coincap: {
+    url: "wss://ws.coincap.io/prices?assets=ALL",
+    name: "CoinCap",
+  },
   binance: {
     url: "wss://stream.binance.com:9443/stream?streams=",
     name: "Binance",
@@ -126,6 +130,7 @@ export const useCryptoPrices = () => {
   const [isLive, setIsLive] = useState(false);
   
   // WebSocket refs for each exchange
+  const coincapWsRef = useRef<WebSocket | null>(null);
   const binanceWsRefs = useRef<WebSocket[]>([]);
   const bybitWsRef = useRef<WebSocket | null>(null);
   const okxWsRef = useRef<WebSocket | null>(null);
@@ -136,6 +141,7 @@ export const useCryptoPrices = () => {
   const cryptoListRef = useRef<{ symbol: string; name: string; id: string }[]>([]);
   const pricesRef = useRef<Map<string, CryptoPrice>>(new Map());
   const lastUpdateTimeRef = useRef<Map<string, number>>(new Map());
+  const coinIdMapRef = useRef<Map<string, string>>(new Map()); // CoinCap ID to symbol mapping
   const exchangesConnectedRef = useRef(false);
   
   // Throttle interval - minimum 2 seconds between updates per coin for readable UI
@@ -308,6 +314,72 @@ export const useCryptoPrices = () => {
       setLoading(false);
     }
   }, []);
+
+  // Connect to CoinCap WebSocket - FREE, supports ALL cryptocurrencies
+  const connectCoinCap = useCallback(() => {
+    if (cryptoListRef.current.length === 0) return;
+    
+    if (coincapWsRef.current) {
+      coincapWsRef.current.close();
+    }
+
+    try {
+      // Build CoinCap asset list from our crypto list (CoinCap uses lowercase IDs)
+      const assetIds = cryptoListRef.current.map(c => c.id).join(",");
+      const ws = new WebSocket(`wss://ws.coincap.io/prices?assets=${assetIds}`);
+      
+      // Build ID to symbol mapping
+      cryptoListRef.current.forEach(c => {
+        coinIdMapRef.current.set(c.id, c.symbol.toLowerCase());
+      });
+      
+      ws.onopen = () => {
+        setConnectedExchanges(prev => 
+          prev.includes("CoinCap") ? prev : [...prev, "CoinCap"]
+        );
+        setIsLive(true);
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          // CoinCap sends { coinId: "price", anotherCoinId: "price" }
+          Object.entries(data).forEach(([coinId, priceStr]) => {
+            const symbol = coinIdMapRef.current.get(coinId);
+            if (symbol && priceStr) {
+              const price = parseFloat(priceStr as string);
+              if (!isNaN(price) && price > 0) {
+                updatePrice(symbol, {
+                  current_price: price,
+                }, "CoinCap");
+              }
+            }
+          });
+        } catch (e) {
+          // Silent parse errors
+        }
+      };
+      
+      ws.onerror = () => {
+        // Silent - will reconnect on close
+      };
+      
+      ws.onclose = () => {
+        setConnectedExchanges(prev => prev.filter(e => e !== "CoinCap"));
+        
+        if (reconnectTimeoutsRef.current.coincap) {
+          clearTimeout(reconnectTimeoutsRef.current.coincap);
+        }
+        reconnectTimeoutsRef.current.coincap = window.setTimeout(() => {
+          connectCoinCap();
+        }, 2000);
+      };
+      
+      coincapWsRef.current = ws;
+    } catch (err) {
+      // Silent connection errors
+    }
+  }, [updatePrice]);
 
   // Connect to Binance WebSocket
   const connectBinance = useCallback(() => {
@@ -679,12 +751,15 @@ export const useCryptoPrices = () => {
       if (cryptoListRef.current.length > 0 && !exchangesConnectedRef.current) {
         exchangesConnectedRef.current = true;
         
-        // Stagger connections to avoid overwhelming
-        connectBinance();
-        setTimeout(() => connectBybit(), 500);
-        setTimeout(() => connectOKX(), 1000);
-        setTimeout(() => connectCoinbase(), 1500);
-        setTimeout(() => connectKraken(), 2000);
+        // Connect CoinCap first - it supports ALL cryptos
+        connectCoinCap();
+        
+        // Stagger other connections for additional data points
+        setTimeout(() => connectBinance(), 500);
+        setTimeout(() => connectBybit(), 1000);
+        setTimeout(() => connectOKX(), 1500);
+        setTimeout(() => connectCoinbase(), 2000);
+        setTimeout(() => connectKraken(), 2500);
       }
     };
     
@@ -699,13 +774,14 @@ export const useCryptoPrices = () => {
         clearTimeout(timeout);
       });
       
+      if (coincapWsRef.current) coincapWsRef.current.close();
       binanceWsRefs.current.forEach(ws => ws.close());
       if (bybitWsRef.current) bybitWsRef.current.close();
       if (okxWsRef.current) okxWsRef.current.close();
       if (coinbaseWsRef.current) coinbaseWsRef.current.close();
       if (krakenWsRef.current) krakenWsRef.current.close();
     };
-  }, [connectBinance, connectBybit, connectOKX, connectCoinbase, connectKraken]);
+  }, [connectCoinCap, connectBinance, connectBybit, connectOKX, connectCoinbase, connectKraken]);
 
   // Track live status
   useEffect(() => {
