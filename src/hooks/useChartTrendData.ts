@@ -212,14 +212,38 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
   const retryCountRef = useRef(0);
   const MAX_RETRIES = 3;
   
-  const fetchWithTimeout = async (url: string, timeoutMs = 10000): Promise<Response> => {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      return await fetch(url, { signal: controller.signal });
-    } finally {
-      clearTimeout(timeout);
+  const fetchWithRetry = async (url: string, maxRetries = 3, timeoutMs = 10000): Promise<Response> => {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+      
+      try {
+        const response = await fetch(url, { 
+          signal: controller.signal,
+          cache: 'no-store'
+        });
+        clearTimeout(timeout);
+        return response;
+      } catch (err) {
+        clearTimeout(timeout);
+        lastError = err as Error;
+        
+        // Don't retry on abort (intentional cancellation)
+        if ((err as Error).name === 'AbortError') {
+          throw err;
+        }
+        
+        // Wait with exponential backoff before retrying
+        if (attempt < maxRetries - 1) {
+          const delay = Math.min(500 * Math.pow(2, attempt), 4000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
     }
+    
+    throw lastError || new Error('Fetch failed after retries');
   };
   
   const fetchWithId = useCallback(async (coinCapId: string): Promise<boolean> => {
@@ -228,7 +252,7 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
       const end = Date.now();
       const start = end - 24 * 60 * 60 * 1000; // 24 hours ago
       
-      const response = await fetchWithTimeout(
+      const response = await fetchWithRetry(
         `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=h1&start=${start}&end=${end}`
       );
       
@@ -263,7 +287,7 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
       
       // Also try to get actual volume data
       try {
-        const assetRes = await fetchWithTimeout(`https://api.coincap.io/v2/assets/${coinCapId}`);
+        const assetRes = await fetchWithRetry(`https://api.coincap.io/v2/assets/${coinCapId}`, 2);
         if (assetRes.ok) {
           const assetData = await assetRes.json();
           const volume24h = parseFloat(assetData.data?.volumeUsd24Hr || '0');
@@ -317,7 +341,7 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
     if (!coinCapId) {
       // Try dynamic lookup
       try {
-        const searchRes = await fetchWithTimeout(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=1`);
+        const searchRes = await fetchWithRetry(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=1`, 2);
         if (searchRes.ok) {
           const searchData = await searchRes.json();
           if (searchData.data?.[0]?.id) {
