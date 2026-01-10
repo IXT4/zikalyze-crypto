@@ -359,6 +359,14 @@ const Landing = () => {
             {t("landing.footer")}
           </p>
         </div>
+        
+        {/* Legal Disclaimer */}
+        <div className="max-w-6xl mx-auto mt-4 pt-4 border-t border-border/50 xl:max-w-7xl">
+          <p className="text-[10px] text-muted-foreground/70 text-center italic sm:text-xs lg:text-sm">
+            ⚠️ <strong>Not Financial Advice:</strong> Zikalyze AI provides analysis for informational and educational purposes only. 
+            Always do your own research and verify signals on your chart before making any trading decisions.
+          </p>
+        </div>
       </footer>
     </div>
   );
