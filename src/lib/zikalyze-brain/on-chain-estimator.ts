@@ -178,63 +178,80 @@ export function estimateOnChainMetrics(
   };
 }
 
-export function estimateETFFlowData(price: number, change: number): ETFFlowData {
+export function estimateETFFlowData(price: number, change: number, crypto: string = 'BTC'): ETFFlowData | null {
   // ═══════════════════════════════════════════════════════════════════════════
-  // ETF FLOW ESTIMATION — Deterministic based on price action
+  // ETF FLOW ESTIMATION — Only for BTC and ETH (the only cryptos with spot ETFs)
   // ═══════════════════════════════════════════════════════════════════════════
+  const symbol = crypto.toUpperCase();
+  
+  // Only BTC and ETH have spot ETFs — return null for all other cryptos
+  if (symbol !== 'BTC' && symbol !== 'ETH') {
+    return null;
+  }
+  
   const momentum = Math.abs(change);
+  const isBTC = symbol === 'BTC';
   
   // Flow direction matches price direction
-  let btcFlow24h: number;
+  let netFlow24h: number;
   let institutionalSentiment: string;
   
   if (change >= 5) {
-    btcFlow24h = 200 + momentum * 40;
+    netFlow24h = 200 + momentum * 40;
     institutionalSentiment = 'STRONGLY BULLISH';
   } else if (change >= 2) {
-    btcFlow24h = 80 + momentum * 30;
+    netFlow24h = 80 + momentum * 30;
     institutionalSentiment = 'BULLISH';
   } else if (change <= -5) {
-    btcFlow24h = -150 - momentum * 30;
+    netFlow24h = -150 - momentum * 30;
     institutionalSentiment = 'BEARISH';
   } else if (change <= -2) {
-    btcFlow24h = -50 - momentum * 20;
+    netFlow24h = -50 - momentum * 20;
     institutionalSentiment = 'CAUTIOUS';
   } else {
-    btcFlow24h = change * 25;
+    netFlow24h = change * 25;
     institutionalSentiment = change > 0 ? 'CAUTIOUSLY BULLISH' : 'NEUTRAL';
   }
 
-  // Round for cleaner display
-  btcFlow24h = Math.round(btcFlow24h);
-  const btcFlow7d = Math.round(btcFlow24h * 4.5);
-  const ethFlow24h = Math.round(btcFlow24h * 0.3);
-  const ethFlow7d = Math.round(ethFlow24h * 4);
+  // ETH flows are typically smaller than BTC
+  const flowMultiplier = isBTC ? 1 : 0.3;
+  netFlow24h = Math.round(netFlow24h * flowMultiplier);
+  const netFlow7d = Math.round(netFlow24h * 4.5);
 
   // Determine trend
   let trend: ETFFlowData['trend'];
-  if (btcFlow24h > 100) trend = 'ACCUMULATING';
-  else if (btcFlow24h < -100) trend = 'DISTRIBUTING';
+  if (netFlow24h > 100) trend = 'ACCUMULATING';
+  else if (netFlow24h < -100) trend = 'DISTRIBUTING';
   else trend = 'NEUTRAL';
 
   // Top buyers/sellers based on direction (real ETF names)
-  const topBuyers = btcFlow24h > 50 
-    ? ['BlackRock iShares', 'Fidelity Wise Origin'] 
-    : btcFlow24h > 0 
-      ? ['Fidelity'] 
-      : [];
+  const topBuyers = isBTC
+    ? netFlow24h > 50 
+      ? ['BlackRock iShares', 'Fidelity Wise Origin'] 
+      : netFlow24h > 0 
+        ? ['Fidelity'] 
+        : []
+    : netFlow24h > 30
+      ? ['BlackRock', 'Fidelity']
+      : netFlow24h > 0
+        ? ['BlackRock']
+        : [];
   
-  const topSellers = btcFlow24h < -50 
-    ? ['Grayscale GBTC', 'ARK 21Shares'] 
-    : btcFlow24h < 0 
-      ? ['Grayscale GBTC'] 
+  const topSellers = isBTC
+    ? netFlow24h < -50 
+      ? ['Grayscale GBTC', 'ARK 21Shares'] 
+      : netFlow24h < 0 
+        ? ['Grayscale GBTC'] 
+        : []
+    : netFlow24h < -30
+      ? ['Grayscale ETHE']
       : [];
 
   return {
-    btcNetFlow24h: btcFlow24h,
-    btcNetFlow7d: btcFlow7d,
-    ethNetFlow24h: ethFlow24h,
-    ethNetFlow7d: ethFlow7d,
+    btcNetFlow24h: isBTC ? netFlow24h : 0,
+    btcNetFlow7d: isBTC ? netFlow7d : 0,
+    ethNetFlow24h: isBTC ? 0 : netFlow24h,
+    ethNetFlow7d: isBTC ? 0 : netFlow7d,
     trend,
     topBuyers,
     topSellers,

@@ -5,7 +5,7 @@
 import { InstitutionalVsRetail, ETFFlowData, OnChainMetrics, IfThenScenario } from './types';
 
 export function analyzeInstitutionalVsRetail(data: {
-  etfFlow: ETFFlowData;
+  etfFlow: ETFFlowData | null;
   onChain: OnChainMetrics;
   socialSentiment: number;
   fearGreed: number;
@@ -18,8 +18,12 @@ export function analyzeInstitutionalVsRetail(data: {
   let instBullSignals = 0;
   let instBearSignals = 0;
 
-  if (etfFlow.btcNetFlow24h > 100) instBullSignals += 2;
-  else if (etfFlow.btcNetFlow24h < -100) instBearSignals += 2;
+  // Only factor in ETF flows if available (BTC/ETH only)
+  if (etfFlow) {
+    const netFlow = etfFlow.btcNetFlow24h || etfFlow.ethNetFlow24h;
+    if (netFlow > 100) instBullSignals += 2;
+    else if (netFlow < -100) instBearSignals += 2;
+  }
 
   if (onChain.exchangeNetFlow.trend === 'OUTFLOW') instBullSignals += 1;
   else if (onChain.exchangeNetFlow.trend === 'INFLOW') instBearSignals += 1;
