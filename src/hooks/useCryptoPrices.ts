@@ -276,6 +276,28 @@ export const useCryptoPrices = () => {
     const normalizedSymbol = symbol.toLowerCase();
     const now = Date.now();
     
+    // CRITICAL: Never overwrite valid prices with zeros
+    if (updates.current_price !== undefined && updates.current_price <= 0) {
+      delete updates.current_price;
+    }
+    if (updates.high_24h !== undefined && updates.high_24h <= 0) {
+      delete updates.high_24h;
+    }
+    if (updates.low_24h !== undefined && updates.low_24h <= 0) {
+      delete updates.low_24h;
+    }
+    if (updates.total_volume !== undefined && updates.total_volume <= 0) {
+      delete updates.total_volume;
+    }
+    if (updates.market_cap !== undefined && updates.market_cap <= 0) {
+      delete updates.market_cap;
+    }
+    
+    // If no valid updates remain, skip entirely
+    if (Object.keys(updates).length === 0) {
+      return;
+    }
+    
     // Throttle updates - only update if enough time has passed
     const lastUpdate = lastUpdateTimeRef.current.get(normalizedSymbol) || 0;
     if (now - lastUpdate < UPDATE_THROTTLE_MS) {
@@ -351,16 +373,57 @@ export const useCryptoPrices = () => {
   };
 
   const fetchPrices = useCallback(async () => {
-    // Initialize with fallback data immediately so UI is responsive
+    // Try to load from cache FIRST to avoid showing zeros
     if (prices.length === 0) {
-      const fallbackWithTimestamp = FALLBACK_CRYPTOS.map((c) => ({ ...c, lastUpdate: Date.now() }));
-      setPrices(fallbackWithTimestamp);
-      fallbackWithTimestamp.forEach((p) => pricesRef.current.set(p.symbol, p));
-      cryptoListRef.current = fallbackWithTimestamp.map((coin) => ({
-        symbol: coin.symbol.toUpperCase(),
-        name: coin.name,
-        id: coin.id,
-      }));
+      const cached = loadCachedTop100();
+      if (cached && cached.length > 0) {
+        // Build from cache immediately - no zeros
+        const cleanData = cached.filter(
+          (coin) =>
+            !STABLECOINS.includes(coin.symbol.toLowerCase()) &&
+            !STABLECOINS.includes(coin.id.toLowerCase()) &&
+            !isUsdPrefixed(coin.symbol)
+        );
+        const sortedData = cleanData.sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
+        const filteredData = sortedData.slice(0, 100);
+        
+        cryptoListRef.current = filteredData.map((coin) => ({
+          symbol: coin.symbol.toUpperCase(),
+          name: coin.name,
+          id: coin.id,
+        }));
+        
+        const initialPrices: CryptoPrice[] = filteredData.map((coin, index) => ({
+          id: coin.id,
+          symbol: coin.symbol.toLowerCase(),
+          name: coin.name,
+          image: coin.image,
+          current_price: coin.current_price ?? 0,
+          price_change_percentage_24h: coin.price_change_percentage_24h ?? 0,
+          high_24h: coin.high_24h ?? 0,
+          low_24h: coin.low_24h ?? 0,
+          total_volume: coin.total_volume ?? 0,
+          market_cap: coin.market_cap ?? 0,
+          market_cap_rank: coin.market_cap_rank ?? index + 1,
+          circulating_supply: coin.circulating_supply ?? 0,
+          lastUpdate: Date.now(),
+          source: "Cache",
+        }));
+        
+        initialPrices.forEach((p) => pricesRef.current.set(p.symbol, p));
+        setPrices(initialPrices);
+        console.log('[Top100] Loaded initial prices from cache');
+      } else {
+        // No cache - use fallback skeleton
+        const fallbackWithTimestamp = FALLBACK_CRYPTOS.map((c) => ({ ...c, lastUpdate: Date.now() }));
+        setPrices(fallbackWithTimestamp);
+        fallbackWithTimestamp.forEach((p) => pricesRef.current.set(p.symbol, p));
+        cryptoListRef.current = fallbackWithTimestamp.map((coin) => ({
+          symbol: coin.symbol.toUpperCase(),
+          name: coin.name,
+          id: coin.id,
+        }));
+      }
     }
 
     const buildTop100 = (coins: CoinGeckoCoin[], source: string) => {
