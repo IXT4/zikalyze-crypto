@@ -393,15 +393,18 @@ export function useAILearning(symbol: string) {
       return updated;
     });
     
-    // Contribute to global learning
+    // Contribute to global learning via secure RPC
     if (userId) {
       try {
+        const consensusBias = bias === 'LONG' ? 'BULLISH' : bias === 'SHORT' ? 'BEARISH' : 'NEUTRAL';
         await supabase.rpc('contribute_to_global_learning', {
           p_symbol: symbol,
-          p_trend_accuracy: patternsRef.current.trendAccuracy,
-          p_volatility: patternsRef.current.volatility,
-          p_bias: bias,
-          p_was_correct: wasCorrect
+          p_avg_trend_accuracy: patternsRef.current.trendAccuracy,
+          p_avg_volatility: patternsRef.current.volatility,
+          p_consensus_bias: consensusBias,
+          p_bias_confidence: Math.abs(patternsRef.current.confidenceAdjustment) * 10,
+          p_total_predictions: patternsRef.current.totalPredictions,
+          p_correct_predictions: patternsRef.current.correctPredictions
         });
       } catch (e) {
         console.warn('[AI Learning] Global contribution failed:', e);
