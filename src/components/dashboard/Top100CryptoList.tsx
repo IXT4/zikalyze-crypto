@@ -305,16 +305,16 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
                       </div>
                     </td>
                     <td className="py-3 text-right">
-                      <span 
+                      <span
                         className={`font-medium text-sm transition-all duration-150 inline-block px-1.5 py-0.5 rounded ${
-                          flash === "up" 
-                            ? "bg-success/20 text-success animate-price-flash-up" 
-                            : flash === "down" 
-                              ? "bg-destructive/20 text-destructive animate-price-flash-down" 
+                          flash === "up"
+                            ? "bg-success/20 text-success animate-price-flash-up"
+                            : flash === "down"
+                              ? "bg-destructive/20 text-destructive animate-price-flash-down"
                               : "text-foreground"
                         }`}
                       >
-                        {formatPrice(crypto.current_price)}
+                        {crypto.current_price > 0 ? formatPrice(crypto.current_price) : "—"}
                       </span>
                     </td>
                     <td className="py-3 text-right">
