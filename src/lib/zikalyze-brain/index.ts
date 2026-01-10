@@ -16,7 +16,7 @@ import { getUpcomingMacroCatalysts, getQuickMacroFlag } from './macro-catalysts'
 import { detectVolumeSpike, getVolumeSpikeFlag } from './volume-analysis';
 import { analyzeInstitutionalVsRetail, generateIfThenScenarios } from './institutional-analysis';
 import { estimateOnChainMetrics, estimateETFFlowData } from './on-chain-estimator';
-import { analyzeMarketStructure, generatePrecisionEntry, calculateFinalBias } from './technical-analysis';
+import { analyzeMarketStructure, generatePrecisionEntry, calculateFinalBias, performTopDownAnalysis } from './technical-analysis';
 
 // Translation maps for multi-language support
 const TRANSLATIONS: Record<string, Record<string, string>> = {
@@ -125,6 +125,9 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     onChainTrend: onChainMetrics.exchangeNetFlow.trend
   });
 
+  // Top-down multi-timeframe analysis (NEW)
+  const topDownAnalysis = performTopDownAnalysis(price, high24h, low24h, change);
+
   // Market structure analysis
   const structure = analyzeMarketStructure(price, high24h, low24h, change);
 
@@ -150,8 +153,11 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     keyResistance
   });
 
-  // Add additional insights
+  // Add additional insights with top-down context first
   const allInsights = [...insights];
+
+  // Add top-down reasoning
+  topDownAnalysis.reasoning.forEach(r => allInsights.push(r));
 
   if (volumeSpike.isSpike) {
     allInsights.unshift(`📊 ${volumeSpike.description}`);
@@ -176,18 +182,35 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     allInsights.push(`⚡ ${institutionalVsRetail.divergenceNote}`);
   }
 
-  // Build success probability bar
-  const successProb = Math.min(85, 50 + (confidence - 50) * 0.5 + (precisionEntry.timing === 'NOW' ? 10 : 0));
+  // Build success probability bar (higher when HTF aligned)
+  const htfBonus = topDownAnalysis.tradeableDirection !== 'NO_TRADE' ? 8 : 0;
+  const successProb = Math.min(88, 50 + (confidence - 50) * 0.5 + (precisionEntry.timing === 'NOW' ? 10 : 0) + htfBonus);
   const filledBlocks = Math.round(successProb / 10);
   const probBar = '█'.repeat(filledBlocks) + '░'.repeat(10 - filledBlocks);
 
-  // Build final analysis text
+  // Build HTF alignment status
+  const htfStatus = `W:${topDownAnalysis.weekly.trend.charAt(0)} D:${topDownAnalysis.daily.trend.charAt(0)} 4H:${topDownAnalysis.h4.trend.charAt(0)} 1H:${topDownAnalysis.h1.trend.charAt(0)} 15M:${topDownAnalysis.m15.trend.charAt(0)}`;
+
+  // Build final analysis text with TOP-DOWN section
   const analysis = `📊 ${crypto.toUpperCase()} ${t.quickAnalysis}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 💰 ${t.price}: $${price.toLocaleString()} ${trendEmoji} ${Math.abs(change).toFixed(2)}%
 📈 ${t.range24h}: $${low24h.toLocaleString()} - $${high24h.toLocaleString()}
 ${volumeSpike.isSpike ? `📊 Volume: ${volumeSpike.magnitude} SPIKE (+${volumeSpike.percentageAboveAvg.toFixed(0)}% vs avg)` : ''}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔭 TOP-DOWN ANALYSIS (HTF → LTF)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📅 WEEKLY:  ${topDownAnalysis.weekly.trend} (${topDownAnalysis.weekly.strength.toFixed(0)}%)
+📆 DAILY:   ${topDownAnalysis.daily.trend} (${topDownAnalysis.daily.strength.toFixed(0)}%)
+⏰ 4H:      ${topDownAnalysis.h4.trend} (${topDownAnalysis.h4.strength.toFixed(0)}%)
+🕐 1H:      ${topDownAnalysis.h1.trend} (${topDownAnalysis.h1.strength.toFixed(0)}%)
+⏱️ 15M:     ${topDownAnalysis.m15.trend} (${topDownAnalysis.m15.strength.toFixed(0)}%)
+
+📊 Confluence: ${topDownAnalysis.confluenceScore.toFixed(0)}% | Direction: ${topDownAnalysis.tradeableDirection}
+${htfStatus}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
