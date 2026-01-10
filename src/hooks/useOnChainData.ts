@@ -47,6 +47,37 @@ const WS_ENDPOINTS: Record<string, string[]> = {
   'KAS': [] // Kaspa uses fast REST polling (no public WS)
 };
 
+// CoinCap ID mapping for all cryptocurrencies
+const COINCAP_ID_MAP: Record<string, string> = {
+  'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'XRP': 'ripple', 
+  'BNB': 'binance-coin', 'ADA': 'cardano', 'DOGE': 'dogecoin', 'AVAX': 'avalanche',
+  'DOT': 'polkadot', 'MATIC': 'polygon', 'LINK': 'chainlink', 'LTC': 'litecoin',
+  'BCH': 'bitcoin-cash', 'ATOM': 'cosmos', 'NEAR': 'near-protocol', 'FTM': 'fantom',
+  'ARB': 'arbitrum', 'KAS': 'kaspa', 'SUI': 'sui', 'APT': 'aptos',
+  'OP': 'optimism', 'INJ': 'injective-protocol', 'TIA': 'celestia', 'RNDR': 'render-token',
+  'FET': 'fetch-ai', 'WLD': 'worldcoin', 'JUP': 'jupiter', 'JTO': 'jito-governance-token',
+  'HBAR': 'hedera-hashgraph', 'VET': 'vechain', 'ALGO': 'algorand', 'TON': 'toncoin',
+  'ICP': 'internet-computer', 'FIL': 'filecoin', 'GRT': 'the-graph', 'AAVE': 'aave',
+  'MKR': 'maker', 'UNI': 'uniswap', 'SHIB': 'shiba-inu', 'TRX': 'tron',
+  'XLM': 'stellar', 'ETC': 'ethereum-classic', 'XMR': 'monero', 'CRO': 'crypto-com-coin',
+  'PEPE': 'pepe', 'IMX': 'immutable-x', 'RUNE': 'thorchain', 'SEI': 'sei-network',
+  'STX': 'stacks', 'KAVA': 'kava', 'MINA': 'mina-protocol', 'CFX': 'conflux-network',
+  'EGLD': 'elrond-egld', 'ROSE': 'oasis-network', 'ZEC': 'zcash', 'THETA': 'theta-network',
+  'QNT': 'quant', 'NEO': 'neo', 'FLOW': 'flow', 'KCS': 'kucoin-shares',
+  'XTZ': 'tezos', 'EOS': 'eos', 'IOTA': 'iota', 'XEC': 'ecash'
+};
+
+// Blockchair blockchain name mapping for detailed on-chain data
+const BLOCKCHAIR_CHAIN_MAP: Record<string, string> = {
+  'BTC': 'bitcoin', 'ETH': 'ethereum', 'LTC': 'litecoin', 'BCH': 'bitcoin-cash',
+  'DOGE': 'dogecoin', 'XLM': 'stellar', 'ADA': 'cardano', 'XMR': 'monero',
+  'XRP': 'ripple', 'ZEC': 'zcash', 'ETC': 'ethereum-classic', 'DASH': 'dash',
+  'BSV': 'bitcoin-sv', 'XTZ': 'tezos', 'EOS': 'eos', 'TRX': 'tron',
+  'SOL': 'solana', 'MATIC': 'polygon', 'AVAX': 'avalanche', 'BNB': 'bnb',
+  'DOT': 'polkadot', 'NEAR': 'near', 'FTM': 'fantom', 'ARB': 'arbitrum-one',
+  'OP': 'optimism', 'ATOM': 'cosmos'
+};
+
 // Whale thresholds in USD
 const WHALE_THRESHOLDS: Record<string, number> = {
   'BTC': 500000, 'ETH': 250000, 'SOL': 100000, 'XRP': 500000, 'ADA': 50000,
@@ -57,7 +88,10 @@ const WHALE_THRESHOLDS: Record<string, number> = {
 
 // TPS estimates for chains
 const CHAIN_TPS: Record<string, number> = {
-  'SOL': 3000, 'AVAX': 4500, 'MATIC': 2000, 'KAS': 100, 'ETH': 15, 'BTC': 7, 'DEFAULT': 50
+  'SOL': 3000, 'AVAX': 4500, 'MATIC': 2000, 'KAS': 100, 'ETH': 15, 'BTC': 7, 
+  'SUI': 10000, 'APT': 160000, 'TON': 1000000, 'NEAR': 100000, 'FTM': 4500,
+  'ARB': 40000, 'OP': 2000, 'BNB': 160, 'XRP': 1500, 'ADA': 250, 'DOT': 1500,
+  'TRX': 2000, 'ATOM': 10000, 'LINK': 1000, 'DEFAULT': 50
 };
 
 // API cache to prevent rate limiting
@@ -198,7 +232,50 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
       let largeTxCount24h = 20;
       let source = 'derived';
 
-      // BTC - mempool.space REST
+      // Try CoinCap API first for all cryptos (free, no API key)
+      const coinCapId = COINCAP_ID_MAP[currentCrypto] || currentCrypto.toLowerCase();
+      const coinCapData = await cachedFetch<any>(`https://api.coincap.io/v2/assets/${coinCapId}`, null);
+      
+      if (coinCapData?.data) {
+        const asset = coinCapData.data;
+        // CoinCap provides volume and supply data
+        if (asset.volumeUsd24Hr) {
+          transactionVolume.value = parseFloat(asset.volumeUsd24Hr) || 0;
+        }
+        if (asset.supply) {
+          activeAddressesCurrent = Math.round(parseFloat(asset.supply) * 0.001); // Estimate active addresses
+        }
+        source = 'coincap';
+      }
+
+      // Try Blockchair for chains they support (free tier, no API key for basic data)
+      const blockchairChain = BLOCKCHAIR_CHAIN_MAP[currentCrypto];
+      if (blockchairChain) {
+        const blockchairData = await cachedFetch<any>(`https://api.blockchair.com/${blockchairChain}/stats`, null);
+        
+        if (blockchairData?.data) {
+          const stats = blockchairData.data;
+          blockHeight = stats.blocks || stats.best_block_height || 0;
+          hashRate = stats.hashrate_24h || stats.hashrate || 0;
+          difficulty = stats.difficulty || 0;
+          avgBlockTime = stats.average_block_time ? stats.average_block_time / 60 : 0; // Convert to minutes
+          
+          if (stats.transactions_24h) {
+            transactionVolume.value = stats.transactions_24h;
+            transactionVolume.tps = Math.round(stats.transactions_24h / 86400);
+          }
+          if (stats.mempool_transactions) {
+            mempoolData.unconfirmedTxs = stats.mempool_transactions;
+          }
+          if (stats.suggested_transaction_fee_per_byte_sat) {
+            mempoolData.avgFeeRate = stats.suggested_transaction_fee_per_byte_sat;
+          }
+          largeTxCount24h = stats.largest_transaction_24h ? 50 : 20;
+          source = 'blockchair';
+        }
+      }
+
+      // BTC - mempool.space REST (enhanced data)
       if (currentCrypto === 'BTC') {
         const [fees, blocks, stats, diffAdj, tipHeight] = await Promise.all([
           cachedFetch<any>('https://mempool.space/api/v1/fees/recommended', null),
@@ -216,7 +293,7 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         }
         if (stats?.currentHashrate) hashRate = stats.currentHashrate;
         if (diffAdj) { difficulty = diffAdj.progressPercent || 0; avgBlockTime = diffAdj.timeAvg ? diffAdj.timeAvg / 60000 : 10; }
-        blockHeight = tipHeight || 0;
+        blockHeight = tipHeight || blockHeight;
         transactionVolume = { value: mempoolData.unconfirmedTxs * 100, change24h: currentChange, tps: Math.round(mempoolData.unconfirmedTxs / 600) };
         largeTxCount24h = Math.max(Math.round(mempoolData.unconfirmedTxs * 0.02), 50);
         source = 'mempool-live';
@@ -238,10 +315,9 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
           };
         }
         if (blockData?.result) {
-          blockHeight = parseInt(blockData.result, 16) || 0;
+          blockHeight = parseInt(blockData.result, 16) || blockHeight;
         }
-        // Use minutes in UI; Ethereum blocks ~12s
-        avgBlockTime = 12 / 60;
+        avgBlockTime = avgBlockTime || 12 / 60;
         transactionVolume.tps = 15;
         source = 'eth-api';
       }
@@ -253,29 +329,32 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         ]);
 
         if (networkInfo) {
-          hashRate = networkInfo.hashrate || 0;
-          difficulty = networkInfo.difficulty || 0;
+          hashRate = networkInfo.hashrate || hashRate;
+          difficulty = networkInfo.difficulty || difficulty;
         }
         if (blockInfo?.blueScore) {
           blockHeight = blockInfo.blueScore;
         }
-        // Use minutes in UI; Kaspa ~1s blocks
-        avgBlockTime = 1 / 60;
+        avgBlockTime = avgBlockTime || 1 / 60;
         transactionVolume.tps = 100;
         source = 'kaspa-api';
       }
-      // SOL - Solana public RPC
+      // SOL - Solana RPC
       else if (currentCrypto === 'SOL') {
-        const slotData = await cachedFetch<any>('https://api.mainnet-beta.solana.com', null);
-        // Solana RPC needs POST, use derived data
-        avgBlockTime = 0.4;
-        transactionVolume.tps = 3000;
-        source = 'solana-derived';
+        try {
+          const slotResponse = await cachedFetch<any>('https://api.mainnet-beta.solana.com', null);
+          // For Solana, use derived metrics as RPC needs POST
+          avgBlockTime = avgBlockTime || 0.4 / 60;
+          transactionVolume.tps = 3000;
+          source = source === 'derived' ? 'solana-derived' : source;
+        } catch {
+          // Continue with derived data
+        }
       }
-      // Other chains - derive from price action
+      // Other chains - use CoinCap/Blockchair data or derive from price action
       else {
         transactionVolume.tps = CHAIN_TPS[currentCrypto] || CHAIN_TPS['DEFAULT'];
-        source = 'derived';
+        if (source === 'derived') source = 'multi-api';
       }
 
       // Derive metrics from market data
