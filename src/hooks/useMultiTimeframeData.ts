@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { fetchWithRetry, safeFetch } from '@/lib/fetchWithRetry';
 
 export type Timeframe = '15m' | '1h' | '4h' | '1d';
 
@@ -260,16 +261,6 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
   const mountedRef = useRef(true);
   const refreshIntervalRef = useRef<number | null>(null);
   
-  const fetchWithTimeout = async (url: string, timeoutMs = 15000): Promise<Response> => {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      return await fetch(url, { signal: controller.signal });
-    } finally {
-      clearTimeout(timeout);
-    }
-  };
-  
   const fetchTimeframe = useCallback(async (
     coinCapId: string,
     timeframe: Timeframe
@@ -286,8 +277,9 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
         interval = 'h1';
       }
       
-      const response = await fetchWithTimeout(
-        `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=${interval}&start=${start}&end=${end}`
+      const response = await fetchWithRetry(
+        `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=${interval}&start=${start}&end=${end}`,
+        { timeoutMs: 15000 }
       );
       
       if (!response.ok) {
@@ -422,7 +414,7 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
     
     if (!coinCapId) {
       try {
-        const searchRes = await fetchWithTimeout(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=1`);
+        const searchRes = await safeFetch(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=1`);
         if (searchRes.ok) {
           const searchData = await searchRes.json();
           if (searchData.data?.[0]?.id) {
