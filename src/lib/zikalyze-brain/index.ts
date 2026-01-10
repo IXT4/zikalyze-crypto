@@ -452,7 +452,15 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   const macroSection = buildMacroSection(macroPenalty > 0);
 
   // Build TL;DR headline — one-liner summary for quick scanning
-  const biasWord = bias === 'LONG' ? 'Bullish' : bias === 'SHORT' ? 'Bearish' : 'Neutral';
+  // Confidence-adjusted bias labels: "Lean bearish" for low confidence, "BEARISH" for high
+  const getBiasLabel = (b: 'LONG' | 'SHORT' | 'NEUTRAL', conf: number): string => {
+    if (b === 'NEUTRAL') return 'Neutral';
+    const baseWord = b === 'LONG' ? 'bullish' : 'bearish';
+    if (conf >= 65) return baseWord.toUpperCase(); // Strong conviction
+    if (conf >= 50) return baseWord.charAt(0).toUpperCase() + baseWord.slice(1); // Moderate: "Bullish"
+    return `Lean ${baseWord}`; // Low confidence: "Lean bearish"
+  };
+  const biasWord = getBiasLabel(bias, confidence);
   const structureWord = topDownAnalysis.confluenceScore >= 70 ? 'strong' : topDownAnalysis.confluenceScore >= 50 ? 'moderate' : 'weak';
   const marketPhase = pricePosition > 70 ? 'extended' : pricePosition < 30 ? 'discount' : 'mid-range';
   const actionWord = precisionEntry.timing === 'NOW' 
@@ -478,7 +486,7 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
 ${historicalContext}
 ${volumeSpike.isSpike ? `📊 VOLUME SPIKE: +${volumeSpike.percentageAboveAvg.toFixed(0)}% above 24h avg (${volumeSpike.magnitude}) [Spot via aggregator]\n` : ''}📈 Volume: ${volume > avgVolume ? `+${((volume / avgVolume - 1) * 100).toFixed(0)}% above` : volume < avgVolume * 0.8 ? `${((1 - volume / avgVolume) * 100).toFixed(0)}% below` : 'near'} 24h avg | Futures OI ${change > 2 ? 'rising (longs building)' : change < -2 ? 'declining (shorts closing)' : 'stable'}
 ┌─────────────────────────────────────────────────┐
-│  🎯 VERDICT: ${bias === 'LONG' ? '🟢 BULLISH' : bias === 'SHORT' ? '🔴 BEARISH' : '⚪ NEUTRAL'}  │  Confidence: ${confidence.toFixed(0)}%
+│  🎯 VERDICT: ${bias === 'LONG' ? (confidence >= 65 ? '🟢 BULLISH' : confidence >= 50 ? '🟢 Bullish' : '🟢 Lean bullish') : bias === 'SHORT' ? (confidence >= 65 ? '🔴 BEARISH' : confidence >= 50 ? '🔴 Bearish' : '🔴 Lean bearish') : '⚪ NEUTRAL'}  │  Confidence: ${confidence.toFixed(0)}%
 └─────────────────────────────────────────────────┘
 
 ━━━ 📊 MARKET PULSE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -512,6 +520,7 @@ D: ${topDownAnalysis.daily.trend.padEnd(7)} ${createBar(topDownAnalysis.daily.st
    └─ Trigger: ${precisionEntry.trigger}
 ✓ Confirm: ${precisionEntry.confirmation}
 ✗ Invalid: ${precisionEntry.invalidation}
+${bias === 'SHORT' ? `📈 If invalidated: Upside target $${(high24h + range * 0.15).toFixed(decimals)} → reassess for long` : bias === 'LONG' ? `📉 If invalidated: Downside target $${(low24h - range * 0.15).toFixed(decimals)} → reassess for short` : ''}
 
 📊 Success: [${probBar}] ${successProb}%
    └─ ${probDescription}
