@@ -125,8 +125,8 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   const macroCatalysts = getUpcomingMacroCatalysts();
   const macroFlag = getQuickMacroFlag();
   
-  // Build macro section with countdown
-  const buildMacroSection = (): string => {
+  // Build macro section with countdown + confidence impact
+  const buildMacroSection = (penaltyApplied: boolean = false): string => {
     if (macroCatalysts.length === 0) return '';
     const catalyst = macroCatalysts[0];
     if (catalyst.date === 'Ongoing') return '';
@@ -139,9 +139,10 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     
     const urgency = daysUntil <= 2 ? '🚨' : daysUntil <= 5 ? '⚠️' : '📅';
     const countdown = daysUntil === 0 ? 'TODAY' : daysUntil === 1 ? 'TOMORROW' : `${daysUntil}d`;
+    const impactNote = penaltyApplied ? '\n   ⚡ Confidence reduced due to event proximity' : '';
     
     return `${urgency} ${catalyst.event.toUpperCase()} in ${countdown}
-   ↳ ${catalyst.description}`;
+   ↳ ${catalyst.description}${impactNote}`;
   };
 
   // Detect volume spikes
@@ -188,26 +189,55 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     onChainTrend: onChainMetrics.exchangeNetFlow.trend
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🎯 UNIFIED CONFIDENCE — Blend raw signal + confluence + macro
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // Macro volatility penalty — reduce confidence if high-impact event imminent
+  let macroPenalty = 0;
+  const imminentCatalyst = macroCatalysts.find(c => {
+    if (c.date === 'Ongoing') return false;
+    const now = new Date();
+    const eventDate = new Date(c.date);
+    const daysUntil = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return c.impact === 'HIGH' && daysUntil <= 2 && daysUntil >= 0;
+  });
+  
+  if (imminentCatalyst) {
+    macroPenalty = 15; // Major event imminent — reduce confidence
+  }
+  
+  // Base confluence from top-down
+  const confluenceBase = topDownAnalysis.confluenceScore;
+  
   // Override bias if top-down conflicts
   let bias: 'LONG' | 'SHORT' | 'NEUTRAL' = rawBias;
-  let confidence = rawConfidence;
+  let confidence: number;
   
   if (topDownAnalysis.tradeableDirection === 'NO_TRADE') {
     bias = 'NEUTRAL';
-    confidence = Math.min(confidence, 55);
+    // Confidence = low since no trade signal
+    confidence = Math.max(40, Math.min(55, confluenceBase * 0.6)) - macroPenalty;
   } else if (topDownAnalysis.tradeableDirection === 'LONG' && rawBias === 'SHORT') {
     bias = 'NEUTRAL';
-    confidence = 50;
+    confidence = Math.max(40, 50 - macroPenalty);
   } else if (topDownAnalysis.tradeableDirection === 'SHORT' && rawBias === 'LONG') {
     bias = 'NEUTRAL';
-    confidence = 50;
+    confidence = Math.max(40, 50 - macroPenalty);
   } else if (topDownAnalysis.tradeableDirection === 'LONG' && rawBias === 'NEUTRAL') {
     bias = 'LONG';
-    confidence = Math.max(55, rawConfidence);
+    // Blend confluence with raw signal
+    confidence = Math.max(50, Math.min(78, (confluenceBase + rawConfidence) / 2)) - macroPenalty;
   } else if (topDownAnalysis.tradeableDirection === 'SHORT' && rawBias === 'NEUTRAL') {
     bias = 'SHORT';
-    confidence = Math.max(55, rawConfidence);
+    confidence = Math.max(50, Math.min(78, (confluenceBase + rawConfidence) / 2)) - macroPenalty;
+  } else {
+    // Aligned direction — STRONG signal, blend confluence + raw confidence
+    confidence = Math.max(52, Math.min(88, (confluenceBase * 0.6 + rawConfidence * 0.4))) - macroPenalty;
   }
+  
+  // Clamp final confidence
+  confidence = Math.max(35, Math.min(88, confidence));
 
   // Market structure
   const structure = analyzeMarketStructure(price, high24h, low24h, change);
@@ -313,8 +343,8 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   // Historical context
   const historicalContext = getHistoricalContext(price, high24h, low24h, change);
 
-  // Macro section
-  const macroSection = buildMacroSection();
+  // Macro section (pass penalty status)
+  const macroSection = buildMacroSection(macroPenalty > 0);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // BUILD FINAL ANALYSIS — Dense, Visual, Actionable
