@@ -115,8 +115,11 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     change
   });
 
-  // Calculate final bias
-  const { bias, confidence, insights } = calculateFinalBias({
+  // Top-down multi-timeframe analysis FIRST (determines tradeable direction)
+  const topDownAnalysis = performTopDownAnalysis(price, high24h, low24h, change);
+
+  // Calculate multi-factor bias
+  const { bias: rawBias, confidence: rawConfidence, insights } = calculateFinalBias({
     priceChange: change,
     pricePosition,
     volumeStrength: volumeSpike.isSpike ? 'HIGH' : volume > avgVolume ? 'MODERATE' : 'LOW',
@@ -125,13 +128,36 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     onChainTrend: onChainMetrics.exchangeNetFlow.trend
   });
 
-  // Top-down multi-timeframe analysis (NEW)
-  const topDownAnalysis = performTopDownAnalysis(price, high24h, low24h, change);
+  // CRITICAL: Final bias MUST align with top-down direction for consistency
+  let bias: 'LONG' | 'SHORT' | 'NEUTRAL' = rawBias;
+  let confidence = rawConfidence;
+  
+  // Override bias if top-down analysis conflicts
+  if (topDownAnalysis.tradeableDirection === 'NO_TRADE') {
+    bias = 'NEUTRAL';
+    confidence = Math.min(confidence, 55);
+  } else if (topDownAnalysis.tradeableDirection === 'LONG' && rawBias === 'SHORT') {
+    // HTF says long but factors say short — go neutral
+    bias = 'NEUTRAL';
+    confidence = 50;
+  } else if (topDownAnalysis.tradeableDirection === 'SHORT' && rawBias === 'LONG') {
+    // HTF says short but factors say long — go neutral  
+    bias = 'NEUTRAL';
+    confidence = 50;
+  } else if (topDownAnalysis.tradeableDirection === 'LONG' && rawBias === 'NEUTRAL') {
+    // HTF bullish, factors neutral — lean long
+    bias = 'LONG';
+    confidence = Math.max(55, rawConfidence);
+  } else if (topDownAnalysis.tradeableDirection === 'SHORT' && rawBias === 'NEUTRAL') {
+    // HTF bearish, factors neutral — lean short
+    bias = 'SHORT';
+    confidence = Math.max(55, rawConfidence);
+  }
 
   // Market structure analysis
   const structure = analyzeMarketStructure(price, high24h, low24h, change);
 
-  // Generate precision entry
+  // Generate precision entry with ALIGNED bias
   const precisionEntry = generatePrecisionEntry(
     price,
     high24h,

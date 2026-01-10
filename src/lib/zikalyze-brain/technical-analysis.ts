@@ -73,7 +73,8 @@ function analyzeTimeframe(
   } else {
     trend = 'NEUTRAL';
     structure = 'RANGE';
-    strength = 40 + Math.random() * 15;
+    // Deterministic strength based on price position distance from 50
+    strength = 40 + Math.abs(50 - position) * 0.3;
   }
   
   // Calculate key level for this timeframe
