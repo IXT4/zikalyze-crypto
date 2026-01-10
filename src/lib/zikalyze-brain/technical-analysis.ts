@@ -465,17 +465,26 @@ export function generatePrecisionEntry(
       structureStatus = 'Trending';
       movementPhase = 'Impulse';
     }
+  } else {
+    // NEUTRAL bias — no clear direction
+    timing = 'AVOID';
+    zone = `Range: $${fib382.toFixed(2)} - $${fib618.toFixed(2)}`;
+    trigger = '⏸️ NO TRADE — Neutral bias, wait for direction';
+    confirmation = 'Wait for breakout or breakdown';
+    invalidation = 'N/A';
+    structureStatus = 'Neutral';
+    movementPhase = 'Consolidation';
   }
 
   return {
     timing,
-    zone,
-    trigger,
-    confirmation,
-    invalidation,
+    zone: zone || `$${support.toFixed(2)} - $${resistance.toFixed(2)}`, // Fallback
+    trigger: trigger || 'Wait for setup',
+    confirmation: confirmation || 'Pending',
+    invalidation: invalidation || 'N/A',
     volumeCondition: volumeStrength,
-    structureStatus,
-    movementPhase
+    structureStatus: structureStatus || 'Undefined',
+    movementPhase: movementPhase || 'Unknown'
   };
 }
 
