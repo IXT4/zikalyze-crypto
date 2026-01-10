@@ -12,10 +12,10 @@ export interface FetchRetryOptions {
 }
 
 const DEFAULT_OPTIONS: Required<FetchRetryOptions> = {
-  maxRetries: 3,
-  timeoutMs: 10000,
-  baseDelayMs: 500,
-  maxDelayMs: 4000,
+  maxRetries: 4,
+  timeoutMs: 12000,
+  baseDelayMs: 800,
+  maxDelayMs: 6000,
 };
 
 /**
@@ -37,6 +37,9 @@ export async function fetchWithRetry(
       const response = await fetch(url, {
         signal: controller.signal,
         cache: 'no-store',
+        headers: {
+          'Accept': 'application/json',
+        },
       });
       clearTimeout(timeout);
       return response;
@@ -44,19 +47,27 @@ export async function fetchWithRetry(
       clearTimeout(timeout);
       lastError = err as Error;
 
-      // Don't retry on intentional abort or if component unmounted
-      if ((err as Error).name === 'AbortError' && attempt === 0) {
-        // Only throw immediately if it's the first attempt timeout
-        // Otherwise continue to retry
+      const errorMessage = (err as Error).message || '';
+      const isNetworkError = 
+        errorMessage.includes('Load failed') ||
+        errorMessage.includes('Failed to fetch') ||
+        errorMessage.includes('NetworkError') ||
+        errorMessage.includes('Network request failed') ||
+        (err as Error).name === 'AbortError' ||
+        (err as Error).name === 'TypeError';
+
+      // Only retry on network/timeout errors
+      if (!isNetworkError) {
+        throw err;
       }
 
-      // Log retry attempt
+      // Log retry attempt (not the last one)
       if (attempt < config.maxRetries - 1) {
         const delay = Math.min(
-          config.baseDelayMs * Math.pow(2, attempt),
+          config.baseDelayMs * Math.pow(1.5, attempt) + Math.random() * 500,
           config.maxDelayMs
         );
-        console.log(`[FetchRetry] Attempt ${attempt + 1}/${config.maxRetries} failed for ${url}, retrying in ${delay}ms`);
+        console.log(`[FetchRetry] Attempt ${attempt + 1}/${config.maxRetries} failed for ${url.split('?')[0]}, retrying in ${Math.round(delay)}ms`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }

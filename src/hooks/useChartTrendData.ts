@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchWithRetry, safeFetch } from '@/lib/fetchWithRetry';
+import { safeFetch } from '@/lib/fetchWithRetry';
 
 export interface CandleData {
   timestamp: number;
@@ -219,19 +219,19 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
       const end = Date.now();
       const start = end - 24 * 60 * 60 * 1000; // 24 hours ago
       
-      const response = await fetchWithRetry(
-        `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=h1&start=${start}&end=${end}`
+      const response = await safeFetch(
+        `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=h1&start=${start}&end=${end}`,
+        { timeoutMs: 15000, maxRetries: 4 }
       );
       
-      if (!response.ok) {
-        console.log(`[ChartTrend] CoinCap fetch failed: ${response.status}`);
+      if (!response || !response.ok) {
+        // Silent fail - data will just not update
         return false;
       }
       
       const result = await response.json();
       
       if (!result.data || result.data.length < 5) {
-        console.log(`[ChartTrend] Insufficient data points: ${result.data?.length || 0}`);
         return false;
       }
       
@@ -252,16 +252,18 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
         };
       });
       
-      // Also try to get actual volume data
+      // Also try to get actual volume data (optional - don't fail if this errors)
       try {
-        const assetRes = await safeFetch(`https://api.coincap.io/v2/assets/${coinCapId}`, { maxRetries: 2 });
-        if (assetRes.ok) {
+        const assetRes = await safeFetch(`https://api.coincap.io/v2/assets/${coinCapId}`, { maxRetries: 2, timeoutMs: 8000 });
+        if (assetRes && assetRes.ok) {
           const assetData = await assetRes.json();
           const volume24h = parseFloat(assetData.data?.volumeUsd24Hr || '0');
           
           // Distribute volume across candles
-          const volumePerCandle = volume24h / candles.length;
-          candles.forEach(c => c.volume = volumePerCandle * (0.8 + Math.random() * 0.4));
+          if (volume24h > 0) {
+            const volumePerCandle = volume24h / candles.length;
+            candles.forEach(c => c.volume = volumePerCandle * (0.8 + Math.random() * 0.4));
+          }
         }
       } catch {
         // Volume data is optional, continue without it
@@ -292,11 +294,10 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
       
       setIsLoading(false);
       retryCountRef.current = 0; // Reset on success
-      console.log(`[ChartTrend] ${symbol} loaded: ${candles.length} candles, trend: ${analyzeTrend(candles)}`);
       return true;
       
-    } catch (err) {
-      console.log(`[ChartTrend] Error fetching ${symbol}:`, err);
+    } catch {
+      // Silent fail - network issues are expected
       return false;
     }
   }, [symbol]);

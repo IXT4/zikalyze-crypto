@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchWithRetry, safeFetch } from '@/lib/fetchWithRetry';
+import { safeFetch } from '@/lib/fetchWithRetry';
 
 export type Timeframe = '15m' | '1h' | '4h' | '1d';
 
@@ -277,20 +277,19 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
         interval = 'h1';
       }
       
-      const response = await fetchWithRetry(
+      const response = await safeFetch(
         `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=${interval}&start=${start}&end=${end}`,
-        { timeoutMs: 15000 }
+        { timeoutMs: 15000, maxRetries: 4 }
       );
       
-      if (!response.ok) {
-        console.log(`[MTF] ${timeframe} fetch failed: ${response.status}`);
+      if (!response || !response.ok) {
+        // Silent fail - data will just not update
         return null;
       }
       
       const result = await response.json();
       
       if (!result.data || result.data.length < 5) {
-        console.log(`[MTF] ${timeframe} insufficient data: ${result.data?.length || 0}`);
         return null;
       }
       
@@ -341,8 +340,8 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
         lastUpdated: Date.now(),
         isLive: true,
       };
-    } catch (err) {
-      console.log(`[MTF] ${timeframe} error:`, err);
+    } catch {
+      // Silent fail - network issues are expected
       return null;
     }
   }, []);
