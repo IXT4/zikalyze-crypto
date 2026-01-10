@@ -83,14 +83,14 @@ export const useAnalysisHistory = (symbol: string) => {
     change: number,
     confidence?: number,
     bias?: string
-  ) => {
+  ): Promise<string | null> => {
     if (!user) {
       console.error("User not authenticated");
-      return;
+      return null;
     }
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("analysis_history")
         .insert({
           symbol: symbol.toUpperCase(),
@@ -100,14 +100,19 @@ export const useAnalysisHistory = (symbol: string) => {
           confidence: confidence || null,
           bias: bias || null,
           user_id: user.id,
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
       
       // Refresh history after saving
       fetchHistory();
+      
+      return data?.id || null;
     } catch (err) {
       console.error("Error saving analysis:", err);
+      return null;
     }
   }, [symbol, fetchHistory, user]);
 

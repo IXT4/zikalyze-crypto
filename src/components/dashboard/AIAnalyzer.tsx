@@ -52,6 +52,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const [showHistory, setShowHistory] = useState(false);
   const [selectedHistory, setSelectedHistory] = useState<AnalysisRecord | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const charIndexRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef(0);
@@ -169,6 +171,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     setDisplayedText("");
     setFullAnalysis("");
     setProcessingStep(0);
+    setCurrentAnalysisId(null);
+    setFeedbackSubmitted(false);
     charIndexRef.current = 0;
 
     const stepInterval = setInterval(() => {
@@ -329,10 +333,13 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       setFullAnalysis(result.analysis);
       setHasAnalyzed(true);
 
-      // Cache and save
+      // Cache and save - get the record ID for feedback
       if (result.analysis.length > 100) {
         cacheAnalysis(result.analysis, analysisPrice, analysisChange);
-        saveAnalysis(result.analysis, analysisPrice, analysisChange, result.confidence, result.bias);
+        const savedId = await saveAnalysis(result.analysis, analysisPrice, analysisChange, result.confidence, result.bias);
+        if (savedId) {
+          setCurrentAnalysisId(savedId);
+        }
       }
 
       // Silent completion - no toast notification
@@ -376,7 +383,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     toast.success("Analysis history cleared");
   };
 
-  const handleFeedback = async (recordId: string, wasCorrect: boolean) => {
+  const handleFeedback = async (recordId: string, wasCorrect: boolean): Promise<boolean> => {
     setFeedbackLoading(recordId);
     const success = await submitFeedback(recordId, wasCorrect);
     setFeedbackLoading(null);
@@ -386,6 +393,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     } else {
       toast.error("Failed to submit feedback");
     }
+    return success;
   };
 
   const sentiment = currentChange >= 0 ? "bullish" : "bearish";
@@ -898,7 +906,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         </div>
         
         {/* Inline Feedback Prompt */}
-        {hasAnalyzed && !selectedHistory && fullAnalysis && charIndexRef.current >= fullAnalysis.length && (
+        {hasAnalyzed && !selectedHistory && fullAnalysis && charIndexRef.current >= fullAnalysis.length && !feedbackSubmitted && currentAnalysisId && (
           <div className="mt-3 p-3 rounded-xl bg-gradient-to-r from-primary/5 to-chart-cyan/5 border border-primary/20 animate-fade-in">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
@@ -910,14 +918,10 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => {
-                    // Save with positive feedback
-                    if (history.length > 0) {
-                      const latestRecord = history[0];
-                      if (latestRecord.was_correct === null) {
-                        handleFeedback(latestRecord.id, true);
-                      }
-                    }
+                  disabled={feedbackLoading === currentAnalysisId}
+                  onClick={async () => {
+                    const success = await handleFeedback(currentAnalysisId, true);
+                    if (success !== false) setFeedbackSubmitted(true);
                   }}
                   className="h-7 px-2 text-xs text-success hover:text-success hover:bg-success/10"
                 >
@@ -927,20 +931,19 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => {
-                    // Save with negative feedback
-                    if (history.length > 0) {
-                      const latestRecord = history[0];
-                      if (latestRecord.was_correct === null) {
-                        handleFeedback(latestRecord.id, false);
-                      }
-                    }
+                  disabled={feedbackLoading === currentAnalysisId}
+                  onClick={async () => {
+                    const success = await handleFeedback(currentAnalysisId, false);
+                    if (success !== false) setFeedbackSubmitted(true);
                   }}
                   className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
                 >
                   <ThumbsDown className="h-3 w-3 mr-1" />
                   No
                 </Button>
+                {feedbackLoading === currentAnalysisId && (
+                  <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />
+                )}
               </div>
             </div>
           </div>
