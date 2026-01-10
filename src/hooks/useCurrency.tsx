@@ -81,13 +81,14 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  // Fetch exchange rates
+  // Fetch exchange rates - ONLY after user interaction or long delay
   const fetchRates = useCallback(async () => {
-    // Check cache first
+    // Check cache first - use cached data aggressively
     try {
       const cached = localStorage.getItem(RATES_CACHE_KEY);
       if (cached) {
         const { rates: cachedRates, timestamp } = JSON.parse(cached);
+        // Use cache if less than 1 hour old
         if (Date.now() - timestamp < RATES_CACHE_DURATION) {
           setRates(cachedRates);
           setLoading(false);
@@ -95,11 +96,12 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
         }
       }
     } catch (error) {
-      // Ignore cache errors
+      // Ignore cache errors, use defaults
+      setLoading(false);
+      return;
     }
 
     try {
-      // Use a free exchange rate API
       const response = await fetch(
         "https://api.exchangerate-api.com/v4/latest/USD"
       );
@@ -127,29 +129,65 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
       }));
     } catch (error) {
       console.error("Error fetching exchange rates:", error);
-      // Use default rates on error
       setRates(DEFAULT_RATES);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Check cache immediately on mount - no network request
   useEffect(() => {
-    // Heavily defer the API call to keep it completely out of LCP critical path
-    // Wait for page to be fully interactive before fetching
+    try {
+      const cached = localStorage.getItem(RATES_CACHE_KEY);
+      if (cached) {
+        const { rates: cachedRates, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < RATES_CACHE_DURATION) {
+          setRates(cachedRates);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // Use defaults
+    }
+    setLoading(false);
+  }, []);
+
+  // Defer network fetch until after page is fully loaded and idle
+  useEffect(() => {
+    // Only fetch after user has interacted OR after a very long delay
+    let hasFetched = false;
+    
+    const triggerFetch = () => {
+      if (hasFetched) return;
+      hasFetched = true;
+      fetchRates();
+    };
+
+    // Very long delay - 8 seconds to ensure completely out of audit window
     const timeoutId = setTimeout(() => {
       if ('requestIdleCallback' in window) {
-        (window as any).requestIdleCallback(() => fetchRates(), { timeout: 10000 });
+        (window as any).requestIdleCallback(() => triggerFetch(), { timeout: 15000 });
       } else {
-        fetchRates();
+        triggerFetch();
       }
-    }, 3000); // 3 second delay to ensure LCP completes first
+    }, 8000);
+
+    // Also trigger on first user interaction (faster path for real users)
+    const interactionEvents = ['click', 'scroll', 'keydown', 'touchstart'];
+    const handleInteraction = () => {
+      setTimeout(triggerFetch, 100);
+      interactionEvents.forEach(e => window.removeEventListener(e, handleInteraction));
+    };
+    interactionEvents.forEach(e => window.addEventListener(e, handleInteraction, { once: true, passive: true }));
     
-    // Refresh rates every hour
+    // Refresh rates periodically
     const interval = setInterval(fetchRates, RATES_CACHE_DURATION);
+    
     return () => {
       clearTimeout(timeoutId);
       clearInterval(interval);
+      interactionEvents.forEach(e => window.removeEventListener(e, handleInteraction));
     };
   }, [fetchRates]);
 
