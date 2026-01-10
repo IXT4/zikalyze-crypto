@@ -82,6 +82,31 @@ export interface PrecisionEntry {
   movementPhase: string;
 }
 
+// Real-time chart data for trend analysis
+export interface ChartTrendInput {
+  candles: Array<{
+    timestamp: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+  }>;
+  trend24h: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  trendStrength: number;
+  higherHighs: boolean;
+  higherLows: boolean;
+  lowerHighs: boolean;
+  lowerLows: boolean;
+  ema9: number;
+  ema21: number;
+  rsi: number;
+  volumeTrend: 'INCREASING' | 'DECREASING' | 'STABLE';
+  priceVelocity: number;
+  isLive: boolean;
+  source: string;
+}
+
 export interface AnalysisInput {
   crypto: string;
   price: number;
@@ -98,6 +123,7 @@ export interface AnalysisInput {
     fearGreed?: { value: number; label: string };
     social?: { overall?: { score: number } };
   };
+  chartTrendData?: ChartTrendInput; // Real-time 24h chart data for accurate trend analysis
 }
 
 export interface AnalysisResult {
