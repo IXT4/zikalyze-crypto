@@ -115,12 +115,6 @@ const Top100CryptoList = ({ onSelect, selected }: Top100CryptoListProps) => {
       return { valid: false, error: "Enter a valid price" };
     }
     
-    const percentDiff = Math.abs((target - current) / current) * 100;
-    
-    if (percentDiff < 1) {
-      return { valid: false, error: "Target must be at least 1% from current price" };
-    }
-    
     if (alertCondition === "above" && target <= current) {
       return { valid: false, error: "Target must be above current price" };
     }
