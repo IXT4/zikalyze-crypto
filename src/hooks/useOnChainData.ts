@@ -36,8 +36,16 @@ const MAX_RECONNECT_ATTEMPTS = 3;
 const BASE_RECONNECT_DELAY = 2000;
 const CACHE_DURATION = 30000;
 
-// Only BTC has reliable public WebSocket
-const BTC_WS_URL = 'wss://mempool.space/api/v1/ws';
+// WebSocket URLs for live streaming
+const WS_ENDPOINTS: Record<string, string[]> = {
+  'BTC': ['wss://mempool.space/api/v1/ws'],
+  'ETH': [
+    'wss://ethereum-rpc.publicnode.com',
+    'wss://eth.drpc.org',
+    'wss://ethereum.publicnode.com'
+  ],
+  'KAS': [] // Kaspa uses fast REST polling (no public WS)
+};
 
 // Whale thresholds in USD
 const WHALE_THRESHOLDS: Record<string, number> = {
@@ -324,13 +332,14 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     }
   }, [sendWhaleAlert, updateMetrics]);
 
-  // BTC WebSocket connection (only reliable public WS)
+  // Multi-chain WebSocket connection (BTC + ETH)
   const connectWebSocket = useCallback(() => {
     const cryptoUpper = cryptoRef.current.toUpperCase();
+    const endpoints = WS_ENDPOINTS[cryptoUpper];
     
-    // Only BTC has reliable public WebSocket
-    if (cryptoUpper !== 'BTC') {
-      console.log(`[OnChain] ${cryptoUpper} using REST polling`);
+    // If no WebSocket endpoints, use REST polling
+    if (!endpoints || endpoints.length === 0) {
+      console.log(`[OnChain] ${cryptoUpper} using REST polling (no WS)`);
       setStreamStatus('polling');
       return;
     }
@@ -346,20 +355,33 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     }
 
     setStreamStatus('connecting');
-    console.log(`[OnChain] Connecting BTC WebSocket...`);
+    const wsUrl = endpoints[wsStateRef.current.reconnectAttempts % endpoints.length];
+    console.log(`[OnChain] Connecting ${cryptoUpper} WebSocket: ${wsUrl}`);
 
     try {
-      const ws = new WebSocket(BTC_WS_URL);
+      const ws = new WebSocket(wsUrl);
       wsStateRef.current.socket = ws;
 
       ws.onopen = () => {
         if (!isMountedRef.current) return;
-        console.log(`[OnChain] BTC WebSocket connected`);
+        console.log(`[OnChain] ${cryptoUpper} WebSocket connected`);
         wsStateRef.current.reconnectAttempts = 0;
         setStreamStatus('connected');
         
-        ws.send(JSON.stringify({ action: 'init' }));
-        ws.send(JSON.stringify({ action: 'want', data: ['blocks', 'mempool-blocks', 'stats'] }));
+        // BTC-specific init
+        if (cryptoUpper === 'BTC') {
+          ws.send(JSON.stringify({ action: 'init' }));
+          ws.send(JSON.stringify({ action: 'want', data: ['blocks', 'mempool-blocks', 'stats'] }));
+        }
+        // ETH - subscribe to new blocks
+        else if (cryptoUpper === 'ETH') {
+          ws.send(JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'eth_subscribe',
+            params: ['newHeads']
+          }));
+        }
       };
 
       ws.onmessage = (event) => {
@@ -368,56 +390,86 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         try {
           const data = JSON.parse(event.data);
           
-          if (data.mempoolInfo) {
-            updateMetrics({
-              mempoolData: {
-                unconfirmedTxs: data.mempoolInfo.size || 0,
-                avgFeeRate: metricsRef.current?.mempoolData?.avgFeeRate || 0,
-                fastestFee: metricsRef.current?.mempoolData?.fastestFee,
-                minimumFee: metricsRef.current?.mempoolData?.minimumFee,
-              },
-              source: 'mempool-ws',
-              streamStatus: 'connected'
-            });
-          }
+          // BTC message handling
+          if (cryptoUpper === 'BTC') {
+            if (data.mempoolInfo) {
+              updateMetrics({
+                mempoolData: {
+                  unconfirmedTxs: data.mempoolInfo.size || 0,
+                  avgFeeRate: metricsRef.current?.mempoolData?.avgFeeRate || 0,
+                  fastestFee: metricsRef.current?.mempoolData?.fastestFee,
+                  minimumFee: metricsRef.current?.mempoolData?.minimumFee,
+                },
+                source: 'mempool-ws',
+                streamStatus: 'connected'
+              });
+            }
 
-          if (data.block) {
-            updateMetrics({
-              blockHeight: data.block.height || metricsRef.current?.blockHeight || 0,
-              source: 'mempool-ws',
-              streamStatus: 'connected'
-            });
-            console.log(`[OnChain] BTC New block: ${data.block.height}`);
-          }
+            if (data.block) {
+              updateMetrics({
+                blockHeight: data.block.height || metricsRef.current?.blockHeight || 0,
+                source: 'mempool-ws',
+                streamStatus: 'connected'
+              });
+              console.log(`[OnChain] BTC New block: ${data.block.height}`);
+            }
 
-          if (data['mempool-blocks']) {
-            const blocks = data['mempool-blocks'];
-            const totalTxs = blocks.reduce((acc: number, b: any) => acc + (b.nTx || 0), 0);
-            const avgFee = blocks[0]?.medianFee || 0;
-            
-            updateMetrics({
-              mempoolData: {
-                unconfirmedTxs: totalTxs,
-                avgFeeRate: avgFee,
-                fastestFee: blocks[0]?.feeRange?.[blocks[0].feeRange.length - 1] || avgFee,
-                minimumFee: blocks[blocks.length - 1]?.feeRange?.[0] || 1,
-              },
-              source: 'mempool-ws',
-              streamStatus: 'connected'
-            });
-          }
+            if (data['mempool-blocks']) {
+              const blocks = data['mempool-blocks'];
+              const totalTxs = blocks.reduce((acc: number, b: any) => acc + (b.nTx || 0), 0);
+              const avgFee = blocks[0]?.medianFee || 0;
+              
+              updateMetrics({
+                mempoolData: {
+                  unconfirmedTxs: totalTxs,
+                  avgFeeRate: avgFee,
+                  fastestFee: blocks[0]?.feeRange?.[blocks[0].feeRange.length - 1] || avgFee,
+                  minimumFee: blocks[blocks.length - 1]?.feeRange?.[0] || 1,
+                },
+                source: 'mempool-ws',
+                streamStatus: 'connected'
+              });
+            }
 
-          if (data.fees) {
-            updateMetrics({
-              mempoolData: {
-                unconfirmedTxs: metricsRef.current?.mempoolData?.unconfirmedTxs || 0,
-                avgFeeRate: data.fees.halfHourFee || data.fees.hourFee || 0,
-                fastestFee: data.fees.fastestFee,
-                minimumFee: data.fees.minimumFee,
-              },
-              source: 'mempool-ws',
-              streamStatus: 'connected'
-            });
+            if (data.fees) {
+              updateMetrics({
+                mempoolData: {
+                  unconfirmedTxs: metricsRef.current?.mempoolData?.unconfirmedTxs || 0,
+                  avgFeeRate: data.fees.halfHourFee || data.fees.hourFee || 0,
+                  fastestFee: data.fees.fastestFee,
+                  minimumFee: data.fees.minimumFee,
+                },
+                source: 'mempool-ws',
+                streamStatus: 'connected'
+              });
+            }
+          }
+          // ETH message handling
+          else if (cryptoUpper === 'ETH') {
+            // New block header subscription result
+            if (data.params?.result?.number) {
+              const blockNum = parseInt(data.params.result.number, 16);
+              const gasUsed = parseInt(data.params.result.gasUsed || '0', 16);
+              const baseFee = parseInt(data.params.result.baseFeePerGas || '0', 16);
+              
+              updateMetrics({
+                blockHeight: blockNum,
+                mempoolData: {
+                  unconfirmedTxs: metricsRef.current?.mempoolData?.unconfirmedTxs || 150,
+                  avgFeeRate: Math.round(baseFee / 1e9), // Convert wei to Gwei
+                  fastestFee: metricsRef.current?.mempoolData?.fastestFee,
+                  minimumFee: metricsRef.current?.mempoolData?.minimumFee,
+                },
+                transactionVolume: {
+                  value: gasUsed,
+                  change24h: changeRef.current,
+                  tps: 15
+                },
+                source: 'eth-ws',
+                streamStatus: 'connected'
+              });
+              console.log(`[OnChain] ETH New block: ${blockNum}`);
+            }
           }
         } catch {
           // Ignore parse errors
@@ -425,12 +477,12 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
       };
 
       ws.onerror = () => {
-        console.warn(`[OnChain] BTC WebSocket error`);
+        console.warn(`[OnChain] ${cryptoUpper} WebSocket error`);
         setStreamStatus('disconnected');
       };
 
       ws.onclose = (event) => {
-        console.log(`[OnChain] BTC WebSocket closed: ${event.code}`);
+        console.log(`[OnChain] ${cryptoUpper} WebSocket closed: ${event.code}`);
         wsStateRef.current.socket = null;
         
         if (!isMountedRef.current) return;
@@ -438,19 +490,19 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
 
         if (wsStateRef.current.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           const delay = BASE_RECONNECT_DELAY * Math.pow(2, wsStateRef.current.reconnectAttempts);
-          console.log(`[OnChain] Reconnecting BTC in ${delay}ms (attempt ${wsStateRef.current.reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+          console.log(`[OnChain] Reconnecting ${cryptoUpper} in ${delay}ms (attempt ${wsStateRef.current.reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
           
           wsStateRef.current.reconnectAttempts++;
           wsStateRef.current.reconnectTimeout = setTimeout(() => {
             if (isMountedRef.current) connectWebSocket();
           }, delay);
         } else {
-          console.log('[OnChain] BTC WebSocket max attempts, using polling');
+          console.log(`[OnChain] ${cryptoUpper} WebSocket max attempts, using polling`);
           setStreamStatus('polling');
         }
       };
     } catch (e) {
-      console.error('[OnChain] BTC WebSocket error:', e);
+      console.error(`[OnChain] ${cryptoUpper} WebSocket error:`, e);
       setStreamStatus('polling');
     }
   }, [updateMetrics]);
