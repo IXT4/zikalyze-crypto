@@ -7,8 +7,40 @@ export interface ChartDataPoint {
   positive: boolean;
 }
 
-// Supported exchanges in priority order
-type Exchange = "binance" | "coinbase" | "kraken" | "coingecko";
+// Supported exchanges in priority order (CoinCap first - free, all cryptos, no limits)
+type Exchange = "coincap" | "binance" | "coinbase" | "kraken" | "coingecko";
+
+// Map symbols to CoinCap IDs (free, all cryptos, no rate limits)
+const COINCAP_ID_MAP: Record<string, string> = {
+  BTC: "bitcoin", ETH: "ethereum", SOL: "solana", XRP: "xrp", DOGE: "dogecoin",
+  BNB: "binance-coin", ADA: "cardano", AVAX: "avalanche", DOT: "polkadot",
+  MATIC: "polygon", LINK: "chainlink", UNI: "uniswap", ATOM: "cosmos",
+  LTC: "litecoin", BCH: "bitcoin-cash", NEAR: "near-protocol", APT: "aptos", FIL: "filecoin",
+  ARB: "arbitrum", OP: "optimism", INJ: "injective-protocol", SUI: "sui",
+  TIA: "celestia", SEI: "sei-network", PEPE: "pepe", SHIB: "shiba-inu",
+  WIF: "dogwifhat", BONK: "bonk", FLOKI: "floki-inu", RENDER: "render-token",
+  FET: "fetch", AAVE: "aave", MKR: "maker", GRT: "the-graph", IMX: "immutable-x",
+  STX: "stacks", RUNE: "thorchain", SAND: "the-sandbox", MANA: "decentraland",
+  AXS: "axie-infinity", GALA: "gala", APE: "apecoin", CRV: "curve-dao-token",
+  SNX: "synthetix-network-token", COMP: "compound", LDO: "lido-dao",
+  ENS: "ethereum-name-service", ALGO: "algorand", XLM: "stellar", VET: "vechain",
+  ICP: "internet-computer", HBAR: "hedera", ETC: "ethereum-classic",
+  FTM: "fantom", TRX: "tron", XMR: "monero", EOS: "eos", THETA: "theta-token",
+  XTZ: "tezos", NEO: "neo", KAVA: "kava", ZEC: "zcash", DASH: "dash",
+  EGLD: "multiversx-egld", FLOW: "flow", MINA: "mina-protocol", ROSE: "oasis-network",
+  ONE: "harmony", ZIL: "zilliqa", ENJ: "enjin-coin", CHZ: "chiliz",
+  BAT: "basic-attention-token", CAKE: "pancakeswap", SUSHI: "sushi",
+  YFI: "yearn-finance", STETH: "lido-staked-ether", WBTC: "wrapped-bitcoin",
+  TON: "toncoin", LEO: "unus-sed-leo", OKB: "okb", KCS: "kucoin-token",
+  CRO: "cronos", WLD: "worldcoin", JUP: "jupiter", JTO: "jito-governance-token",
+  KAS: "kaspa", TAO: "bittensor", PYTH: "pyth-network", TRB: "tellor", ORDI: "ordi",
+  STG: "stargate-finance", BLUR: "blur", PENDLE: "pendle", DYDX: "dydx",
+  PI: "pi-network", TRUMP: "maga", POL: "polygon-ecosystem-token",
+  HYPE: "hyperliquid", SXP: "solar", FARTCOIN: "fartcoin", VIRTUAL: "virtual-protocol",
+  ENA: "ethena", ONDO: "ondo-finance", OM: "mantra-dao", BRETT: "brett",
+  XDC: "xdc-network", JASMY: "jasmycoin", IOTA: "iota", QNT: "quant-network",
+  AERO: "aerodrome-finance", CORE: "core", MANTLE: "mantle",
+};
 
 // Map symbols to CoinGecko IDs for fallback
 const COINGECKO_ID_MAP: Record<string, string> = {
@@ -163,6 +195,7 @@ const setCacheData = (symbol: string, data: ChartDataPoint[], priceChange: numbe
 const getExchangeSymbol = (sym: string, exchange: Exchange, coinGeckoId?: string): string | null => {
   const upperSym = sym.toUpperCase();
   switch (exchange) {
+    case "coincap": return COINCAP_ID_MAP[upperSym] || upperSym.toLowerCase();
     case "binance": return BINANCE_SYMBOL_MAP[upperSym] || null;
     case "coinbase": return COINBASE_SYMBOL_MAP[upperSym] || null;
     case "kraken": return KRAKEN_SYMBOL_MAP[upperSym] || null;
@@ -172,6 +205,47 @@ const getExchangeSymbol = (sym: string, exchange: Exchange, coinGeckoId?: string
 };
 
 // Fetch functions (pure, no hooks)
+
+// CoinCap - free, supports all cryptos, no rate limits
+const fetchCoinCapData = async (symbol: string, coinCapId: string): Promise<ChartDataPoint[] | null> => {
+  const backoffKey = getBackoffKey(symbol, "coincap");
+  if (!canRetry(backoffKey)) return null;
+  try {
+    // First get current price and 24h volume
+    const assetResponse = await fetchWithTimeout(`https://api.coincap.io/v2/assets/${coinCapId}`);
+    if (!assetResponse.ok) { recordFailure(backoffKey); return null; }
+    const assetData = await assetResponse.json();
+    if (!assetData.data) { recordFailure(backoffKey); return null; }
+
+    const volume24h = parseFloat(assetData.data.volumeUsd24Hr) || 0;
+
+    // Get historical data for chart (last 20 minutes)
+    const end = Date.now();
+    const start = end - 20 * 60 * 1000;
+    const historyResponse = await fetchWithTimeout(
+      `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=m1&start=${start}&end=${end}`
+    );
+    if (!historyResponse.ok) { recordFailure(backoffKey); return null; }
+    const historyData = await historyResponse.json();
+    if (!historyData.data || historyData.data.length === 0) { recordFailure(backoffKey); return null; }
+
+    recordSuccess(backoffKey);
+    const points = historyData.data.slice(-20);
+    const volumePerPoint = volume24h / (24 * 60); // Distribute 24h volume across minutes
+
+    return points.map((point: any, index: number) => {
+      const price = parseFloat(point.priceUsd);
+      const prevPrice = index > 0 ? parseFloat(points[index - 1].priceUsd) : price;
+      return {
+        time: formatTime(new Date(point.time)),
+        price,
+        volume: volumePerPoint,
+        positive: price >= prevPrice,
+      };
+    });
+  } catch { recordFailure(backoffKey); return null; }
+};
+
 const fetchBinanceData = async (symbol: string, binanceSymbol: string): Promise<ChartDataPoint[] | null> => {
   const backoffKey = getBackoffKey(symbol, "binance");
   if (!canRetry(backoffKey)) return null;
@@ -415,6 +489,58 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
       } catch {}
     };
 
+    // CoinCap WebSocket for real-time price updates
+    const setupCoinCapWebSocket = (coinCapId: string) => {
+      try {
+        const ws = new WebSocket(`wss://ws.coincap.io/prices?assets=${coinCapId}`);
+        
+        ws.onmessage = (event) => {
+          if (!mountedRef.current) return;
+          try {
+            const data = JSON.parse(event.data);
+            const price = parseFloat(data[coinCapId]);
+            if (price && !isNaN(price)) {
+              const timeStr = formatTime(new Date());
+              if (lastPriceRef.current === null) lastPriceRef.current = price;
+              const change = ((price - lastPriceRef.current) / lastPriceRef.current) * 100;
+              setPriceChange(change);
+              setChartData((prev) => {
+                const newPoint: ChartDataPoint = {
+                  time: timeStr,
+                  price,
+                  volume: prev[prev.length - 1]?.volume || 0,
+                  positive: price >= (prev[prev.length - 1]?.price || price),
+                };
+                const existingIndex = prev.findIndex(p => p.time === timeStr);
+                if (existingIndex !== -1) {
+                  const updated = [...prev];
+                  updated[existingIndex] = newPoint;
+                  return updated;
+                }
+                const updated = [...prev, newPoint];
+                if (updated.length > 20) {
+                  updated.shift();
+                  lastPriceRef.current = updated[0]?.price || null;
+                }
+                return updated;
+              });
+            }
+          } catch {}
+        };
+
+        ws.onclose = () => {
+          if (mountedRef.current && !reconnectTimeoutRef.current) {
+            reconnectTimeoutRef.current = window.setTimeout(() => {
+              reconnectTimeoutRef.current = null;
+              setupCoinCapWebSocket(coinCapId);
+            }, 2000);
+          }
+        };
+
+        wsRef.current = ws;
+      } catch {}
+    };
+
     const setupCoinGeckoRefresh = (cgId: string) => {
       refreshIntervalRef.current = window.setInterval(async () => {
         if (!mountedRef.current) return;
@@ -429,7 +555,8 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
     };
 
     const loadData = async () => {
-      const exchanges: Exchange[] = ["binance", "coinbase", "kraken", "coingecko"];
+      // CoinCap first (free, all cryptos, no limits), then fallback to others
+      const exchanges: Exchange[] = ["coincap", "binance", "coinbase", "kraken", "coingecko"];
 
       for (const exchange of exchanges) {
         if (!mountedRef.current) return;
@@ -440,6 +567,9 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
         let data: ChartDataPoint[] | null = null;
 
         switch (exchange) {
+          case "coincap":
+            data = await fetchWithRetry(() => fetchCoinCapData(symbol, exchangeSymbol));
+            break;
           case "binance": 
             data = await fetchWithRetry(() => fetchBinanceData(symbol, exchangeSymbol)); 
             break;
@@ -463,7 +593,11 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
           setCacheData(symbol, data, change, exchange);
           lastPriceRef.current = data[0]?.price || null;
 
-          if (exchange !== "coingecko") {
+          // Set up live updates - WebSocket for supported exchanges, polling for CoinCap/CoinGecko
+          if (exchange === "coincap") {
+            // CoinCap WebSocket for live updates
+            setupCoinCapWebSocket(exchangeSymbol);
+          } else if (exchange !== "coingecko") {
             connectWebSocket(exchange, exchangeSymbol);
           } else {
             setupCoinGeckoRefresh(exchangeSymbol);
