@@ -46,12 +46,14 @@ export function getUpcomingMacroCatalysts(): MacroCatalyst[] {
   if (nextFOMC) {
     const daysToFOMC = getDaysUntil(now, nextFOMC);
     if (daysToFOMC <= 14) {
+      // Add CME FedWatch context
+      const fedWatchNote = 'CME FedWatch: ~90% hold expected. Surprise cut = ultra bullish, hike = crash risk';
       catalysts.push({
         event: 'FOMC Interest Rate Decision',
         date: nextFOMC.toISOString().split('T')[0],
         impact: 'HIGH',
         expectedEffect: 'VOLATILE',
-        description: `${formatDays(daysToFOMC)}. Fed decision on rates — dovish = bullish, hawkish = bearish`
+        description: `${formatDays(daysToFOMC)}. ${fedWatchNote}`
       });
     }
   }
@@ -72,12 +74,14 @@ export function getUpcomingMacroCatalysts(): MacroCatalyst[] {
   if (nextCPI) {
     const daysToCPI = getDaysUntil(now, nextCPI);
     if (daysToCPI <= 10) {
+      // Add market consensus context
+      const consensusNote = 'Consensus: ~2.8% YoY. Below = bullish surprise (rate cut hopes), Above = hawkish reaction';
       catalysts.push({
         event: 'US CPI Inflation Data',
         date: nextCPI.toISOString().split('T')[0],
         impact: 'HIGH',
         expectedEffect: 'VOLATILE',
-        description: `${formatDays(daysToCPI)}. Lower = bullish (rate cuts), Higher = bearish`
+        description: `${formatDays(daysToCPI)}. ${consensusNote}`
       });
     }
   }

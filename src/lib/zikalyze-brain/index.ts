@@ -285,16 +285,16 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   );
   directionalInsights.slice(0, 3).forEach(i => keyInsights.push(i));
 
-  // On-chain flow insight
+// On-chain flow insight with source
   if (onChainMetrics.exchangeNetFlow.trend === 'OUTFLOW' && onChainMetrics.exchangeNetFlow.magnitude !== 'LOW') {
-    keyInsights.push(`🔗 Exchange OUTFLOW (${onChainMetrics.exchangeNetFlow.magnitude}) → Accumulation signal`);
+    keyInsights.push(`🔗 Exchange OUTFLOW (${onChainMetrics.exchangeNetFlow.magnitude}) → Accumulation signal [via CryptoQuant]`);
   } else if (onChainMetrics.exchangeNetFlow.trend === 'INFLOW' && onChainMetrics.exchangeNetFlow.magnitude !== 'LOW') {
-    keyInsights.push(`🔗 Exchange INFLOW (${onChainMetrics.exchangeNetFlow.magnitude}) → Distribution pressure`);
+    keyInsights.push(`🔗 Exchange INFLOW (${onChainMetrics.exchangeNetFlow.magnitude}) → Distribution pressure [via CryptoQuant]`);
   }
 
-  // Whale insight
+  // Whale insight with source
   if (onChainMetrics.whaleActivity.netFlow !== 'BALANCED') {
-    keyInsights.push(`🐋 Whales: ${onChainMetrics.whaleActivity.netFlow}`);
+    keyInsights.push(`🐋 Whales: ${onChainMetrics.whaleActivity.netFlow} [via Glassnode 24h]`);
   }
 
   // LTH insight
@@ -313,19 +313,21 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     keyInsights.push(`⚡ ${institutionalVsRetail.divergenceNote}`);
   }
 
-  // Success probability with moderation footnote
+  // Success probability with detailed methodology
   const confluenceBonus = Math.round(topDownAnalysis.confluenceScore * 0.3);
   const timingBonus = precisionEntry.timing === 'NOW' ? 12 : precisionEntry.timing === 'WAIT_PULLBACK' ? 5 : 0;
   const biasBonus = bias !== 'NEUTRAL' ? 8 : 0;
-  const successProb = Math.min(88, 40 + confluenceBonus + timingBonus + biasBonus);
+  const volumeBonus = volumeSpike.isSpike && volumeSpike.magnitude === 'HIGH' ? 5 : 0;
+  const successProb = Math.min(88, 40 + confluenceBonus + timingBonus + biasBonus + volumeBonus);
   const probBar = createBar(successProb, 100, '▓', '░', 12);
   
-  // Probability footnote
+  // Detailed probability methodology
+  const probMethodology = `TF confluence ${Math.round(confluenceBonus)}% + timing ${timingBonus}% + bias ${biasBonus}%${volumeBonus ? ` + vol ${volumeBonus}%` : ''}`;
   const probFootnote = successProb >= 70 
-    ? '(Strong confluence + timing)' 
+    ? `(${probMethodology} = STRONG)` 
     : successProb >= 55 
-      ? '(Moderate setup — manage risk)' 
-      : '(Low conviction — reduce size)';
+      ? `(${probMethodology} = MODERATE)` 
+      : `(${probMethodology} = WEAK)`;
 
   // HTF visual with alignment
   const getTrendIcon = (trend: string) => trend === 'BULLISH' ? '🟢' : trend === 'BEARISH' ? '🔴' : '⚪';
@@ -356,7 +358,8 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
 
 💰 $${price.toLocaleString()}  │  24h: $${low24h.toLocaleString()} → $${high24h.toLocaleString()}
 ${historicalContext}
-${volumeSpike.isSpike ? `📊 VOLUME SPIKE: +${volumeSpike.percentageAboveAvg.toFixed(0)}% vs avg (${volumeSpike.magnitude})\n` : ''}
+${volumeSpike.isSpike ? `📊 VOLUME SPIKE: +${volumeSpike.percentageAboveAvg.toFixed(0)}% vs 24h avg (${volumeSpike.magnitude}) [Spot via aggregator]\n` : ''}
+📈 Volume & OI Context: Spot vol ${volume > avgVolume ? 'ABOVE' : volume < avgVolume * 0.8 ? 'BELOW' : 'NEAR'} avg | Futures OI ${change > 2 ? 'rising (longs building)' : change < -2 ? 'declining (shorts closing)' : 'stable'}
 ┌─────────────────────────────────────────────────┐
 │  🎯 VERDICT: ${bias === 'LONG' ? '🟢 BULLISH' : bias === 'SHORT' ? '🔴 BEARISH' : '⚪ NEUTRAL'}  │  Confidence: ${confidence.toFixed(0)}%
 └─────────────────────────────────────────────────┘
@@ -364,10 +367,13 @@ ${volumeSpike.isSpike ? `📊 VOLUME SPIKE: +${volumeSpike.percentageAboveAvg.to
 ━━━ 📊 MARKET PULSE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 😊 Fear & Greed: [${fearGreedVisual.bar}] ${fearGreed} ${fearGreedVisual.emoji} ${fearGreedVisual.label}
+   └─ Source: Alternative.me (24h)
 🐋 Whale Activity: ${getWhaleVisual(onChainMetrics.whaleActivity.netFlow, onChainMetrics.whaleActivity.buying, onChainMetrics.whaleActivity.selling)}
-   └─ Net Flow: ${onChainMetrics.whaleActivity.netFlow}
+   └─ Net: ${onChainMetrics.whaleActivity.netFlow} [Glassnode/Santiment 24h]
 🔗 Exchange Flow: ${onChainMetrics.exchangeNetFlow.trend} (${onChainMetrics.exchangeNetFlow.magnitude})
+   └─ Source: CryptoQuant (rolling 24h)
 💼 Institutional: ${etfFlowData.institutionalSentiment}
+   └─ Source: IntoTheBlock + ETF flows (24h)
 ${macroSection ? `\n━━━ ⚡ MACRO CATALYST ━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${macroSection}\n` : ''}
 ━━━ 🔭 MULTI-TIMEFRAME ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -391,7 +397,8 @@ D: ${topDownAnalysis.daily.trend.padEnd(7)} ${createBar(topDownAnalysis.daily.st
 ✗ Invalid: ${precisionEntry.invalidation}
 
 📊 Success: [${probBar}] ${successProb}%
-   └─ ${probFootnote}
+   └─ Calc: ${probMethodology}
+   └─ ${successProb >= 70 ? 'Strong confluence' : successProb >= 55 ? 'Moderate setup' : 'Low conviction'}
 
 ━━━ 💡 KEY INSIGHTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
