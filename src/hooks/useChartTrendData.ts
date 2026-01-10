@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { fetchWithRetry, safeFetch } from '@/lib/fetchWithRetry';
 
 export interface CandleData {
   timestamp: number;
@@ -212,40 +213,6 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
   const retryCountRef = useRef(0);
   const MAX_RETRIES = 3;
   
-  const fetchWithRetry = async (url: string, maxRetries = 3, timeoutMs = 10000): Promise<Response> => {
-    let lastError: Error | null = null;
-    
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-      
-      try {
-        const response = await fetch(url, { 
-          signal: controller.signal,
-          cache: 'no-store'
-        });
-        clearTimeout(timeout);
-        return response;
-      } catch (err) {
-        clearTimeout(timeout);
-        lastError = err as Error;
-        
-        // Don't retry on abort (intentional cancellation)
-        if ((err as Error).name === 'AbortError') {
-          throw err;
-        }
-        
-        // Wait with exponential backoff before retrying
-        if (attempt < maxRetries - 1) {
-          const delay = Math.min(500 * Math.pow(2, attempt), 4000);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-    }
-    
-    throw lastError || new Error('Fetch failed after retries');
-  };
-  
   const fetchWithId = useCallback(async (coinCapId: string): Promise<boolean> => {
     try {
       // Fetch 24h of hourly candles for trend analysis
@@ -287,7 +254,7 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
       
       // Also try to get actual volume data
       try {
-        const assetRes = await fetchWithRetry(`https://api.coincap.io/v2/assets/${coinCapId}`, 2);
+        const assetRes = await safeFetch(`https://api.coincap.io/v2/assets/${coinCapId}`, { maxRetries: 2 });
         if (assetRes.ok) {
           const assetData = await assetRes.json();
           const volume24h = parseFloat(assetData.data?.volumeUsd24Hr || '0');
@@ -341,7 +308,7 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
     if (!coinCapId) {
       // Try dynamic lookup
       try {
-        const searchRes = await fetchWithRetry(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=1`, 2);
+        const searchRes = await safeFetch(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=1`, { maxRetries: 2 });
         if (searchRes.ok) {
           const searchData = await searchRes.json();
           if (searchData.data?.[0]?.id) {

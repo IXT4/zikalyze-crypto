@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { fetchWithRetry as fetchWithRetryUtil, safeFetch } from "@/lib/fetchWithRetry";
 
 export interface ChartDataPoint {
   time: string;
@@ -362,13 +363,7 @@ const formatTime = (date: Date): string => {
 };
 
 const fetchWithTimeout = async (url: string, timeoutMs = 15000): Promise<Response> => {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
+  return fetchWithRetryUtil(url, { timeoutMs, maxRetries: 2 });
 };
 
 // Retry wrapper for fetch functions

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { safeFetch } from "@/lib/fetchWithRetry";
 
 export interface OnChainMetrics {
   exchangeNetFlow: { value: number; trend: 'OUTFLOW' | 'INFLOW' | 'NEUTRAL'; magnitude: string; change24h: number };
@@ -105,16 +106,14 @@ async function cachedFetch<T>(url: string, fallback: T): Promise<T> {
   }
   
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
-    const response = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
-    clearTimeout(timeoutId);
+    const response = await safeFetch(url, { timeoutMs: API_TIMEOUT, maxRetries: 2 });
     
-    if (!response.ok) {
-      if (response.status === 429 && apiCache[url]) {
+    if (!response || !response.ok) {
+      if (response?.status === 429 && apiCache[url]) {
         apiCache[url].timestamp = now;
         return apiCache[url].data as T;
       }
+      if (apiCache[url]) return apiCache[url].data as T;
       return fallback;
     }
     
