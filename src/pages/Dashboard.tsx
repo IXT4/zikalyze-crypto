@@ -192,7 +192,7 @@ const Dashboard = () => {
           {/* Top 100 Crypto List */}
           <ErrorBoundary componentName="Crypto List" fallback={<ChartErrorFallback />}>
             <Suspense fallback={<ChartSkeleton />}>
-              <Top100CryptoList selected={selectedCrypto} onSelect={setSelectedCrypto} />
+              <Top100CryptoList selected={selectedCrypto} onSelect={setSelectedCrypto} prices={prices} loading={loading} />
             </Suspense>
           </ErrorBoundary>
         </div>
