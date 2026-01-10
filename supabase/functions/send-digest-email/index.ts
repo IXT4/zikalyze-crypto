@@ -229,6 +229,16 @@ Deno.serve(async (req) => {
 
     for (const pref of preferences) {
       try {
+        // Fetch user email from Supabase Auth (more secure than storing in application table)
+        const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(pref.user_id);
+        
+        if (authError || !authUser?.user?.email) {
+          console.error(`Error fetching email for user ${pref.user_id}:`, authError);
+          errors.push(`${pref.user_id}: Could not fetch user email`);
+          continue;
+        }
+        
+        const userEmail = authUser.user.email;
         // Fetch pending alerts for this user
         const alertsQuery = supabase
           .from('alert_digest_queue')
@@ -279,17 +289,17 @@ Deno.serve(async (req) => {
 
         const periodLabel = pref.digest_frequency === 'daily' ? 'Daily' : 'Weekly';
         
-        // Send email
+        // Send email (using email from Supabase Auth)
         const { error: sendError } = await resend.emails.send({
           from: 'Zikalyze <onboarding@resend.dev>',
-          to: [pref.email],
+          to: [userEmail],
           subject: `📊 Your ${periodLabel} Zikalyze Digest - ${alertItems.length} Alerts`,
           html,
         });
 
         if (sendError) {
-          console.error(`Error sending to ${pref.email}:`, sendError);
-          errors.push(`${pref.email}: ${sendError.message}`);
+          console.error(`Error sending to ${userEmail}:`, sendError);
+          errors.push(`${userEmail}: ${sendError.message}`);
           continue;
         }
 
@@ -312,7 +322,7 @@ Deno.serve(async (req) => {
           .eq('id', pref.id);
 
         sentCount++;
-        console.log(`Sent digest to ${pref.email}`);
+        console.log(`Sent digest to ${userEmail}`);
 
       } catch (userError) {
         console.error(`Error processing user ${pref.user_id}:`, userError);

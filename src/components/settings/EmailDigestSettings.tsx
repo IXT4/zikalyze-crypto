@@ -114,7 +114,6 @@ const EmailDigestSettings = () => {
         .from('user_email_preferences')
         .upsert({
           user_id: user.id,
-          email: user.email,
           ...preferences,
           updated_at: new Date().toISOString(),
         }, {
