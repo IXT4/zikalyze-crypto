@@ -388,26 +388,22 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     keyInsights.push(`⚡ ${institutionalVsRetail.divergenceNote}`);
   }
 
-  // Success probability with CORRECT math
-  // Base: 40%, then add bonuses that sum correctly
-  const BASE_PROB = 40;
-  const confluenceBonus = Math.round(topDownAnalysis.confluenceScore * 0.35); // max ~31
+  // Success probability — based on confluence and setup quality
+  const confluenceBonus = Math.round(topDownAnalysis.confluenceScore * 0.35);
   const timingBonus = precisionEntry.timing === 'NOW' ? 10 : precisionEntry.timing === 'WAIT_PULLBACK' ? 4 : 0;
   const biasBonus = bias !== 'NEUTRAL' ? 6 : 0;
   const volumeBonus = volumeSpike.isSpike && volumeSpike.magnitude === 'HIGH' ? 4 : volumeSpike.isSpike ? 2 : 0;
-  
-  // Calculate total with correct addition
-  const totalBonuses = confluenceBonus + timingBonus + biasBonus + volumeBonus;
-  const successProb = Math.min(88, BASE_PROB + totalBonuses);
+  const successProb = Math.min(88, 40 + confluenceBonus + timingBonus + biasBonus + volumeBonus);
   const probBar = createBar(successProb, 100, '▓', '░', 12);
   
-  // Show EXACT breakdown for transparency
-  const probMethodology = `Base ${BASE_PROB} + conf ${confluenceBonus} + timing ${timingBonus} + bias ${biasBonus}${volumeBonus ? ` + vol ${volumeBonus}` : ''} = ${successProb}%`;
-  const probFootnote = successProb >= 70 
-    ? 'STRONG setup' 
-    : successProb >= 55 
-      ? 'MODERATE — manage risk' 
-      : 'WEAK — reduce size';
+  // Qualitative description based on probability tier
+  const probDescription = successProb >= 75 
+    ? 'HIGH — Strong confluence across timeframes'
+    : successProb >= 65 
+      ? 'GOOD — Multiple confirmations present' 
+      : successProb >= 55 
+        ? 'MODERATE — Proceed with caution'
+        : 'LOW — Weak setup, reduce size';
 
   // HTF visual with alignment
   const getTrendIcon = (trend: string) => trend === 'BULLISH' ? '🟢' : trend === 'BEARISH' ? '🔴' : '⚪';
@@ -476,8 +472,7 @@ D: ${topDownAnalysis.daily.trend.padEnd(7)} ${createBar(topDownAnalysis.daily.st
 ✗ Invalid: ${precisionEntry.invalidation}
 
 📊 Success: [${probBar}] ${successProb}%
-   └─ Calc: ${probMethodology}
-   └─ ${successProb >= 70 ? 'Strong confluence' : successProb >= 55 ? 'Moderate setup' : 'Low conviction'}
+   └─ ${probDescription}
 
 ━━━ 💡 KEY INSIGHTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
