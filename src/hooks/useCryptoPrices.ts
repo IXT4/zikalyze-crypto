@@ -81,6 +81,8 @@ const PRIORITY_TOKENS = [
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
 
 // CoinGecko ID to CoinCap ID mapping (they differ for many coins)
+// CoinGecko ID to CoinCap ID mapping (they differ for many coins)
+// Also includes special handling for assets not on Binance mainnet
 const COINGECKO_TO_COINCAP: Record<string, string> = {
   "bitcoin": "bitcoin",
   "ethereum": "ethereum",
@@ -118,7 +120,7 @@ const COINGECKO_TO_COINCAP: Record<string, string> = {
   "arbitrum": "arbitrum",
   "maker": "maker",
   "algorand": "algorand",
-  "kaspa": "kaspa",
+  "kaspa": "kaspa", // KAS - available on CoinCap, not on Binance spot
   "optimism": "optimism",
   "aave": "aave",
   "immutable-x": "immutable-x",
@@ -249,6 +251,14 @@ const EXCHANGES = {
   },
 };
 
+// Symbols NOT available on Binance spot - rely on CoinCap/Kraken for these
+// These assets are only on futures, delisted, or not listed on Binance
+const BINANCE_UNAVAILABLE_SYMBOLS = new Set([
+  "kas", "xmr", "sc", "zil", "rvn", "gno", "lsk", "dcr", "zen",
+  "ark", "sys", "waves", "iotx", "strax", "snt", "stmx", "ckb",
+  "oxt", "lrc", "orn", "pols", "rsr", "ilv", "ygg", "alice", "tlm",
+  "ghst", "audio", "ens", "ldo", "gmx", "magic", "ssv", "glmr",
+]);
 export const useCryptoPrices = () => {
   const [prices, setPrices] = useState<CryptoPrice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -269,8 +279,9 @@ export const useCryptoPrices = () => {
   const exchangesConnectedRef = useRef(false);
   const pricesInitializedRef = useRef(false); // Track if prices have been initialized
   
-  // Throttle interval - minimum 2 seconds between updates per coin for readable UI
-  const UPDATE_THROTTLE_MS = 2000;
+// Throttle interval - minimum 1 second between updates per coin for readable UI
+// Reduced from 2s to 1s to prevent delayed prices for fast-moving assets
+const UPDATE_THROTTLE_MS = 1000;
 
   // Update price with source tracking and throttling for readable updates
   const updatePrice = useCallback((symbol: string, updates: Partial<CryptoPrice>, source: string) => {
@@ -687,15 +698,19 @@ export const useCryptoPrices = () => {
     const cryptoList = cryptoListRef.current;
     
     // Build combined stream for all symbols (Binance supports up to 1024 streams)
-    // Use both ticker and miniTicker for comprehensive data
-    const streams = cryptoList
+    // Filter out symbols not available on Binance spot to prevent connection errors
+    const validSymbols = cryptoList
       .slice(0, 100)
+      .filter(c => !BINANCE_UNAVAILABLE_SYMBOLS.has(c.symbol.toLowerCase()));
+    
+    const streams = validSymbols
       .map(c => `${c.symbol.toLowerCase()}usdt@ticker`)
       .join("/");
     
+    console.log(`[Binance] Connecting to ${validSymbols.length} symbols (skipped ${cryptoList.slice(0, 100).length - validSymbols.length} unavailable)...`);
+    
     try {
       const wsUrl = `${EXCHANGES.binance.combinedUrl}${streams}`;
-      console.log(`[Binance] Connecting to ${cryptoList.length} streams...`);
       const ws = new WebSocket(wsUrl);
       
       const connectTimeout = setTimeout(() => {
@@ -952,6 +967,58 @@ export const useCryptoPrices = () => {
       saveLivePrices(prices);
     }
   }, [prices, isLive, saveLivePrices]);
+
+  // Periodic refresh for stale prices (assets not updating via WebSocket)
+  // This catches Kaspa and other altcoins that may have delayed WebSocket feeds
+  useEffect(() => {
+    const STALE_THRESHOLD_MS = 30000; // 30 seconds = stale
+    const REFRESH_INTERVAL_MS = 15000; // Check every 15 seconds
+    
+    const refreshStalePrices = async () => {
+      const now = Date.now();
+      const staleSymbols: string[] = [];
+      
+      prices.forEach(p => {
+        const lastUpdate = p.lastUpdate || 0;
+        if (now - lastUpdate > STALE_THRESHOLD_MS && p.current_price > 0) {
+          staleSymbols.push(p.id);
+        }
+      });
+      
+      if (staleSymbols.length === 0) return;
+      
+      // Fetch fresh data for stale coins from CoinGecko
+      try {
+        const ids = staleSymbols.slice(0, 20).join(','); // Limit to 20 at a time
+        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`;
+        
+        const response = await fetch(url);
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        
+        Object.entries(data).forEach(([id, priceData]: [string, any]) => {
+          const coin = prices.find(p => p.id === id);
+          if (coin && priceData.usd) {
+            updatePrice(coin.symbol, {
+              current_price: priceData.usd,
+              price_change_percentage_24h: priceData.usd_24h_change || 0,
+            }, "CoinGecko-Refresh");
+          }
+        });
+        
+        if (staleSymbols.length > 0) {
+          console.log(`[Refresh] Updated ${Object.keys(data).length} stale prices`);
+        }
+      } catch (e) {
+        // Silent error - WebSocket is primary source
+      }
+    };
+    
+    const intervalId = setInterval(refreshStalePrices, REFRESH_INTERVAL_MS);
+    
+    return () => clearInterval(intervalId);
+  }, [prices, updatePrice]);
 
   // No polling - rely on real-time WebSocket data for 24h updates
   // Initial fetch provides market cap and other static data
