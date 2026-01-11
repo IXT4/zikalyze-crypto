@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { fetchWithRetry as fetchWithRetryUtil, safeFetch } from "@/lib/fetchWithRetry";
+import { usePythPrices, PYTH_FEED_IDS } from "./usePythPrices";
 
 export interface ChartDataPoint {
   time: string;
@@ -8,8 +9,8 @@ export interface ChartDataPoint {
   positive: boolean;
 }
 
-// Supported exchanges in priority order (CoinCap first - free, all cryptos, no limits)
-type Exchange = "coincap" | "binance" | "coinbase" | "kraken" | "coingecko";
+// Supported exchanges in priority order - Pyth Oracle first (decentralized), then CoinCap
+type Exchange = "pyth" | "coincap" | "binance" | "coinbase" | "kraken" | "coingecko";
 
 // Map symbols to CoinCap v2 API IDs (verified correct IDs)
 // CoinCap uses lowercase names with hyphens, NOT the same as CoinGecko
@@ -668,11 +669,17 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
   const [error, setError] = useState<string | null>(null);
   const [dataSource, setDataSource] = useState<Exchange | null>(null);
 
+  // Pyth Oracle integration for decentralized streaming
+  const pythFeedKey = `${symbol.toUpperCase()}/USD`;
+  const hasPythFeed = pythFeedKey in PYTH_FEED_IDS;
+  const pyth = usePythPrices(hasPythFeed ? [symbol] : []);
+
   const wsRef = useRef<WebSocket | null>(null);
   const lastPriceRef = useRef<number | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const refreshIntervalRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
+  const pythPriceRef = useRef<number | null>(null);
 
   // Cleanup function
   const cleanup = useCallback(() => {
@@ -689,6 +696,58 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
       wsRef.current = null;
     }
   }, []);
+
+  // Process Pyth oracle price updates for chart streaming
+  useEffect(() => {
+    if (!pyth.isConnected || !hasPythFeed || !mountedRef.current) return;
+
+    const pythData = pyth.getPrice(symbol);
+    if (!pythData || pythData.price <= 0) return;
+
+    const price = pythData.price;
+    const timeStr = formatTime(new Date(pythData.publishTime));
+
+    // Skip if price hasn't changed significantly
+    if (pythPriceRef.current !== null) {
+      const priceDiff = Math.abs(price - pythPriceRef.current) / pythPriceRef.current;
+      if (priceDiff < 0.00001) return; // Less than 0.001% change
+    }
+
+    pythPriceRef.current = price;
+
+    // Update chart data with Pyth oracle tick
+    if (lastPriceRef.current === null) lastPriceRef.current = price;
+    const change = ((price - lastPriceRef.current) / lastPriceRef.current) * 100;
+    setPriceChange(change);
+    setDataSource("pyth");
+
+    setChartData((prev) => {
+      const newPoint: ChartDataPoint = {
+        time: timeStr,
+        price,
+        volume: prev[prev.length - 1]?.volume || 0,
+        positive: price >= (prev[prev.length - 1]?.price || price),
+      };
+
+      // Check if we already have a point for this time
+      const existingIndex = prev.findIndex(p => p.time === timeStr);
+      if (existingIndex !== -1) {
+        const updated = [...prev];
+        updated[existingIndex] = newPoint;
+        return updated;
+      }
+
+      const updated = [...prev, newPoint];
+      // Keep max 50 points for performance
+      if (updated.length > 50) {
+        updated.shift();
+        lastPriceRef.current = updated[0]?.price || null;
+      }
+      return updated;
+    });
+
+    if (isLoading) setIsLoading(false);
+  }, [pyth.prices, pyth.isConnected, hasPythFeed, symbol, isLoading, pyth]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -842,14 +901,21 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
       } catch {}
     };
 
-    // No polling - CoinGecko is only used for initial snapshot.
-    // After that, we attempt CoinCap WebSocket streaming for real-time ticks.
+    // No polling - Pyth Oracle and CoinCap WebSocket are the primary streaming sources
     const setupCoinGeckoRefresh = (_cgId: string) => {
-      // intentionally no-op
+      // intentionally no-op - pure streaming mode
     };
 
     const loadData = async () => {
-      // CoinCap first (free, all cryptos, no limits), then fallback to others
+      // If Pyth oracle is available for this symbol, it will handle streaming via the useEffect above
+      // We still need initial historical data from exchanges for the chart baseline
+      if (hasPythFeed && pyth.isConnected) {
+        console.log(`[Chart] ${symbol} using Pyth Oracle for live streaming`);
+        // Pyth streaming is handled by the useEffect, but we need initial data
+        // Fall through to get baseline from exchanges
+      }
+
+      // Exchanges for initial historical data (Pyth Oracle handles live updates if available)
       const exchanges: Exchange[] = ["coincap", "binance", "coinbase", "kraken", "coingecko"];
 
       for (const exchange of exchanges) {
@@ -889,12 +955,19 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
           const change = ((data[data.length - 1].price - data[0].price) / data[0].price) * 100;
           setChartData(data);
           setPriceChange(change);
-          setDataSource(exchange);
           setIsLoading(false);
           setCacheData(symbol, data, change, exchange);
           lastPriceRef.current = data[0]?.price || null;
 
-          // Set up live updates - WebSocket only (no polling)
+          // If Pyth oracle is available, use it for live streaming (already handled by useEffect)
+          if (hasPythFeed) {
+            setDataSource("pyth");
+            console.log(`[Chart] ${symbol} initial data from ${exchange}, live streaming via Pyth Oracle`);
+            return;
+          }
+
+          // Otherwise fall back to exchange WebSockets
+          setDataSource(exchange);
           if (exchange === "coincap") {
             setupCoinCapWebSocket(exchangeSymbol);
           } else if (exchange !== "coingecko") {
@@ -915,6 +988,14 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
         }
       }
 
+      // If we have Pyth but no historical data, still mark as supported (Pyth will stream)
+      if (hasPythFeed) {
+        console.log(`[Chart] ${symbol} no historical data, will build from Pyth Oracle stream`);
+        setDataSource("pyth");
+        setIsLoading(false);
+        return;
+      }
+
       if (mountedRef.current) {
         setIsSupported(false);
         setError("Data not available for this asset");
@@ -928,7 +1009,17 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
       mountedRef.current = false;
       cleanup();
     };
-  }, [symbol, coinGeckoId, cleanup]);
+  }, [symbol, coinGeckoId, cleanup, hasPythFeed, pyth.isConnected]);
 
-  return { chartData, priceChange, isLoading, isSupported, error, dataSource };
+  return { 
+    chartData, 
+    priceChange, 
+    isLoading, 
+    isSupported, 
+    error, 
+    dataSource,
+    // Oracle status for UI
+    isPythStreaming: dataSource === "pyth" && pyth.isConnected,
+    oracleConnected: pyth.isConnected,
+  };
 };
