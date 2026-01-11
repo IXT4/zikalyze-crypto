@@ -97,8 +97,9 @@ const fetchCoinGeckoData = async (symbol: string, coinGeckoId: string): Promise<
   try {
     console.log(`[CoinGecko] Fetching historical data for ${symbol} (${coinGeckoId})`);
     
+    // Use days=2 to get automatic hourly data (CoinGecko auto-provides hourly for 2-90 days)
     const response = await fetchWithTimeout(
-      `https://api.coingecko.com/api/v3/coins/${coinGeckoId}/market_chart?vs_currency=usd&days=1&interval=hourly`
+      `https://api.coingecko.com/api/v3/coins/${coinGeckoId}/market_chart?vs_currency=usd&days=2`
     );
     
     if (!response.ok) {
