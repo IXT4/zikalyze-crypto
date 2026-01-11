@@ -269,8 +269,8 @@ export const useCryptoPrices = () => {
   const exchangesConnectedRef = useRef(false);
   const pricesInitializedRef = useRef(false); // Track if prices have been initialized
   
-  // Throttle interval - minimum 2 seconds between updates per coin for readable UI
-  const UPDATE_THROTTLE_MS = 2000;
+  // Throttle interval - 100ms for true real-time updates while preventing UI flicker
+  const UPDATE_THROTTLE_MS = 100;
 
   // Update price with source tracking and throttling for readable updates
   const updatePrice = useCallback((symbol: string, updates: Partial<CryptoPrice>, source: string) => {
@@ -658,8 +658,8 @@ export const useCryptoPrices = () => {
         clearTimeout(connectTimeout);
         setConnectedExchanges(prev => prev.filter(e => e !== "CoinCap"));
         
-        // Exponential backoff
-        const delay = Math.min(3000 + Math.random() * 2000, 8000);
+        // Fast reconnection for real-time streaming
+        const delay = 500 + Math.random() * 500;
         if (reconnectTimeoutsRef.current.coincap) {
           clearTimeout(reconnectTimeoutsRef.current.coincap);
         }
@@ -671,7 +671,7 @@ export const useCryptoPrices = () => {
       coincapWsRef.current = ws;
     } catch (err) {
       console.log(`[CoinCap] Connection failed, retrying...`);
-      setTimeout(() => connectCoinCap(), 3000);
+      setTimeout(() => connectCoinCap(), 500);
     }
   }, [updatePrice]);
 
@@ -757,12 +757,12 @@ export const useCryptoPrices = () => {
         clearTimeout(connectTimeout);
         setConnectedExchanges(prev => prev.filter(ex => ex !== "Binance"));
         
-        // Reconnect with exponential backoff
-        const delay = 2000 + Math.random() * 2000;
+        // Fast reconnection for real-time streaming
+        const delay = 500 + Math.random() * 500;
         if (reconnectTimeoutsRef.current.binance) {
           clearTimeout(reconnectTimeoutsRef.current.binance);
         }
-        console.log(`[Binance] Disconnected (code: ${e.code}), reconnecting in ${Math.round(delay)}ms...`);
+        console.log(`[Binance] Disconnected (code: ${e.code}), reconnecting...`);
         reconnectTimeoutsRef.current.binance = window.setTimeout(() => {
           connectBinance();
         }, delay);
@@ -936,7 +936,8 @@ export const useCryptoPrices = () => {
         setConnectedExchanges(prev => prev.filter(e => e !== "Kraken"));
         console.log(`[Kraken v2] Disconnected (code: ${event.code})`);
         
-        const delay = Math.min(5000 + Math.random() * 3000, 12000);
+        // Fast reconnection for real-time streaming
+        const delay = 500 + Math.random() * 500;
         if (reconnectTimeoutsRef.current.kraken) {
           clearTimeout(reconnectTimeoutsRef.current.kraken);
         }
@@ -948,7 +949,7 @@ export const useCryptoPrices = () => {
       krakenWsRef.current = ws;
     } catch (err) {
       console.log(`[Kraken v2] Connection failed, retrying...`);
-      setTimeout(() => connectKraken(), 5000);
+      setTimeout(() => connectKraken(), 500);
     }
   }, [updatePrice]);
 
