@@ -1,6 +1,6 @@
 import { ComposedChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useState } from "react";
-import { Zap, Activity, TrendingUp, TrendingDown, Clock } from "lucide-react";
+import { Zap, Activity, TrendingUp, TrendingDown, Clock, Database } from "lucide-react";
 import { usePythOHLC, CandleInterval, INTERVAL_LABELS } from "@/hooks/usePythOHLC";
 
 interface CandlestickChartProps {
@@ -77,6 +77,7 @@ const CandlestickChart = ({ crypto = "BTC" }: CandlestickChartProps) => {
     hasPythFeed,
     ticksReceived,
     lastTick,
+    hasPersistedData,
   } = usePythOHLC(crypto, interval, 20);
 
   // Calculate price change
@@ -95,8 +96,8 @@ const CandlestickChart = ({ crypto = "BTC" }: CandlestickChartProps) => {
     };
   });
 
-  // Loading state - waiting for Pyth connection
-  if (!isConnected && hasPythFeed) {
+  // Loading state - waiting for Pyth connection (but show cached data if available)
+  if (!isConnected && hasPythFeed && !hasPersistedData) {
     return (
       <div className="rounded-2xl border border-border bg-card p-6">
         <div className="mb-4 flex items-center justify-between">
@@ -195,10 +196,22 @@ const CandlestickChart = ({ crypto = "BTC" }: CandlestickChartProps) => {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-lg font-semibold text-foreground">OHLC Candlesticks</h3>
-          <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
-            <Zap className="h-3 w-3" />
-            Pyth Oracle
-          </span>
+          {isStreaming ? (
+            <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
+              <Zap className="h-3 w-3" />
+              Pyth Oracle
+            </span>
+          ) : hasPersistedData ? (
+            <span className="flex items-center gap-1 rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+              <Database className="h-3 w-3" />
+              Cached
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+              <Zap className="h-3 w-3" />
+              Connecting...
+            </span>
+          )}
           {priceChange !== 0 && (
             <span className={`flex items-center gap-0.5 text-xs font-medium ${
               priceChange >= 0 ? 'text-emerald-400' : 'text-red-400'
@@ -214,7 +227,7 @@ const CandlestickChart = ({ crypto = "BTC" }: CandlestickChartProps) => {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-muted-foreground">
-            {ticksReceived} ticks
+            {ticksReceived} ticks{hasPersistedData && !isStreaming ? ' (saved)' : ''}
           </span>
           <div className="flex gap-0.5">
             {(["1m", "5m", "15m", "1h", "4h", "1d"] as CandleInterval[]).map((int) => (
