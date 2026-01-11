@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { safeFetch } from "@/lib/fetchWithRetry";
 import { useOraclePrices } from "./useOraclePrices";
 
@@ -98,50 +98,69 @@ export const useCryptoPrices = () => {
   const [isLive, setIsLive] = useState(false);
   
   // Decentralized Oracle Integration - Pyth Primary, Chainlink Fallback
-  const oracle = useOraclePrices();
+  // Use empty array to get all symbols from oracles
+  const oracle = useOraclePrices([]);
   
   const cryptoListRef = useRef<{ symbol: string; name: string; id: string }[]>([]);
   const pricesRef = useRef<Map<string, CryptoPrice>>(new Map());
   const lastUpdateTimeRef = useRef<Map<string, number>>(new Map());
   const pricesInitializedRef = useRef(false);
+  const oracleUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Throttle interval for readable updates
-  const UPDATE_THROTTLE_MS = 100;
+  const UPDATE_THROTTLE_MS = 150;
   
   // Apply Oracle prices as primary source (Pyth/Chainlink) - DECENTRALIZED ONLY
+  // Debounced to prevent React queue issues
   useEffect(() => {
     if (!oracle.isLive || oracle.prices.size === 0) return;
     
-    const now = Date.now();
-    let hasUpdates = false;
-    
-    oracle.prices.forEach((oracleData, _key) => {
-      const symbol = oracleData.symbol.toLowerCase();
-      const existing = pricesRef.current.get(symbol);
-      
-      if (existing && oracleData.price > 0) {
-        // Oracle prices take priority - update if significantly different or fresher
-        const priceDiff = Math.abs(existing.current_price - oracleData.price) / (existing.current_price || 1);
-        const isSignificant = priceDiff > 0.0001; // 0.01% threshold
-        
-        if (isSignificant) {
-          const oracleSource = oracleData.source === "Pyth" ? "Pyth Oracle" : "Chainlink Oracle";
-          const updated = {
-            ...existing,
-            current_price: oracleData.price,
-            lastUpdate: now,
-            source: oracleSource,
-          };
-          pricesRef.current.set(symbol, updated);
-          hasUpdates = true;
-        }
-      }
-    });
-    
-    // Batch update state only if there were changes
-    if (hasUpdates) {
-      setPrices(Array.from(pricesRef.current.values()));
+    // Clear any pending update
+    if (oracleUpdateTimeoutRef.current) {
+      clearTimeout(oracleUpdateTimeoutRef.current);
     }
+    
+    // Debounce oracle updates
+    oracleUpdateTimeoutRef.current = setTimeout(() => {
+      const now = Date.now();
+      let hasUpdates = false;
+      
+      oracle.prices.forEach((oracleData, _key) => {
+        if (!oracleData || !oracleData.price || oracleData.price <= 0) return;
+        
+        const symbol = oracleData.symbol.toLowerCase();
+        const existing = pricesRef.current.get(symbol);
+        
+        if (existing && oracleData.price > 0) {
+          // Oracle prices take priority - update if significantly different
+          const priceDiff = Math.abs(existing.current_price - oracleData.price) / (existing.current_price || 1);
+          const isSignificant = priceDiff > 0.0001; // 0.01% threshold
+        
+          if (isSignificant) {
+            const oracleSource = oracleData.source === "Pyth" ? "Pyth Oracle" : "Chainlink Oracle";
+            const updated = {
+              ...existing,
+              current_price: oracleData.price,
+              lastUpdate: now,
+              source: oracleSource,
+            };
+            pricesRef.current.set(symbol, updated);
+            hasUpdates = true;
+          }
+        }
+      });
+      
+      // Batch update state only if there were changes
+      if (hasUpdates) {
+        setPrices(Array.from(pricesRef.current.values()));
+      }
+    }, 100); // 100ms debounce
+    
+    return () => {
+      if (oracleUpdateTimeoutRef.current) {
+        clearTimeout(oracleUpdateTimeoutRef.current);
+      }
+    };
   }, [oracle.prices, oracle.isLive]);
 
   // Update price with source tracking and throttling
