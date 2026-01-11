@@ -89,7 +89,23 @@ const PriceChart = ({ crypto, coinGeckoId, change24h }: PriceChartProps) => {
       );
     }
 
-    // No data after loading
+    // Pyth streaming mode - waiting for oracle ticks to build chart
+    if (isPythStreaming && chartData.length === 0) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Zap className="h-6 w-6 text-chart-cyan animate-pulse" />
+            <span className="text-sm font-medium">Building from Pyth Oracle ticks...</span>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-xs text-muted-foreground/70">Pure decentralized streaming active</span>
+            <span className="text-[10px] text-chart-cyan/70">Chart will populate as oracle ticks arrive</span>
+          </div>
+        </div>
+      );
+    }
+
+    // No data after loading (non-Pyth)
     if (chartData.length === 0) {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">

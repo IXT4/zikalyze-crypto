@@ -752,14 +752,30 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
   useEffect(() => {
     mountedRef.current = true;
     
-    // Check cache first
+    // For Pyth-supported assets, skip exchange data and build purely from oracle ticks
+    if (hasPythFeed) {
+      console.log(`[Chart] ${symbol} - Pure Pyth Oracle mode, building chart from oracle ticks only`);
+      setChartData([]);
+      lastPriceRef.current = null;
+      setPriceChange(0);
+      setDataSource("pyth");
+      setIsSupported(true);
+      setError(null);
+      // Chart will build from Pyth ticks via the useEffect above
+      // Mark as not loading since we're waiting for first oracle tick
+      if (pyth.isConnected) {
+        setIsLoading(false);
+      }
+      return;
+    }
+    
+    // For non-Pyth assets, use exchange data
     const cached = getCachedData(symbol);
     if (cached && isCacheValid(symbol)) {
       setChartData(cached.data);
       setPriceChange(cached.priceChange);
       setDataSource(cached.exchange);
       setIsLoading(false);
-      // Use first price point as reference for change calculation
       lastPriceRef.current = cached.data[0]?.price || null;
     } else {
       setChartData([]);
@@ -907,13 +923,16 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
     };
 
     const loadData = async () => {
-      // If Pyth oracle is available for this symbol, it will handle streaming via the useEffect above
-      // We still need initial historical data from exchanges for the chart baseline
-      if (hasPythFeed && pyth.isConnected) {
-        console.log(`[Chart] ${symbol} using Pyth Oracle for live streaming`);
-        // Pyth streaming is handled by the useEffect, but we need initial data
-        // Fall through to get baseline from exchanges
+      // For Pyth-supported assets, build chart purely from oracle ticks - no exchange data
+      if (hasPythFeed) {
+        console.log(`[Chart] ${symbol} - Pure decentralized mode: chart builds from Pyth Oracle ticks only`);
+        setDataSource("pyth");
+        setIsLoading(false);
+        // Chart data will accumulate from Pyth ticks via the useEffect above
+        return;
       }
+
+      // For non-Pyth assets, fall back to exchange data
 
       // Exchanges for initial historical data (Pyth Oracle handles live updates if available)
       const exchanges: Exchange[] = ["coincap", "binance", "coinbase", "kraken", "coingecko"];
