@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { CryptoPrice } from "@/hooks/useCryptoPrices";
 import { useCurrency } from "@/hooks/useCurrency";
@@ -33,6 +34,9 @@ interface CryptoTickerProps {
   connectedExchanges?: string[];
 }
 
+// Track price changes for flash animations
+type PriceFlash = "up" | "down" | null;
+
 const CryptoTicker = ({ 
   selected, 
   onSelect, 
@@ -43,6 +47,50 @@ const CryptoTicker = ({
   connectedExchanges = []
 }: CryptoTickerProps) => {
   const { formatPrice } = useCurrency();
+  
+  // Track previous prices for flash animation
+  const prevPricesRef = useRef<Map<string, number>>(new Map());
+  const [priceFlashes, setPriceFlashes] = useState<Map<string, PriceFlash>>(new Map());
+
+  // Detect price changes and trigger flash animations
+  useEffect(() => {
+    const newFlashes = new Map<string, PriceFlash>();
+    
+    cryptoMeta.forEach((crypto) => {
+      const livePrice = getPriceBySymbol(crypto.symbol);
+      const currentPrice = livePrice?.current_price || 0;
+      const prevPrice = prevPricesRef.current.get(crypto.symbol);
+      
+      if (prevPrice !== undefined && prevPrice !== currentPrice && currentPrice > 0) {
+        if (currentPrice > prevPrice) {
+          newFlashes.set(crypto.symbol, "up");
+        } else if (currentPrice < prevPrice) {
+          newFlashes.set(crypto.symbol, "down");
+        }
+      }
+      
+      if (currentPrice > 0) {
+        prevPricesRef.current.set(crypto.symbol, currentPrice);
+      }
+    });
+
+    if (newFlashes.size > 0) {
+      setPriceFlashes(prev => {
+        const merged = new Map(prev);
+        newFlashes.forEach((value, key) => merged.set(key, value));
+        return merged;
+      });
+
+      // Clear flashes after animation
+      setTimeout(() => {
+        setPriceFlashes(prev => {
+          const updated = new Map(prev);
+          newFlashes.forEach((_, key) => updated.delete(key));
+          return updated;
+        });
+      }, 500);
+    }
+  }, [getPriceBySymbol]);
   
   // Determine oracle display
   const getOracleIcon = () => {
@@ -102,6 +150,7 @@ const CryptoTicker = ({
           const price = livePrice?.current_price || 0;
           const change = livePrice?.price_change_percentage_24h || 0;
           const source = livePrice?.source;
+          const flash = priceFlashes.get(crypto.symbol);
           
           // Determine if this price is from an oracle
           const isOraclePrice = source?.includes("Oracle") || source === "Pyth" || source === "Chainlink";
@@ -114,7 +163,9 @@ const CryptoTicker = ({
                 "flex flex-col gap-1 rounded-xl border px-4 py-3 transition-all relative",
                 selected === crypto.symbol
                   ? "border-primary bg-primary/10"
-                  : "border-border bg-card hover:border-primary/50"
+                  : "border-border bg-card hover:border-primary/50",
+                flash === "up" && "animate-price-flash-up",
+                flash === "down" && "animate-price-flash-down"
               )}
             >
               {/* Oracle indicator dot */}
@@ -128,14 +179,21 @@ const CryptoTicker = ({
                 <span className={cn("font-bold", crypto.color)}>{crypto.symbol}</span>
                 <span
                   className={cn(
-                    "text-xs",
-                    change >= 0 ? "text-success" : "text-destructive"
+                    "text-xs font-medium rounded px-1 transition-colors",
+                    change >= 0 ? "text-success" : "text-destructive",
+                    flash === "up" && "bg-success/20",
+                    flash === "down" && "bg-destructive/20"
                   )}
                 >
                   {change >= 0 ? "↗" : "↘"} {Math.abs(change).toFixed(2)}%
                 </span>
               </div>
-              <span className="text-lg font-semibold text-foreground">
+              <span 
+                className={cn(
+                  "text-lg font-semibold transition-colors rounded px-1",
+                  flash === "up" ? "text-success" : flash === "down" ? "text-destructive" : "text-foreground"
+                )}
+              >
                 {loading ? "..." : formatPrice(price)}
               </span>
             </button>
