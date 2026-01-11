@@ -104,8 +104,6 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     crypto,
     price,
     change,
-    high24h = price * 1.02,
-    low24h = price * 0.98,
     volume = 0,
     language = 'en',
     isLiveData = false,
@@ -115,6 +113,27 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     chartTrendData, // Real-time 24h chart data
     multiTimeframeData // Multi-timeframe analysis (15m, 1h, 4h, 1d)
   } = input;
+  
+  // Ensure valid price range — fallback to 2% spread if missing or identical
+  const minSpreadPercent = 0.02;
+  const validPrice = price > 0 ? price : 1;
+  let high24h = input.high24h ?? validPrice * (1 + minSpreadPercent);
+  let low24h = input.low24h ?? validPrice * (1 - minSpreadPercent);
+  
+  // Fix identical or inverted high/low
+  if (high24h <= low24h) {
+    high24h = validPrice * (1 + minSpreadPercent);
+    low24h = validPrice * (1 - minSpreadPercent);
+  }
+  
+  // Ensure minimum 1% spread for meaningful analysis
+  const currentSpread = (high24h - low24h) / validPrice;
+  if (currentSpread < 0.01) {
+    const halfSpread = validPrice * 0.01;
+    const midPoint = (high24h + low24h) / 2;
+    high24h = midPoint + halfSpread;
+    low24h = midPoint - halfSpread;
+  }
 
   const t = getTranslations(language);
   const trendEmoji = change >= 0 ? '📈' : '📉';
@@ -291,10 +310,11 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
     if (p < 0.1) return 5;
     if (p < 1) return 4;
     if (p < 10) return 3;
-    if (p < 1000) return 2;
-    return 0;
+    if (p < 100) return 2;
+    if (p < 10000) return 2;  // Keep 2 decimals for prices up to $10k
+    return 1;  // At least 1 decimal for very high prices (BTC)
   };
-  const decimals = getDecimalPlaces(price);
+  const decimals = getDecimalPlaces(validPrice);
   
   // Ensure minimum spread of 2% of price, never same value
   const minSpread = price * 0.02;

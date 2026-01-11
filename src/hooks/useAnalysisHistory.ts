@@ -90,6 +90,11 @@ export const useAnalysisHistory = (symbol: string) => {
     }
 
     try {
+      // Round confidence to integer (database column is integer type)
+      const roundedConfidence = confidence !== undefined && confidence !== null 
+        ? Math.round(confidence) 
+        : null;
+      
       const { data, error } = await supabase
         .from("analysis_history")
         .insert({
@@ -97,7 +102,7 @@ export const useAnalysisHistory = (symbol: string) => {
           price,
           change_24h: change,
           analysis_text: analysisText,
-          confidence: confidence || null,
+          confidence: roundedConfidence,
           bias: bias || null,
           user_id: user.id,
         })
