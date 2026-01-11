@@ -495,7 +495,10 @@ export const useCryptoPrices = () => {
       isLive: oracle.isLive,
       primarySource: oracle.primarySource,
       pythConnected: oracle.pythConnected,
-      chainlinkConnected: oracle.chainlinkConnected,
+      diaConnected: oracle.diaConnected,
+      redstoneConnected: oracle.redstoneConnected,
+      // Legacy compatibility
+      chainlinkConnected: oracle.diaConnected || oracle.chainlinkConnected || false,
     },
   };
 };

@@ -1,40 +1,44 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { usePythPrices, PythPriceData } from "./usePythPrices";
-import { useChainlinkPrices, ChainlinkPriceData } from "./useChainlinkPrices";
+import { useDIAPrices, DIAPriceData } from "./useDIAPrices";
+import { useRedstonePrices, RedstonePriceData } from "./useRedstonePrices";
 
-// Unified Oracle Price Hook - Pyth WebSocket Primary, Chainlink Fallback
+// Unified Oracle Price Hook - Pyth SSE Primary, DIA + Redstone Fallback
 // 100% decentralized streaming with no centralized API dependencies
+// No CORS issues - all oracles have browser-compatible APIs
 
 export interface OraclePriceData {
   symbol: string;
   price: number;
   confidence?: number;
   lastUpdate: number;
-  source: "Pyth" | "Chainlink";
+  source: "Pyth" | "DIA" | "Redstone";
 }
 
 export interface OracleState {
   prices: Map<string, OraclePriceData>;
   isLive: boolean;
-  primarySource: "Pyth" | "Chainlink" | "none";
+  primarySource: "Pyth" | "DIA" | "Redstone" | "none";
   pythConnected: boolean;
-  chainlinkConnected: boolean;
+  diaConnected: boolean;
+  redstoneConnected: boolean;
 }
 
 export const useOraclePrices = (_symbols: string[] = []) => {
   const [prices, setPrices] = useState<Map<string, OraclePriceData>>(new Map());
   const [isLive, setIsLive] = useState(false);
-  const [primarySource, setPrimarySource] = useState<"Pyth" | "Chainlink" | "none">("none");
+  const [primarySource, setPrimarySource] = useState<"Pyth" | "DIA" | "Redstone" | "none">("none");
 
   const pricesRef = useRef<Map<string, OraclePriceData>>(new Map());
   const isMountedRef = useRef(true);
   const lastUpdateRef = useRef<number>(0);
 
-  // Connect to both oracles - Pyth WebSocket is primary
+  // Connect to all decentralized oracles
   const pyth = usePythPrices([]);
-  const chainlink = useChainlinkPrices([]);
+  const dia = useDIAPrices();
+  const redstone = useRedstonePrices();
 
-  // Merge prices - Pyth is primary, Chainlink is fallback
+  // Merge prices - Pyth is primary, DIA and Redstone are fallbacks
   useEffect(() => {
     if (!isMountedRef.current) return;
 
@@ -45,19 +49,31 @@ export const useOraclePrices = (_symbols: string[] = []) => {
 
     const merged = new Map<string, OraclePriceData>();
 
-    // Add Chainlink prices as base (fallback - one-time fetch)
-    chainlink.prices.forEach((data: ChainlinkPriceData, key: string) => {
+    // Add Redstone prices as base (tertiary fallback)
+    redstone.prices.forEach((data: RedstonePriceData, key: string) => {
       if (!data || !data.price || data.price <= 0) return;
       const symbol = key.replace("/USD", "").toUpperCase();
       merged.set(symbol, {
         symbol,
         price: data.price,
-        lastUpdate: data.updatedAt || Date.now(),
-        source: "Chainlink",
+        lastUpdate: data.timestamp || Date.now(),
+        source: "Redstone",
       });
     });
 
-    // Override with Pyth prices (primary - real-time WebSocket)
+    // Add DIA prices (secondary fallback)
+    dia.prices.forEach((data: DIAPriceData, key: string) => {
+      if (!data || !data.price || data.price <= 0) return;
+      const symbol = key.replace("/USD", "").toUpperCase();
+      merged.set(symbol, {
+        symbol,
+        price: data.price,
+        lastUpdate: data.timestamp || Date.now(),
+        source: "DIA",
+      });
+    });
+
+    // Override with Pyth prices (primary - real-time SSE)
     pyth.prices.forEach((data: PythPriceData, key: string) => {
       if (!data || !data.price || data.price <= 0) return;
       const symbol = key.replace("/USD", "").toUpperCase();
@@ -72,13 +88,19 @@ export const useOraclePrices = (_symbols: string[] = []) => {
 
     pricesRef.current = merged;
 
-    const newPrimarySource = pyth.isConnected ? "Pyth" : chainlink.isConnected ? "Chainlink" : "none";
-    const newIsLive = pyth.isConnected || chainlink.isConnected;
+    const newPrimarySource = pyth.isConnected 
+      ? "Pyth" 
+      : dia.isConnected 
+        ? "DIA" 
+        : redstone.isConnected 
+          ? "Redstone" 
+          : "none";
+    const newIsLive = pyth.isConnected || dia.isConnected || redstone.isConnected;
 
     setPrices(new Map(merged));
     setIsLive(newIsLive);
     setPrimarySource(newPrimarySource);
-  }, [pyth.prices, pyth.isConnected, chainlink.prices, chainlink.isConnected]);
+  }, [pyth.prices, pyth.isConnected, dia.prices, dia.isConnected, redstone.prices, redstone.isConnected]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -97,17 +119,31 @@ export const useOraclePrices = (_symbols: string[] = []) => {
     isLive,
     primarySource,
     pythConnected: pyth.isConnected,
-    chainlinkConnected: chainlink.isConnected,
+    diaConnected: dia.isConnected,
+    redstoneConnected: redstone.isConnected,
+    // Legacy compatibility
+    chainlinkConnected: dia.isConnected,
     getPrice,
     pythStatus: {
       isConnected: pyth.isConnected,
       isConnecting: pyth.isConnecting,
       error: pyth.error,
     },
+    diaStatus: {
+      isConnected: dia.isConnected,
+      isLoading: dia.isLoading,
+      error: dia.error,
+    },
+    redstoneStatus: {
+      isConnected: redstone.isConnected,
+      isLoading: redstone.isLoading,
+      error: redstone.error,
+    },
+    // Legacy compatibility
     chainlinkStatus: {
-      isConnected: chainlink.isConnected,
-      isLoading: chainlink.isLoading,
-      error: chainlink.error,
+      isConnected: dia.isConnected,
+      isLoading: dia.isLoading,
+      error: dia.error,
     },
   };
 };
