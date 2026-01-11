@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
-// Pyth Network Hermes WebSocket for real-time price streaming
-// Using Hermes API which provides WebSocket access to Pyth price feeds
+// Pyth Network Hermes - Real-time decentralized price streaming
+// Using Hermes REST + SSE for maximum reliability
 
 export interface PythPriceData {
   symbol: string;
@@ -11,23 +11,14 @@ export interface PythPriceData {
   source: "Pyth";
 }
 
-export interface PythState {
-  prices: Map<string, PythPriceData>;
-  isConnected: boolean;
-  isConnecting: boolean;
-  error: string | null;
-}
-
-// Pyth Hermes WebSocket endpoints (decentralized, free)
-const HERMES_WS_ENDPOINTS = [
-  "wss://hermes.pyth.network/ws",
-  "wss://hermes-beta.pyth.network/ws",
+// Pyth Hermes endpoints
+const HERMES_ENDPOINTS = [
+  "https://hermes.pyth.network",
+  "https://hermes-beta.pyth.network",
 ];
 
 // Pyth Price Feed IDs for top cryptocurrencies
-// These are the official Pyth feed IDs from https://pyth.network/price-feeds
 export const PYTH_FEED_IDS: Record<string, string> = {
-  // Major Cryptocurrencies
   "BTC/USD": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
   "ETH/USD": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
   "SOL/USD": "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
@@ -50,54 +41,44 @@ export const PYTH_FEED_IDS: Record<string, string> = {
   "SUI/USD": "23d7315113f5b1d3ba7a83604c44b94d79f4fd69af77f804fc7f920a6dc65744",
   "TIA/USD": "09f7c1d7dfbb7df2b8fe3d3d87ee94a2259d212da4f30c1f0540d066dfa44723",
   "SEI/USD": "53614f1cb0c031d4af66c04cb9c756234adad0e1cee85303795091499a4084eb",
-  "PEPE/USD": "d69731a2e74ac0ce884f28a9d3b6f34c8a7e36c2f5f3c8d2b9e1a0c7f4d6e8a2",
-  "SHIB/USD": "f0d57deca57b3da2fe63a493f4c25925fdfd8edf834b20f93e1f84dbd1504d4a",
-  "WIF/USD": "4ca4beeca86f0d164160323817a4e42b10010a724c2217c6ee41b54cd4cc61fc",
-  "BONK/USD": "72b021217ca3fe68922a19aaf990109cb9d84e9ad004b4d2025ad6f529314419",
-  "FET/USD": "5c6c0d2386e3352356c3ab84434fafb5095746a761139a6b4a14dda69e5e1c3f",
-  "RENDER/USD": "3d4a2bd9535be6ce8059d75eadeba507b043257a27c578e4a18c88e0c5d9b9d1",
-  "TAO/USD": "410f41de235f2db824e562ea7ab2d3d3d4ff048316c61d629c0b93f58e2ce7d1",
   "AAVE/USD": "2b9ab1e972a281585084148ba1389800799bd4be63b957507db1349314e47445",
   "MKR/USD": "9375299e43245e24556e14e0c32a97de74e7c8ed87c2ed40c70fe61bfc31c5f0",
   "GRT/USD": "4d1f8dae0d96236fb98e8f47e8b3edfeae244820c1e8f5725cd1ec5a88bf4321",
-  "IMX/USD": "941320a8989414a25ba05f4c27c694f5a1a4da7e24f34dc8ed8c9b704e53a6b2",
   "RUNE/USD": "5fcf71143bb70d41af4fa9aa1287e2efd3c5911cee59f909f915c9f61baacb1e",
   "ALGO/USD": "fa17ceaf30d19ba51112fdcc750cc83454776f47b3f2f1e8e7c68fb66d8f4e6e",
   "ETC/USD": "7f981f906d7cfe93f618804f1de89e0199ead306edc022d3230b3e8305f391b0",
   "FTM/USD": "5c6c0d2386e3352356c3ab84434fafb5095746a761139a6b4a14dda69e5e1c3e",
   "TRX/USD": "67aed5a24fdad045475e7195c98a98aea119c763f272d4523f5bac93a4f33c2c",
   "TON/USD": "8963217838ab4cf5cadc172203c1f0b763fbaa45f346d8ee50ba994bbcac3026",
-  "KAS/USD": "f8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9",
   "STX/USD": "ec7a775f46379b5e943c3526b1c8d54cd49749176b0b98e02dde68d1bd335c17",
+  "MATIC/USD": "5de33440f6c399aa75d5c11e39eaca4c39a0e7c0cfe6afa9b96cb46e5f41108c",
+  "WIF/USD": "4ca4beeca86f0d164160323817a4e42b10010a724c2217c6ee41b54cd4cc61fc",
+  "BONK/USD": "72b021217ca3fe68922a19aaf990109cb9d84e9ad004b4d2025ad6f529314419",
+  "PEPE/USD": "d69731a2e74ac0ce884f28a9d3b6f34c8a7e36c2f5f3c8d2b9e1a0c7f4d6e8a2",
+  "SHIB/USD": "f0d57deca57b3da2fe63a493f4c25925fdfd8edf834b20f93e1f84dbd1504d4a",
+  "RENDER/USD": "3d4a2bd9535be6ce8059d75eadeba507b043257a27c578e4a18c88e0c5d9b9d1",
+  "FET/USD": "5c6c0d2386e3352356c3ab84434fafb5095746a761139a6b4a14dda69e5e1c3f",
 };
 
-// Reverse mapping: feed ID -> symbol
+// Reverse mapping
 const FEED_ID_TO_SYMBOL = Object.entries(PYTH_FEED_IDS).reduce((acc, [symbol, feedId]) => {
   acc[feedId] = symbol;
   return acc;
 }, {} as Record<string, string>);
 
-const MAX_RECONNECT_ATTEMPTS = 10;
-const RECONNECT_BASE_DELAY = 1000;
-
-export const usePythPrices = (symbols: string[] = []) => {
+export const usePythPrices = (_symbols: string[] = []) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [prices, setPrices] = useState<Map<string, PythPriceData>>(new Map());
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectAttemptRef = useRef(0);
+  const pricesMapRef = useRef<Map<string, PythPriceData>>(new Map());
+  const isMountedRef = useRef(true);
+  const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const endpointIndexRef = useRef(0);
-  const isMountedRef = useRef(true);
-  const subscribedFeedsRef = useRef<Set<string>>(new Set());
-  const pricesMapRef = useRef<Map<string, PythPriceData>>(new Map());
-  const updateBatchRef = useRef<Map<string, PythPriceData>>(new Map());
-  const batchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Memoize symbols to prevent unnecessary effect triggers
-  const symbolsKey = useMemo(() => symbols.join(','), [symbols]);
+  const reconnectAttemptRef = useRef(0);
+  const lastUpdateRef = useRef<number>(0);
 
   const getPrice = useCallback((symbol: string): PythPriceData | undefined => {
     const normalizedSymbol = symbol.toUpperCase().replace(/USD$/, "") + "/USD";
@@ -109,128 +90,85 @@ export const usePythPrices = (symbols: string[] = []) => {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-    if (batchTimeoutRef.current) {
-      clearTimeout(batchTimeoutRef.current);
-      batchTimeoutRef.current = null;
-    }
-    if (wsRef.current) {
-      try {
-        wsRef.current.onclose = null;
-        wsRef.current.onerror = null;
-        wsRef.current.onmessage = null;
-        wsRef.current.onopen = null;
-        wsRef.current.close();
-      } catch {
-        // Ignore cleanup errors
-      }
-      wsRef.current = null;
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
   }, []);
 
-  // Batched state update to prevent React queue issues
-  const flushPriceUpdates = useCallback(() => {
-    if (!isMountedRef.current || updateBatchRef.current.size === 0) return;
-    
-    updateBatchRef.current.forEach((data, key) => {
-      pricesMapRef.current.set(key, data);
-    });
-    updateBatchRef.current.clear();
-    
-    setPrices(new Map(pricesMapRef.current));
-  }, []);
-
-  const subscribe = useCallback((feedIds: string[]) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    const newFeeds = feedIds.filter(id => !subscribedFeedsRef.current.has(id));
-    if (newFeeds.length === 0) return;
-
-    const subscribeMsg = {
-      type: "subscribe",
-      ids: newFeeds,
-    };
-    
-    try {
-      wsRef.current.send(JSON.stringify(subscribeMsg));
-      newFeeds.forEach(id => subscribedFeedsRef.current.add(id));
-      console.log(`[Pyth] Subscribed to ${newFeeds.length} feeds`);
-    } catch (e) {
-      console.error("[Pyth] Subscribe error:", e);
-    }
-  }, []);
-
+  // Connect to Pyth SSE stream
   const connect = useCallback(() => {
     if (!isMountedRef.current) return;
     
     cleanup();
-    
-    const endpoint = HERMES_WS_ENDPOINTS[endpointIndexRef.current];
-    console.log(`[Pyth] Connecting to ${endpoint}...`);
-    
     setIsConnecting(true);
     setError(null);
 
+    const endpoint = HERMES_ENDPOINTS[endpointIndexRef.current];
+    const feedIds = Object.values(PYTH_FEED_IDS);
+    
+    // Build SSE URL with all feed IDs
+    const params = new URLSearchParams();
+    feedIds.forEach(id => params.append("ids[]", id));
+    params.append("parsed", "true");
+    params.append("allow_unordered", "true");
+    params.append("benchmarks_only", "false");
+    
+    const sseUrl = `${endpoint}/v2/updates/price/stream?${params.toString()}`;
+    
+    console.log(`[Pyth] Connecting to SSE stream...`);
+    
     try {
-      const ws = new WebSocket(endpoint);
-      wsRef.current = ws;
+      const eventSource = new EventSource(sseUrl);
+      eventSourceRef.current = eventSource;
 
-      ws.onopen = () => {
+      eventSource.onopen = () => {
         if (!isMountedRef.current) return;
-        
-        console.log("[Pyth] Connected to Hermes WebSocket");
+        console.log("[Pyth] ✓ SSE stream connected");
         reconnectAttemptRef.current = 0;
-        
         setIsConnected(true);
         setIsConnecting(false);
         setError(null);
-
-        // Subscribe to all known feed IDs
-        const feedIds = symbols.length > 0
-          ? symbols.map(s => {
-              const sym = s.toUpperCase().replace(/USD$/, "") + "/USD";
-              return PYTH_FEED_IDS[sym];
-            }).filter(Boolean)
-          : Object.values(PYTH_FEED_IDS);
-        
-        if (feedIds.length > 0) {
-          subscribe(feedIds as string[]);
-        }
       };
 
-      ws.onmessage = (event) => {
+      eventSource.onmessage = (event) => {
         if (!isMountedRef.current) return;
-
+        
         try {
           const data = JSON.parse(event.data);
           
-          // Handle price update messages
-          if (data.type === "price_update" && data.price_feed) {
-            const feed = data.price_feed;
-            const feedId = feed.id;
-            const symbol = FEED_ID_TO_SYMBOL[feedId];
+          // Handle price updates
+          if (data.parsed && Array.isArray(data.parsed)) {
+            const now = Date.now();
+            let hasUpdates = false;
             
-            if (symbol && feed.price) {
-              const price = parseFloat(feed.price.price) * Math.pow(10, feed.price.expo);
-              const confidence = parseFloat(feed.price.conf) * Math.pow(10, feed.price.expo);
+            data.parsed.forEach((feed: any) => {
+              const feedId = feed.id;
+              const symbol = FEED_ID_TO_SYMBOL[feedId];
               
-              if (price > 0) {
-                const priceData: PythPriceData = {
-                  symbol: symbol.replace("/USD", ""),
-                  price,
-                  confidence,
-                  publishTime: feed.price.publish_time * 1000,
-                  source: "Pyth",
-                };
+              if (symbol && feed.price) {
+                const price = parseFloat(feed.price.price) * Math.pow(10, feed.price.expo);
+                const confidence = parseFloat(feed.price.conf) * Math.pow(10, feed.price.expo);
                 
-                // Batch updates to prevent rapid state changes
-                updateBatchRef.current.set(symbol, priceData);
-                
-                // Debounce the state update
-                if (batchTimeoutRef.current) {
-                  clearTimeout(batchTimeoutRef.current);
+                if (price > 0) {
+                  const priceData: PythPriceData = {
+                    symbol: symbol.replace("/USD", ""),
+                    price,
+                    confidence,
+                    publishTime: feed.price.publish_time * 1000,
+                    source: "Pyth",
+                  };
+                  
+                  pricesMapRef.current.set(symbol, priceData);
+                  hasUpdates = true;
                 }
-                batchTimeoutRef.current = setTimeout(flushPriceUpdates, 100);
               }
+            });
+            
+            // Throttle state updates to every 200ms
+            if (hasUpdates && now - lastUpdateRef.current > 200) {
+              lastUpdateRef.current = now;
+              setPrices(new Map(pricesMapRef.current));
             }
           }
         } catch {
@@ -238,60 +176,48 @@ export const usePythPrices = (symbols: string[] = []) => {
         }
       };
 
-      ws.onerror = () => {
-        console.log("[Pyth] WebSocket error");
-      };
-
-      ws.onclose = () => {
+      eventSource.onerror = () => {
         if (!isMountedRef.current) return;
         
-        console.log("[Pyth] WebSocket disconnected");
-        subscribedFeedsRef.current.clear();
+        console.log("[Pyth] SSE connection error, reconnecting...");
+        cleanup();
         
         setIsConnected(false);
         setIsConnecting(true);
-
-        // Try next endpoint on failure
+        
+        // Try next endpoint after 2 failures
         if (reconnectAttemptRef.current >= 2) {
-          endpointIndexRef.current = (endpointIndexRef.current + 1) % HERMES_WS_ENDPOINTS.length;
+          endpointIndexRef.current = (endpointIndexRef.current + 1) % HERMES_ENDPOINTS.length;
         }
-
-        // Reconnect with exponential backoff
-        if (reconnectAttemptRef.current < MAX_RECONNECT_ATTEMPTS) {
+        
+        // Reconnect with backoff
+        if (reconnectAttemptRef.current < 10) {
           reconnectAttemptRef.current++;
-          const delay = Math.min(
-            RECONNECT_BASE_DELAY * Math.pow(1.5, reconnectAttemptRef.current),
-            30000
-          );
+          const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptRef.current), 30000);
           
           reconnectTimeoutRef.current = setTimeout(() => {
             if (isMountedRef.current) connect();
           }, delay);
         } else {
           setIsConnecting(false);
-          setError("Failed to connect to Pyth Network after max attempts");
+          setError("Failed to connect to Pyth Network");
         }
       };
     } catch (e) {
       console.error("[Pyth] Connection error:", e);
       setIsConnecting(false);
-      setError("Failed to initialize Pyth WebSocket");
+      setError("Failed to initialize Pyth stream");
     }
-  }, [symbolsKey, cleanup, subscribe, flushPriceUpdates]);
+  }, [cleanup]);
 
   useEffect(() => {
     isMountedRef.current = true;
     
-    // Start connection after small delay
-    const initTimeout = setTimeout(() => {
-      if (isMountedRef.current) {
-        connect();
-      }
-    }, 100);
+    // Start connection immediately
+    connect();
 
     return () => {
       isMountedRef.current = false;
-      clearTimeout(initTimeout);
       cleanup();
     };
   }, [connect, cleanup]);
