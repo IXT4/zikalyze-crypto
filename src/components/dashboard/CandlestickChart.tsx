@@ -1,51 +1,160 @@
-import { ComposedChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { useCryptoPrices } from "@/hooks/useCryptoPrices";
-import { useMemo, useState } from "react";
+import { ComposedChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
+import { useState } from "react";
+import { Zap, Activity, TrendingUp, TrendingDown } from "lucide-react";
+import { usePythOHLC, CandleInterval } from "@/hooks/usePythOHLC";
 
 interface CandlestickChartProps {
   crypto?: string;
 }
 
+// Custom candlestick shape for the bar chart
+const CandlestickShape = (props: any) => {
+  const { x, y, width, height, payload } = props;
+  if (!payload) return null;
+  
+  const { open, high, low, close } = payload;
+  const isBullish = close >= open;
+  const color = isBullish ? "hsl(142, 76%, 46%)" : "hsl(0, 84%, 60%)";
+  
+  // Calculate positions for OHLC visualization
+  const candleWidth = Math.max(width * 0.6, 4);
+  const wickWidth = 2;
+  const centerX = x + width / 2;
+  
+  // Scale factor for wick (relative to candle body)
+  const priceRange = high - low;
+  const bodyTop = Math.max(open, close);
+  const bodyBottom = Math.min(open, close);
+  
+  // Calculate heights
+  const totalHeight = height;
+  const bodyHeight = priceRange > 0 ? ((bodyTop - bodyBottom) / priceRange) * totalHeight : totalHeight;
+  const upperWickHeight = priceRange > 0 ? ((high - bodyTop) / priceRange) * totalHeight : 0;
+  const lowerWickHeight = priceRange > 0 ? ((bodyBottom - low) / priceRange) * totalHeight : 0;
+  
+  // Positions
+  const bodyY = y + upperWickHeight;
+  
+  return (
+    <g>
+      {/* Upper wick */}
+      <rect
+        x={centerX - wickWidth / 2}
+        y={y}
+        width={wickWidth}
+        height={upperWickHeight}
+        fill={color}
+      />
+      {/* Candle body */}
+      <rect
+        x={centerX - candleWidth / 2}
+        y={bodyY}
+        width={candleWidth}
+        height={Math.max(bodyHeight, 2)}
+        fill={color}
+        rx={1}
+      />
+      {/* Lower wick */}
+      <rect
+        x={centerX - wickWidth / 2}
+        y={bodyY + bodyHeight}
+        width={wickWidth}
+        height={lowerWickHeight}
+        fill={color}
+      />
+    </g>
+  );
+};
+
 const CandlestickChart = ({ crypto = "BTC" }: CandlestickChartProps) => {
-  const { prices, loading, getPriceBySymbol } = useCryptoPrices();
-  const [viewMode, setViewMode] = useState<"indicator" | "dashboard">("dashboard");
+  const [interval, setInterval] = useState<CandleInterval>("1m");
+  
+  const {
+    candles,
+    currentCandle,
+    isStreaming,
+    isConnected,
+    hasPythFeed,
+    ticksReceived,
+    lastTick,
+  } = usePythOHLC(crypto, interval, 20);
 
-  const chartData = useMemo(() => {
-    if (prices.length === 0) return [];
+  // Calculate price change
+  const priceChange = candles.length >= 2 
+    ? ((candles[candles.length - 1].close - candles[0].open) / candles[0].open) * 100
+    : 0;
 
-    // Get top 10 cryptos by market cap for candlestick visualization
-    const topCryptos = [...prices]
-      .filter(p => p.market_cap && p.current_price)
-      .sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0))
-      .slice(0, 10);
+  // Prepare chart data with normalized heights
+  const chartData = candles.map(candle => {
+    const range = candle.high - candle.low;
+    return {
+      ...candle,
+      // Bar height represents the range
+      range: range || 0.01,
+      bullish: candle.close >= candle.open,
+    };
+  });
 
-    return topCryptos.map((coin) => {
-      const change = coin.price_change_percentage_24h || 0;
-      const isBullish = change >= 0;
-      
-      return {
-        name: coin.symbol.toUpperCase(),
-        open: coin.low_24h || coin.current_price * 0.97,
-        close: coin.current_price,
-        high: coin.high_24h || coin.current_price * 1.02,
-        low: coin.low_24h || coin.current_price * 0.97,
-        bullish: isBullish,
-        change: change,
-      };
-    });
-  }, [prices]);
-
-  if (loading) {
+  // Loading state - waiting for Pyth connection
+  if (!isConnected && hasPythFeed) {
     return (
       <div className="rounded-2xl border border-border bg-card p-6">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-foreground">Candlesticks</h3>
-          <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-            Loading...
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-foreground">OHLC Candlesticks</h3>
+            <span className="flex items-center gap-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+              <Zap className="h-3 w-3" />
+              Connecting...
+            </span>
+          </div>
+        </div>
+        <div className="h-48 flex flex-col items-center justify-center gap-2">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+          <span className="text-xs text-muted-foreground">Connecting to Pyth Network...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // No Pyth feed available
+  if (!hasPythFeed) {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-foreground">OHLC Candlesticks</h3>
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            No Oracle Feed
           </span>
         </div>
-        <div className="h-48 flex items-center justify-center">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="h-48 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+          <Activity className="h-8 w-8 opacity-50" />
+          <span className="text-sm">{crypto} not available on Pyth Network</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Building candles from ticks
+  if (isStreaming && candles.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-foreground">OHLC Candlesticks</h3>
+            <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 animate-pulse">
+              <Zap className="h-3 w-3" />
+              Building...
+            </span>
+          </div>
+        </div>
+        <div className="h-48 flex flex-col items-center justify-center gap-2">
+          <div className="flex items-center gap-2 text-emerald-400">
+            <Zap className="h-5 w-5 animate-pulse" />
+            <span className="text-sm font-medium">Building from Pyth Oracle ticks...</span>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {ticksReceived} tick{ticksReceived !== 1 ? 's' : ''} received • Last: ${lastTick?.toLocaleString() ?? '-'}
+          </span>
         </div>
       </div>
     );
@@ -54,67 +163,132 @@ const CandlestickChart = ({ crypto = "BTC" }: CandlestickChartProps) => {
   return (
     <div className="rounded-2xl border border-border bg-card p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-foreground">Candlesticks</h3>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => setViewMode("indicator")}
-            className={`rounded-lg px-3 py-1 text-xs transition-colors ${
-              viewMode === "indicator" 
-                ? "bg-primary text-primary-foreground" 
-                : "bg-secondary text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Indicator
-          </button>
-          <button 
-            onClick={() => setViewMode("dashboard")}
-            className={`rounded-lg px-3 py-1 text-xs transition-colors ${
-              viewMode === "dashboard" 
-                ? "bg-primary text-primary-foreground" 
-                : "bg-secondary text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Dashboard
-          </button>
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-foreground">OHLC Candlesticks</h3>
+          <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
+            <Zap className="h-3 w-3" />
+            Pyth Oracle
+          </span>
+          {priceChange !== 0 && (
+            <span className={`flex items-center gap-0.5 text-xs font-medium ${
+              priceChange >= 0 ? 'text-emerald-400' : 'text-red-400'
+            }`}>
+              {priceChange >= 0 ? (
+                <TrendingUp className="h-3 w-3" />
+              ) : (
+                <TrendingDown className="h-3 w-3" />
+              )}
+              {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">
+            {ticksReceived} ticks
+          </span>
+          <div className="flex gap-1">
+            {(["1m", "5m", "15m"] as CandleInterval[]).map((int) => (
+              <button
+                key={int}
+                onClick={() => setInterval(int)}
+                className={`rounded-lg px-2 py-1 text-[10px] transition-colors ${
+                  interval === int
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {int}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+      
+      {/* Current candle info */}
+      {currentCandle && (
+        <div className="mb-2 flex items-center gap-4 text-[10px] text-muted-foreground">
+          <span>O: <span className="text-foreground">${currentCandle.open.toLocaleString()}</span></span>
+          <span>H: <span className="text-emerald-400">${currentCandle.high.toLocaleString()}</span></span>
+          <span>L: <span className="text-red-400">${currentCandle.low.toLocaleString()}</span></span>
+          <span>C: <span className={currentCandle.close >= currentCandle.open ? 'text-emerald-400' : 'text-red-400'}>
+            ${currentCandle.close.toLocaleString()}
+          </span></span>
+        </div>
+      )}
+      
       <div className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData}>
-            <XAxis
-              dataKey="name"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "hsl(215, 20%, 65%)", fontSize: 10 }}
-            />
-            <YAxis hide />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(222, 47%, 8%)",
-                border: "1px solid hsl(222, 47%, 18%)",
-                borderRadius: "8px",
-                color: "hsl(210, 40%, 98%)",
-              }}
-              formatter={(value: number, name: string) => {
-                if (name === "close") return [`$${value.toLocaleString()}`, "Price"];
-                return [value, name];
-              }}
-              labelStyle={{ color: "hsl(215, 20%, 65%)" }}
-            />
-            <Bar 
-              dataKey="close" 
-              radius={[4, 4, 0, 0]}
-              isAnimationActive={false}
-            >
-              {chartData.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={entry.bullish ? "hsl(142, 76%, 46%)" : "hsl(0, 84%, 60%)"}
-                />
-              ))}
-            </Bar>
-          </ComposedChart>
-        </ResponsiveContainer>
+        {chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+              <XAxis
+                dataKey="time"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 9 }}
+                interval="preserveStartEnd"
+              />
+              <YAxis 
+                domain={['dataMin', 'dataMax']}
+                hide 
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: "8px",
+                  color: "hsl(var(--foreground))",
+                  fontSize: "11px",
+                }}
+                formatter={(value: number, name: string, props: any) => {
+                  const { payload } = props;
+                  if (!payload) return [value, name];
+                  return null;
+                }}
+                content={({ active, payload }) => {
+                  if (!active || !payload || !payload[0]) return null;
+                  const data = payload[0].payload;
+                  const isBullish = data.close >= data.open;
+                  return (
+                    <div className="rounded-lg border border-border bg-card p-2 text-xs shadow-lg">
+                      <div className="font-medium text-foreground mb-1">{data.time}</div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                        <span className="text-muted-foreground">Open:</span>
+                        <span className="text-foreground">${data.open.toLocaleString()}</span>
+                        <span className="text-muted-foreground">High:</span>
+                        <span className="text-emerald-400">${data.high.toLocaleString()}</span>
+                        <span className="text-muted-foreground">Low:</span>
+                        <span className="text-red-400">${data.low.toLocaleString()}</span>
+                        <span className="text-muted-foreground">Close:</span>
+                        <span className={isBullish ? 'text-emerald-400' : 'text-red-400'}>
+                          ${data.close.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="mt-1 pt-1 border-t border-border text-muted-foreground">
+                        {data.tickCount} tick{data.tickCount !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+              <Bar
+                dataKey="range"
+                shape={<CandlestickShape />}
+                isAnimationActive={false}
+              >
+                {chartData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={entry.bullish ? "hsl(142, 76%, 46%)" : "hsl(0, 84%, 60%)"}
+                  />
+                ))}
+              </Bar>
+            </ComposedChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+            Waiting for oracle data...
+          </div>
+        )}
       </div>
     </div>
   );
