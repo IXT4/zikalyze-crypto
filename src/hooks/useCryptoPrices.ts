@@ -963,13 +963,11 @@ export const useCryptoPrices = () => {
       if (cryptoListRef.current.length > 0 && !exchangesConnectedRef.current) {
         exchangesConnectedRef.current = true;
         
-        // Priority: Binance first (most reliable for real-time), then others as backup
-        console.log('[WebSocket] ⚡ Connecting to Binance for real-time prices...');
+        // Connect to ALL exchanges simultaneously for instant live streaming
+        console.log('[WebSocket] ⚡ Connecting to all exchanges for real-time prices...');
         connectBinance();
-        // CoinCap as backup for coins not on Binance
-        setTimeout(() => connectCoinCap(), 300);
-        // Kraken for additional coverage
-        setTimeout(() => connectKraken(), 600);
+        connectCoinCap();
+        connectKraken();
       }
     };
     

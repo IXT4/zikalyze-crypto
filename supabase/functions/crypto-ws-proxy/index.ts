@@ -300,16 +300,9 @@ serve(async (req) => {
   clientSocket.onopen = () => {
     console.log(`[crypto-ws-proxy] Client connected for ${symbols.length} symbols`);
     
-    // Connect to both sources for redundancy
-    if (preferredSource === 'kraken') {
-      connectToKraken();
-      // Also connect to Binance for symbols not on Kraken
-      setTimeout(connectToBinance, 500);
-    } else {
-      connectToBinance();
-      // Also connect to Kraken as backup
-      setTimeout(connectToKraken, 500);
-    }
+    // Connect to BOTH sources immediately for instant live streaming
+    connectToBinance();
+    connectToKraken();
   };
 
   clientSocket.onmessage = (event) => {
