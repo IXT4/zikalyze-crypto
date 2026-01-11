@@ -1,7 +1,7 @@
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useRealtimeChartData } from "@/hooks/useRealtimeChartData";
 import { cn } from "@/lib/utils";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Zap, Wifi } from "lucide-react";
 
 interface PriceChartProps {
   crypto: string;
@@ -10,7 +10,16 @@ interface PriceChartProps {
 }
 
 const PriceChart = ({ crypto, coinGeckoId, change24h }: PriceChartProps) => {
-  const { chartData, priceChange: chartRangeChange, isLoading, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
+  const { 
+    chartData, 
+    priceChange: chartRangeChange, 
+    isLoading, 
+    isSupported, 
+    error, 
+    dataSource,
+    isPythStreaming,
+    oracleConnected,
+  } = useRealtimeChartData(crypto, coinGeckoId);
   
   // Use 24h change if provided, otherwise fall back to chart range change
   const displayChange = change24h !== undefined ? change24h : chartRangeChange;
@@ -23,6 +32,34 @@ const PriceChart = ({ crypto, coinGeckoId, change24h }: PriceChartProps) => {
   const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
   const maxPrice = prices.length > 0 ? Math.max(...prices) : 100;
   const padding = (maxPrice - minPrice) * 0.1 || 10;
+
+  // Determine data source display
+  const getDataSourceBadge = () => {
+    if (isPythStreaming) {
+      return (
+        <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium bg-chart-cyan/20 text-chart-cyan">
+          <Zap className="h-3 w-3" />
+          Pyth Oracle
+        </span>
+      );
+    }
+    if (dataSource === "coingecko") {
+      return (
+        <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-warning/20 text-warning">
+          Delayed
+        </span>
+      );
+    }
+    if (dataSource) {
+      return (
+        <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium bg-success/20 text-success">
+          <Wifi className="h-3 w-3" />
+          Live
+        </span>
+      );
+    }
+    return null;
+  };
 
   const renderContent = () => {
     // Not supported or error state
@@ -115,15 +152,9 @@ const PriceChart = ({ crypto, coinGeckoId, change24h }: PriceChartProps) => {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-lg font-semibold text-foreground">Price Chart</h3>
-          {dataSource && (
-            <span className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] font-medium",
-              dataSource === "coingecko" 
-                ? "bg-warning/20 text-warning" 
-                : "bg-success/20 text-success"
-            )}>
-              {dataSource === "coingecko" ? "Delayed" : "Live"}
-            </span>
+          {getDataSourceBadge()}
+          {oracleConnected && !isPythStreaming && (
+            <span className="text-[10px] text-muted-foreground">(Oracle ready)</span>
           )}
         </div>
         {isSupported && chartData.length > 0 && (
