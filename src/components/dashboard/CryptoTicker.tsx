@@ -19,8 +19,11 @@ const cryptoMeta = [
 
 interface OracleStatus {
   isLive: boolean;
-  primarySource: "Pyth" | "Chainlink" | "none";
+  primarySource: "Pyth" | "DIA" | "Redstone" | "none";
   pythConnected: boolean;
+  diaConnected?: boolean;
+  redstoneConnected?: boolean;
+  // Legacy compatibility
   chainlinkConnected: boolean;
 }
 
@@ -97,15 +100,20 @@ const CryptoTicker = ({
     if (oracleStatus?.pythConnected) {
       return <Zap className="h-3 w-3 text-chart-cyan" />;
     }
-    if (oracleStatus?.chainlinkConnected) {
+    if (oracleStatus?.diaConnected || oracleStatus?.chainlinkConnected) {
       return <Link2 className="h-3 w-3 text-primary" />;
+    }
+    if (oracleStatus?.redstoneConnected) {
+      return <Link2 className="h-3 w-3 text-destructive" />;
     }
     return null;
   };
   
   const getOracleLabel = () => {
     if (oracleStatus?.pythConnected) return "Pyth";
-    if (oracleStatus?.chainlinkConnected) return "Chainlink";
+    if (oracleStatus?.diaConnected) return "DIA";
+    if (oracleStatus?.redstoneConnected) return "Redstone";
+    if (oracleStatus?.chainlinkConnected) return "DIA";
     return null;
   };
   

@@ -2,12 +2,13 @@
 // 📊 useMultiSymbolLivePrice — Decentralized Oracle-based Multi-Symbol Streaming
 // ═══════════════════════════════════════════════════════════════════════════════
 // Uses Pyth Network SSE for decentralized real-time price streaming (~400ms updates)
-// with Chainlink as fallback and local 24h tracking for price changes
+// with DIA and Redstone as fallbacks (all CORS-friendly, no blocked requests)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePythPrices, PYTH_FEED_IDS } from "./usePythPrices";
-import { useChainlinkPrices } from "./useChainlinkPrices";
+import { useDIAPrices } from "./useDIAPrices";
+import { useRedstonePrices } from "./useRedstonePrices";
 
 interface SymbolPriceData {
   price: number;
@@ -80,9 +81,10 @@ export const useMultiSymbolLivePrice = (
   const priceHistoryRef = useRef<Map<string, PriceHistoryEntry[]>>(loadPriceHistory());
   const lastHistorySaveRef = useRef(0);
   
-  // Connect to decentralized oracles
+  // Connect to decentralized oracles (all CORS-friendly)
   const { prices: pythPrices, isConnected: pythConnected, lastUpdateTime: pythLastUpdate } = usePythPrices();
-  const { prices: chainlinkPrices, isConnected: chainlinkConnected } = useChainlinkPrices();
+  const { prices: diaPrices, isConnected: diaConnected, lastUpdateTime: diaLastUpdate } = useDIAPrices();
+  const { prices: redstonePrices, isConnected: redstoneConnected, lastUpdateTime: redstoneLastUpdate } = useRedstonePrices();
 
   // Add price to history (sample every minute to avoid storage bloat)
   const addToHistory = useCallback((symbol: string, price: number) => {
@@ -149,10 +151,10 @@ export const useMultiSymbolLivePrice = (
     // Process requested symbols
     for (const symbol of symbols) {
       const upperSymbol = symbol.toUpperCase();
-      const pythKey = `${upperSymbol}/USD`;
+      const oracleKey = `${upperSymbol}/USD`;
 
       // Try Pyth first (primary decentralized source with SSE streaming)
-      const pythPrice = pythPrices.get(pythKey);
+      const pythPrice = pythPrices.get(oracleKey);
       if (pythPrice && pythPrice.price > 0) {
         // Add to history for 24h tracking
         addToHistory(upperSymbol, pythPrice.price);
@@ -171,20 +173,39 @@ export const useMultiSymbolLivePrice = (
         continue;
       }
 
-      // Try Chainlink as fallback
-      const chainlinkPrice = chainlinkPrices.get(pythKey);
-      if (chainlinkPrice && chainlinkPrice.price > 0) {
-        addToHistory(upperSymbol, chainlinkPrice.price);
-        const stats = get24hStats(upperSymbol, chainlinkPrice.price);
+      // Try DIA as second fallback (CORS-friendly REST API)
+      const diaPrice = diaPrices.get(oracleKey);
+      if (diaPrice && diaPrice.price > 0) {
+        addToHistory(upperSymbol, diaPrice.price);
+        const stats = get24hStats(upperSymbol, diaPrice.price);
 
         updatedPrices[upperSymbol] = {
-          price: chainlinkPrice.price,
+          price: diaPrice.price,
+          change24h: stats.change24h,
+          high24h: stats.high24h,
+          low24h: stats.low24h,
+          volume: diaPrice.volume24h || 0,
+          lastUpdate: diaPrice.timestamp || now,
+          source: "DIA Oracle",
+        };
+        connectedSymbols.push(upperSymbol);
+        continue;
+      }
+
+      // Try Redstone as third fallback (CORS-friendly REST API)
+      const redstonePrice = redstonePrices.get(oracleKey);
+      if (redstonePrice && redstonePrice.price > 0) {
+        addToHistory(upperSymbol, redstonePrice.price);
+        const stats = get24hStats(upperSymbol, redstonePrice.price);
+
+        updatedPrices[upperSymbol] = {
+          price: redstonePrice.price,
           change24h: stats.change24h,
           high24h: stats.high24h,
           low24h: stats.low24h,
           volume: 0,
-          lastUpdate: chainlinkPrice.updatedAt || now,
-          source: "Chainlink Oracle",
+          lastUpdate: redstonePrice.timestamp || now,
+          source: "Redstone Oracle",
         };
         connectedSymbols.push(upperSymbol);
         continue;
@@ -204,12 +225,14 @@ export const useMultiSymbolLivePrice = (
       }
     }
     
-    const isLive = pythConnected || chainlinkConnected;
+    const isLive = pythConnected || diaConnected || redstoneConnected;
     const primarySource = pythConnected 
       ? 'Pyth Oracle (SSE)' 
-      : chainlinkConnected 
-        ? 'Chainlink Oracle' 
-        : 'Cached';
+      : diaConnected 
+        ? 'DIA Oracle' 
+        : redstoneConnected
+          ? 'Redstone Oracle'
+          : 'Cached';
     
     setState({
       prices: updatedPrices,
@@ -224,7 +247,7 @@ export const useMultiSymbolLivePrice = (
       savePriceHistory(priceHistoryRef.current);
       lastHistorySaveRef.current = now;
     }
-  }, [pythPrices, chainlinkPrices, pythConnected, chainlinkConnected, symbols, fallbackPrices, addToHistory, get24hStats]);
+  }, [pythPrices, diaPrices, redstonePrices, pythConnected, diaConnected, redstoneConnected, symbols, fallbackPrices, addToHistory, get24hStats]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -239,11 +262,11 @@ export const useMultiSymbolLivePrice = (
 
   // Subscribe/unsubscribe are no-ops since oracles stream all supported symbols
   const subscribe = useCallback((_newSymbols: string[]) => {
-    // No-op: Pyth/Chainlink stream all supported symbols
+    // No-op: All oracles stream all supported symbols
   }, []);
 
   const unsubscribe = useCallback((_removeSymbols: string[]) => {
-    // No-op: Pyth/Chainlink stream all supported symbols
+    // No-op: All oracles stream all supported symbols
   }, []);
 
   // Get price for a specific symbol
@@ -258,7 +281,10 @@ export const useMultiSymbolLivePrice = (
     getPrice,
     // Oracle status
     pythConnected,
-    chainlinkConnected,
+    diaConnected,
+    redstoneConnected,
     pythLastUpdate,
+    // Legacy compatibility
+    chainlinkConnected: diaConnected,
   };
 };
