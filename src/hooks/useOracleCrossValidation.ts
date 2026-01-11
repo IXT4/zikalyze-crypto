@@ -35,7 +35,7 @@ const DEVIATION_THRESHOLDS = {
 // Alert cooldown per symbol (prevent spam)
 const ALERT_COOLDOWN_MS = 60 * 1000; // 1 minute
 
-// Get symbols that exist in both oracles
+// Get symbols that exist in both oracles - limit to top assets to reduce API calls
 const getCommonSymbols = (): string[] => {
   const pythSymbols = Object.keys(PYTH_FEED_IDS).map(s => s.replace("/USD", ""));
   const chainlinkSymbols = [
@@ -43,7 +43,9 @@ const getCommonSymbols = (): string[] => {
     ...Object.keys(CHAINLINK_FEEDS_ARB),
   ].map(s => s.replace("/USD", ""));
   
-  return pythSymbols.filter(s => chainlinkSymbols.includes(s));
+  // Only monitor top assets that exist in both oracles
+  const prioritySymbols = ["BTC", "ETH", "SOL", "LINK", "AAVE", "UNI", "AVAX", "ATOM", "DOT", "LTC"];
+  return prioritySymbols.filter(s => pythSymbols.includes(s) && chainlinkSymbols.includes(s));
 };
 
 export const useOracleCrossValidation = (
