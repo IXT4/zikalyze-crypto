@@ -44,7 +44,7 @@ export interface LiveMarketData {
   dataSourcesSummary: string;
 }
 
-const ONCHAIN_POLL_INTERVAL = 10000; // 10 seconds - live only, no caching
+// No polling - data updates reactively when WebSocket price changes
 
 export function useLiveMarketData(
   crypto: string,
@@ -66,9 +66,11 @@ export function useLiveMarketData(
   
   const lastSentimentFetchRef = useRef<number>(0);
   const isMountedRef = useRef(true);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevSentimentRef = useRef<{ fearGreed: number; sentiment: string } | null>(null);
   const prevWhaleRef = useRef<{ netFlow: number; txCount: number } | null>(null);
+  const lastPriceRef = useRef<number>(fallbackPrice);
+  const lastOnChainUpdateRef = useRef<number>(0);
+  const lastSentimentUpdateRef = useRef<number>(0);
 
   // Fetch on-chain metrics
   const fetchOnChainData = useCallback(async () => {
@@ -233,29 +235,43 @@ export function useLiveMarketData(
     }
   }, [crypto, livePrice.isLive, livePrice.price, livePrice.change24h, fallbackPrice, fallbackChange, checkSentimentShift]);
 
-  // Initial fetch
+  // Initial fetch on mount
   useEffect(() => {
     isMountedRef.current = true;
+    lastPriceRef.current = fallbackPrice;
+    lastOnChainUpdateRef.current = 0;
+    lastSentimentUpdateRef.current = 0;
     
-    // Fetch immediately
+    // Fetch immediately on mount
     fetchOnChainData();
     fetchSentimentData();
-    
-    // Poll for updates
-    pollIntervalRef.current = setInterval(() => {
-      if (isMountedRef.current) {
-        fetchOnChainData();
-        fetchSentimentData();
-      }
-    }, ONCHAIN_POLL_INTERVAL);
 
     return () => {
       isMountedRef.current = false;
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
     };
-  }, [crypto, fetchOnChainData, fetchSentimentData]);
+  }, [crypto]);
+
+  // Reactive updates - trigger when WebSocket price changes significantly
+  useEffect(() => {
+    if (!livePrice.isLive) return;
+    
+    const currentPrice = livePrice.price;
+    const priceChange = Math.abs((currentPrice - lastPriceRef.current) / lastPriceRef.current * 100);
+    const now = Date.now();
+    
+    // Update on-chain data when price changes by 0.5% or more
+    if (priceChange > 0.5 && now - lastOnChainUpdateRef.current > 3000) {
+      lastPriceRef.current = currentPrice;
+      lastOnChainUpdateRef.current = now;
+      fetchOnChainData();
+    }
+    
+    // Update sentiment when price changes by 1% or more (less frequent)
+    if (priceChange > 1 && now - lastSentimentUpdateRef.current > 15000) {
+      lastSentimentUpdateRef.current = now;
+      fetchSentimentData();
+    }
+  }, [livePrice.price, livePrice.isLive, fetchOnChainData, fetchSentimentData]);
 
   // Build aggregated data
   const currentPrice = livePrice.isLive ? livePrice.price : (livePrice.price || fallbackPrice);
