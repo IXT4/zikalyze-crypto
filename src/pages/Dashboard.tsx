@@ -17,6 +17,7 @@ const AIMetrics = lazy(() => import("@/components/dashboard/AIMetrics"));
 const AIAnalyzer = lazy(() => import("@/components/dashboard/AIAnalyzer"));
 const Top100CryptoList = lazy(() => import("@/components/dashboard/Top100CryptoList"));
 const OnChainMetrics = lazy(() => import("@/components/dashboard/OnChainMetrics"));
+const OracleCrossValidation = lazy(() => import("@/components/dashboard/OracleCrossValidation"));
 
 // Skeleton loaders for lazy components
 const ChartSkeleton = () => (
@@ -192,6 +193,11 @@ const Dashboard = () => {
                     volume={liveData?.total_volume}
                     marketCap={liveData?.market_cap}
                   />
+                </Suspense>
+              </ErrorBoundary>
+              <ErrorBoundary componentName="Oracle Cross-Validation" fallback={<MinimalErrorFallback />}>
+                <Suspense fallback={<MetricsSkeleton />}>
+                  <OracleCrossValidation crypto={selectedCrypto} />
                 </Suspense>
               </ErrorBoundary>
             </div>
