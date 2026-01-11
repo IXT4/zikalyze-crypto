@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchWithRetry, safeFetch } from "@/lib/fetchWithRetry";
+import { useOraclePrices } from "./useOraclePrices";
 
 export interface CryptoPrice {
   id: string;
@@ -256,6 +257,9 @@ export const useCryptoPrices = () => {
   const [connectedExchanges, setConnectedExchanges] = useState<string[]>([]);
   const [isLive, setIsLive] = useState(false);
   
+  // Decentralized Oracle Integration - Pyth Primary, Chainlink Fallback
+  const oracle = useOraclePrices();
+  
   // WebSocket refs - simplified to most reliable free sources
   const binanceWsRef = useRef<WebSocket | null>(null);
   const coincapWsRef = useRef<WebSocket | null>(null);
@@ -271,6 +275,37 @@ export const useCryptoPrices = () => {
   
   // Throttle interval - 100ms for true real-time updates while preventing UI flicker
   const UPDATE_THROTTLE_MS = 100;
+  
+  // Apply Oracle prices as primary source (Pyth/Chainlink)
+  useEffect(() => {
+    if (!oracle.isLive || oracle.prices.size === 0) return;
+    
+    const now = Date.now();
+    oracle.prices.forEach((oracleData, _key) => {
+      const symbol = oracleData.symbol.toLowerCase();
+      const existing = pricesRef.current.get(symbol);
+      
+      if (existing && oracleData.price > 0) {
+        // Oracle prices take priority - update if significantly different or fresher
+        const priceDiff = Math.abs(existing.current_price - oracleData.price) / existing.current_price;
+        const isSignificant = priceDiff > 0.0001; // 0.01% threshold
+        
+        if (isSignificant) {
+          const oracleSource = oracleData.source === "Pyth" ? "Pyth Oracle" : "Chainlink Oracle";
+          const updated = {
+            ...existing,
+            current_price: oracleData.price,
+            lastUpdate: now,
+            source: oracleSource,
+          };
+          pricesRef.current.set(symbol, updated);
+        }
+      }
+    });
+    
+    // Batch update state
+    setPrices(Array.from(pricesRef.current.values()));
+  }, [oracle.prices, oracle.isLive]);
 
   // Update price with source tracking and throttling for readable updates
   const updatePrice = useCallback((symbol: string, updates: Partial<CryptoPrice>, source: string) => {
@@ -989,10 +1024,19 @@ export const useCryptoPrices = () => {
     };
   }, [connectBinance, connectCoinCap, connectKraken]);
 
-  // Track live status
+  // Track live status - include oracle connections
   useEffect(() => {
-    setIsLive(connectedExchanges.length > 0);
-  }, [connectedExchanges]);
+    const hasExchanges = connectedExchanges.length > 0;
+    const hasOracles = oracle.isLive;
+    setIsLive(hasExchanges || hasOracles);
+    
+    // Update connected exchanges to include oracles
+    if (oracle.pythConnected && !connectedExchanges.includes("Pyth")) {
+      setConnectedExchanges(prev => [...prev.filter(e => e !== "Chainlink"), "Pyth"]);
+    } else if (oracle.chainlinkConnected && !connectedExchanges.includes("Chainlink") && !oracle.pythConnected) {
+      setConnectedExchanges(prev => [...prev.filter(e => e !== "Pyth"), "Chainlink"]);
+    }
+  }, [connectedExchanges, oracle.isLive, oracle.pythConnected, oracle.chainlinkConnected]);
 
   // Persist live prices to localStorage for session restoration
   useEffect(() => {
@@ -1001,7 +1045,7 @@ export const useCryptoPrices = () => {
     }
   }, [prices, isLive, saveLivePrices]);
 
-  // No polling - rely on real-time WebSocket data for 24h updates
+  // No polling - rely on real-time WebSocket/Oracle data for 24h updates
   // Initial fetch provides market cap and other static data
 
   const getPriceBySymbol = useCallback((symbol: string): CryptoPrice | undefined => {
@@ -1020,7 +1064,14 @@ export const useCryptoPrices = () => {
     isLive,
     getPriceBySymbol, 
     getPriceById, 
-    refetch: fetchPrices 
+    refetch: fetchPrices,
+    // Oracle status
+    oracleStatus: {
+      isLive: oracle.isLive,
+      primarySource: oracle.primarySource,
+      pythConnected: oracle.pythConnected,
+      chainlinkConnected: oracle.chainlinkConnected,
+    },
   };
 };
 

@@ -46,7 +46,7 @@ const Dashboard = () => {
     }
   });
   const [userName, setUserName] = useState<string | null>(null);
-  const { prices, loading, getPriceBySymbol } = useCryptoPrices();
+  const { prices, loading, getPriceBySymbol, oracleStatus, isLive, connectedExchanges } = useCryptoPrices();
   const { t } = useTranslation();
 
   // Save selected crypto to localStorage whenever it changes
@@ -112,7 +112,15 @@ const Dashboard = () => {
 
         <div className="p-3 space-y-4 sm:p-4 md:p-6 md:space-y-6">
           {/* Crypto Ticker */}
-          <CryptoTicker selected={selectedCrypto} onSelect={setSelectedCrypto} getPriceBySymbol={getPriceBySymbol} loading={loading} />
+          <CryptoTicker 
+            selected={selectedCrypto} 
+            onSelect={setSelectedCrypto} 
+            getPriceBySymbol={getPriceBySymbol} 
+            loading={loading}
+            oracleStatus={oracleStatus}
+            isLive={isLive}
+            connectedExchanges={connectedExchanges}
+          />
 
           {/* Time Filter */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 sm:gap-2 custom-scrollbar">
