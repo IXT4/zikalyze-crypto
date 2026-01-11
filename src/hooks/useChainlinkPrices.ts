@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // Chainlink Price Feeds as fallback oracle
-// Uses public RPC endpoints for decentralized access
+// Uses public RPC endpoints for decentralized access with caching
 
 export interface ChainlinkPriceData {
   symbol: string;
@@ -18,22 +18,63 @@ export interface ChainlinkState {
   error: string | null;
 }
 
-// Public RPC endpoints (decentralized, no API key required)
+// Public RPC endpoints (decentralized, no API key required) - prioritized by reliability
 const ETH_RPC_ENDPOINTS = [
   "https://eth.llamarpc.com",
-  "https://rpc.ankr.com/eth",
   "https://ethereum.publicnode.com",
   "https://1rpc.io/eth",
+  "https://cloudflare-eth.com",
+  "https://rpc.flashbots.net",
 ];
 
+// Arbitrum endpoints - removed unreliable ones
 const ARBITRUM_RPC_ENDPOINTS = [
-  "https://arb1.arbitrum.io/rpc",
-  "https://rpc.ankr.com/arbitrum",
-  "https://arbitrum.publicnode.com",
+  "https://arbitrum-one.publicnode.com",
+  "https://1rpc.io/arb",
+  "https://arbitrum.llamarpc.com",
 ];
 
-// Chainlink Price Feed Addresses (Ethereum Mainnet)
-// From: https://docs.chain.link/data-feeds/price-feeds/addresses
+// Cache for Chainlink prices to reduce RPC calls
+const CACHE_KEY = "zikalyze_chainlink_cache_v1";
+const CACHE_TTL = 60 * 1000; // 1 minute cache
+
+interface CachedPrices {
+  prices: Record<string, ChainlinkPriceData>;
+  timestamp: number;
+}
+
+// Load cached prices
+const loadCache = (): Map<string, ChainlinkPriceData> | null => {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (!cached) return null;
+    
+    const data: CachedPrices = JSON.parse(cached);
+    if (Date.now() - data.timestamp > CACHE_TTL) {
+      localStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+    
+    return new Map(Object.entries(data.prices));
+  } catch {
+    return null;
+  }
+};
+
+// Save prices to cache
+const saveCache = (prices: Map<string, ChainlinkPriceData>) => {
+  try {
+    const data: CachedPrices = {
+      prices: Object.fromEntries(prices),
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  } catch {
+    // Ignore storage errors
+  }
+};
+
+// Chainlink Price Feed Addresses (Ethereum Mainnet) - Only verified working feeds
 const CHAINLINK_FEEDS_ETH: Record<string, string> = {
   "BTC/USD": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
   "ETH/USD": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
@@ -47,82 +88,67 @@ const CHAINLINK_FEEDS_ETH: Record<string, string> = {
   "YFI/USD": "0xA027702dbb89fbd58e2903F4A3bCAaB8F8AC4B7F",
   "SUSHI/USD": "0xCc70F09A6CC17553b2E31954cD36E4A2d89501f7",
   "BAL/USD": "0xdF2917806E30300537aEB49A7663062F4d1F2b5F",
-  "1INCH/USD": "0xc929ad75B72593967DE83E7F7Cda0493458261D9",
   "MATIC/USD": "0x7bAC85A8a13A4BcD8abb3eB7d6b4d632c5a57676",
   "SOL/USD": "0x4ffC43a60e009B551865A93d232E33Fce9f01507",
   "AVAX/USD": "0xFF3EEb22B22c1D74C8EED5E02f5D6d30a787C1e5",
   "ATOM/USD": "0xDC4BDB458C6361093069Ca2aD30D74cc152EdC75",
   "DOT/USD": "0x1C07AFb8E2B827c5A4739C6d59Ae3A5035f28734",
   "LTC/USD": "0x6AF09DF7563C363B5763b9102712EbeD3b9e859B",
-  "BCH/USD": "0x9F0F69428F923D6c95B781F89E165C9b2df9789D",
   "XLM/USD": "0x53f91A5B7A6c411E71A6C8EaCF8C1DC4D15A5D55",
-  "EOS/USD": "0x10a43289895eAff840E8d45995BBa89f9115ECEe",
-  "XMR/USD": "0xFA66458Cce7Dd15D8650015c4fce4D278271618F",
-  "ZEC/USD": "0xd54B033D48d0475f19c5fccf7484E8A981a135ae",
-  "DASH/USD": "0xFb0cADFEa136E9E343cfb55B863a6Df8348ab912",
-  "XTZ/USD": "0x5239a625dEb44bF3EeAc2CD5366ba24b8e9DB63F",
   "ETC/USD": "0xaEA2808407B7319A31A383B6F8B60f04BCa23cE2",
   "FIL/USD": "0x1A31D42149e82Eb99777f903C08A2E41A00085d3",
   "TRX/USD": "0xacD0D1A29759CC01E8D925371B72cb2b5610EA25",
-  "ALGO/USD": "0x5239a625dEb44bF3EeAc2CD5366ba24b8e9DB64F", // Placeholder
-  "VET/USD": "0x5239a625dEb44bF3EeAc2CD5366ba24b8e9DB65F", // Placeholder
-  "HBAR/USD": "0x5239a625dEb44bF3EeAc2CD5366ba24b8e9DB66F", // Placeholder
-  "ICP/USD": "0x5239a625dEb44bF3EeAc2CD5366ba24b8e9DB67F", // Placeholder
-  "APT/USD": "0x5239a625dEb44bF3EeAc2CD5366ba24b8e9DB68F", // Placeholder
 };
 
-// Chainlink Feeds on Arbitrum (faster, cheaper)
+// Chainlink Feeds on Arbitrum - verified working feeds only
 const CHAINLINK_FEEDS_ARB: Record<string, string> = {
   "BTC/USD": "0x6ce185860a4963106506C203335A2910D5F2A2FE",
   "ETH/USD": "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612",
   "LINK/USD": "0x86E53CF1B870786351Da77A57575e79CB55812CB",
   "ARB/USD": "0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6",
-  "SOL/USD": "0x24ceA4b8ce57cdA5058b924B9B9987992450590c",
-  "AVAX/USD": "0x8bf61728eeDCE2F32c456454d87B5d6eD6150208",
-  "MATIC/USD": "0x52099D4523531f678Dfc568a7B1e5038aadcE1d6",
-  "AAVE/USD": "0xaD1d5344AaDE45F43E596773Bcc4c423EAbdD034",
-  "UNI/USD": "0x9C917083fDb403ab5ADbEC26Ee294f6EcAda2720",
-  "CRV/USD": "0xaebDA2c976cfd1eE1977Eac079B4382acb849325",
-  "GMX/USD": "0xDB98056FecFff59D032aB628337A4887110df3dB",
-  "MAGIC/USD": "0x47E55cCec6582838E173f252D08Afd8116c2202d",
-  "RDNT/USD": "0x20d0Fcab0ECFD078B036b6CAf1FaC69A6453b352",
-  "PENDLE/USD": "0x66853E19d73c0F9301fe099c324A1E9726953C89",
 };
 
-// ABI for Chainlink Aggregator V3 (minimal)
-const AGGREGATOR_ABI = [
-  "function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
-  "function decimals() external view returns (uint8)",
-];
+// Simple JSON-RPC call helper with timeout
+async function ethCall(rpcUrl: string, to: string, data: string, timeoutMs = 8000): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_call",
+        params: [{ to, data }, "latest"],
+      }),
+      signal: controller.signal,
+    });
 
-// Simple JSON-RPC call helper
-async function ethCall(rpcUrl: string, to: string, data: string): Promise<string> {
-  const response = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "eth_call",
-      params: [{ to, data }, "latest"],
-    }),
-  });
+    clearTimeout(timeoutId);
 
-  if (!response.ok) {
-    throw new Error(`RPC request failed: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`RPC request failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+
+    return result.result;
+  } catch (e: any) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError') {
+      throw new Error('Request timeout');
+    }
+    throw e;
   }
-
-  const result = await response.json();
-  if (result.error) {
-    throw new Error(result.error.message);
-  }
-
-  return result.result;
 }
 
 // Encode function call data
 function encodeLatestRoundData(): string {
-  // latestRoundData() selector
   return "0xfeaf968c";
 }
 
@@ -132,10 +158,7 @@ function decodeLatestRoundData(data: string): {
   answer: bigint;
   updatedAt: number;
 } {
-  // Remove 0x prefix
   const hex = data.slice(2);
-  
-  // Decode uint80, int256, uint256, uint256, uint80
   const roundId = BigInt("0x" + hex.slice(0, 64)).toString();
   const answer = BigInt("0x" + hex.slice(64, 128));
   const updatedAt = Number(BigInt("0x" + hex.slice(192, 256)));
@@ -143,20 +166,44 @@ function decodeLatestRoundData(data: string): {
   return { roundId, answer, updatedAt };
 }
 
-const REFRESH_INTERVAL = 10000; // 10 seconds - Chainlink updates every ~27 seconds on mainnet
+// Longer refresh interval to reduce rate limiting
+const REFRESH_INTERVAL = 30000; // 30 seconds
+
+// Track failed endpoints to skip them temporarily
+const failedEndpoints = new Map<string, number>();
+const ENDPOINT_COOLDOWN = 60000; // 1 minute cooldown for failed endpoints
+
+const isEndpointAvailable = (url: string): boolean => {
+  const failedAt = failedEndpoints.get(url);
+  if (!failedAt) return true;
+  if (Date.now() - failedAt > ENDPOINT_COOLDOWN) {
+    failedEndpoints.delete(url);
+    return true;
+  }
+  return false;
+};
+
+const markEndpointFailed = (url: string) => {
+  failedEndpoints.set(url, Date.now());
+};
 
 export const useChainlinkPrices = (symbols: string[] = []) => {
-  const [state, setState] = useState<ChainlinkState>({
-    prices: new Map(),
-    isConnected: false,
-    isLoading: true,
-    error: null,
+  const [state, setState] = useState<ChainlinkState>(() => {
+    // Initialize from cache
+    const cached = loadCache();
+    return {
+      prices: cached || new Map(),
+      isConnected: cached ? cached.size > 0 : false,
+      isLoading: !cached,
+      error: null,
+    };
   });
 
-  const pricesMapRef = useRef<Map<string, ChainlinkPriceData>>(new Map());
+  const pricesMapRef = useRef<Map<string, ChainlinkPriceData>>(state.prices);
   const rpcIndexRef = useRef({ eth: 0, arb: 0 });
   const isMountedRef = useRef(true);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFetchRef = useRef<number>(0);
 
   const getPrice = useCallback((symbol: string): ChainlinkPriceData | undefined => {
     const normalizedSymbol = symbol.toUpperCase().replace(/USD$/, "") + "/USD";
@@ -171,19 +218,25 @@ export const useChainlinkPrices = (symbols: string[] = []) => {
     const endpoints = isArbitrum ? ARBITRUM_RPC_ENDPOINTS : ETH_RPC_ENDPOINTS;
     const indexKey = isArbitrum ? "arb" : "eth";
     
-    for (let attempt = 0; attempt < endpoints.length; attempt++) {
-      const rpcIndex = (rpcIndexRef.current[indexKey] + attempt) % endpoints.length;
-      const rpcUrl = endpoints[rpcIndex];
+    // Filter available endpoints
+    const availableEndpoints = endpoints.filter(isEndpointAvailable);
+    if (availableEndpoints.length === 0) {
+      // All endpoints are in cooldown, try first one anyway
+      availableEndpoints.push(endpoints[0]);
+    }
+    
+    for (let attempt = 0; attempt < Math.min(availableEndpoints.length, 2); attempt++) {
+      const rpcIndex = (rpcIndexRef.current[indexKey] + attempt) % availableEndpoints.length;
+      const rpcUrl = availableEndpoints[rpcIndex];
       
       try {
         const data = await ethCall(rpcUrl, feedAddress, encodeLatestRoundData());
         const decoded = decodeLatestRoundData(data);
         
-        // Most Chainlink feeds use 8 decimals
         const price = Number(decoded.answer) / 1e8;
         
         if (price > 0) {
-          rpcIndexRef.current[indexKey] = rpcIndex; // Remember working endpoint
+          rpcIndexRef.current[indexKey] = rpcIndex;
           
           return {
             symbol: symbol.replace("/USD", ""),
@@ -193,8 +246,12 @@ export const useChainlinkPrices = (symbols: string[] = []) => {
             source: "Chainlink",
           };
         }
-      } catch (e) {
-        console.log(`[Chainlink] ${symbol} failed on ${rpcUrl}:`, e);
+      } catch (e: any) {
+        // Only log non-rate-limit errors
+        if (!e.message?.includes("429") && !e.message?.includes("timeout")) {
+          console.log(`[Chainlink] ${symbol} failed on ${rpcUrl}`);
+        }
+        markEndpointFailed(rpcUrl);
         continue;
       }
     }
@@ -204,65 +261,78 @@ export const useChainlinkPrices = (symbols: string[] = []) => {
 
   const fetchAllPrices = useCallback(async () => {
     if (!isMountedRef.current) return;
+    
+    // Rate limit: don't fetch more than once per 10 seconds
+    const now = Date.now();
+    if (now - lastFetchRef.current < 10000) return;
+    lastFetchRef.current = now;
 
-    const symbolsToFetch = symbols.length > 0
+    // Prefer Ethereum mainnet feeds (more reliable)
+    const feedsToUse = symbols.length > 0
       ? symbols.map(s => s.toUpperCase().replace(/USD$/, "") + "/USD")
-      : [...Object.keys(CHAINLINK_FEEDS_ETH), ...Object.keys(CHAINLINK_FEEDS_ARB)];
+      : Object.keys(CHAINLINK_FEEDS_ETH);
 
-    const uniqueSymbols = [...new Set(symbolsToFetch)];
+    const uniqueSymbols = [...new Set(feedsToUse)].slice(0, 10); // Limit to 10 symbols
     const results: ChainlinkPriceData[] = [];
 
-    // Batch fetch with concurrency limit
-    const BATCH_SIZE = 5;
-    for (let i = 0; i < uniqueSymbols.length; i += BATCH_SIZE) {
-      const batch = uniqueSymbols.slice(i, i + BATCH_SIZE);
+    // Sequential fetching to avoid rate limits
+    for (const symbol of uniqueSymbols) {
+      // Small delay between requests
+      if (results.length > 0) {
+        await new Promise(r => setTimeout(r, 200));
+      }
       
-      const batchPromises = batch.map(async (symbol) => {
-        // Try Arbitrum first (faster, cheaper), then Ethereum
-        if (CHAINLINK_FEEDS_ARB[symbol]) {
-          const result = await fetchPrice(symbol, CHAINLINK_FEEDS_ARB[symbol], true);
-          if (result) return result;
+      // Try ETH mainnet first (more reliable)
+      if (CHAINLINK_FEEDS_ETH[symbol]) {
+        const result = await fetchPrice(symbol, CHAINLINK_FEEDS_ETH[symbol], false);
+        if (result) {
+          results.push(result);
+          pricesMapRef.current.set(result.symbol + "/USD", result);
+          continue;
         }
-        
-        if (CHAINLINK_FEEDS_ETH[symbol]) {
-          return fetchPrice(symbol, CHAINLINK_FEEDS_ETH[symbol], false);
-        }
-        
-        return null;
-      });
-
-      const batchResults = await Promise.all(batchPromises);
-      batchResults.forEach(result => {
+      }
+      
+      // Fallback to Arbitrum
+      if (CHAINLINK_FEEDS_ARB[symbol]) {
+        const result = await fetchPrice(symbol, CHAINLINK_FEEDS_ARB[symbol], true);
         if (result) {
           results.push(result);
           pricesMapRef.current.set(result.symbol + "/USD", result);
         }
-      });
+      }
     }
 
     if (isMountedRef.current) {
+      // Save to cache
+      if (results.length > 0) {
+        saveCache(pricesMapRef.current);
+      }
+      
       setState({
         prices: new Map(pricesMapRef.current),
-        isConnected: results.length > 0,
+        isConnected: pricesMapRef.current.size > 0,
         isLoading: false,
-        error: results.length === 0 ? "No prices fetched" : null,
+        error: results.length === 0 && pricesMapRef.current.size === 0 ? "No prices available" : null,
       });
     }
-
-    console.log(`[Chainlink] Fetched ${results.length}/${uniqueSymbols.length} prices`);
   }, [symbols, fetchPrice]);
 
   useEffect(() => {
     isMountedRef.current = true;
 
-    // Initial fetch
-    fetchAllPrices();
+    // Delay initial fetch to let Pyth connect first (Pyth is primary)
+    const initTimeout = setTimeout(() => {
+      if (isMountedRef.current) {
+        fetchAllPrices();
+      }
+    }, 2000);
 
-    // Set up refresh interval for real-time-ish updates
+    // Set up refresh interval
     refreshIntervalRef.current = setInterval(fetchAllPrices, REFRESH_INTERVAL);
 
     return () => {
       isMountedRef.current = false;
+      clearTimeout(initTimeout);
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
       }
