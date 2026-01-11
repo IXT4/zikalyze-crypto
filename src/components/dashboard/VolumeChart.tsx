@@ -1,7 +1,7 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useRealtimeChartData } from "@/hooks/useRealtimeChartData";
 import { cn } from "@/lib/utils";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Zap, Wifi, Clock } from "lucide-react";
 
 interface VolumeChartProps {
   crypto: string;
@@ -9,7 +9,15 @@ interface VolumeChartProps {
 }
 
 const VolumeChart = ({ crypto, coinGeckoId }: VolumeChartProps) => {
-  const { chartData, isLoading, isSupported, error, dataSource } = useRealtimeChartData(crypto, coinGeckoId);
+  const { 
+    chartData, 
+    isLoading, 
+    isSupported, 
+    error, 
+    dataSource,
+    isPythStreaming,
+    oracleConnected,
+  } = useRealtimeChartData(crypto, coinGeckoId);
 
   // Format volume for display (convert to K, M, B)
   const formatVolume = (value: number) => {
@@ -17,6 +25,35 @@ const VolumeChart = ({ crypto, coinGeckoId }: VolumeChartProps) => {
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
     if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
     return value.toFixed(0);
+  };
+
+  // Determine data source badge
+  const getDataSourceBadge = () => {
+    if (isPythStreaming) {
+      return (
+        <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium bg-chart-cyan/20 text-chart-cyan">
+          <Zap className="h-3 w-3" />
+          Pyth Oracle
+        </span>
+      );
+    }
+    if (dataSource === "coingecko") {
+      return (
+        <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium bg-warning/20 text-warning">
+          <Clock className="h-3 w-3" />
+          Delayed
+        </span>
+      );
+    }
+    if (dataSource) {
+      return (
+        <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium bg-success/20 text-success">
+          <Wifi className="h-3 w-3" />
+          Live
+        </span>
+      );
+    }
+    return null;
   };
 
   const renderContent = () => {
@@ -42,7 +79,20 @@ const VolumeChart = ({ crypto, coinGeckoId }: VolumeChartProps) => {
       );
     }
 
-    // No data after loading
+    // Pyth streaming mode - waiting for ticks
+    if (isPythStreaming && chartData.length === 0) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-chart-cyan animate-pulse" />
+            <span className="text-xs">Building from Pyth Oracle ticks...</span>
+          </div>
+          <span className="text-[10px] text-muted-foreground/70">Decentralized streaming active</span>
+        </div>
+      );
+    }
+
+    // No data after loading (non-Pyth)
     if (chartData.length === 0) {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-1 text-muted-foreground">
@@ -91,15 +141,9 @@ const VolumeChart = ({ crypto, coinGeckoId }: VolumeChartProps) => {
     <div className="rounded-2xl border border-border bg-card p-6">
       <div className="mb-4 flex items-center gap-2">
         <h3 className="text-lg font-semibold text-foreground">Volume</h3>
-        {dataSource && (
-          <span className={cn(
-            "rounded px-1.5 py-0.5 text-[10px] font-medium",
-            dataSource === "coingecko" 
-              ? "bg-warning/20 text-warning" 
-              : "bg-success/20 text-success"
-          )}>
-            {dataSource === "coingecko" ? "Delayed" : "Live"}
-          </span>
+        {getDataSourceBadge()}
+        {oracleConnected && !isPythStreaming && (
+          <span className="text-[10px] text-muted-foreground">(Oracle ready)</span>
         )}
       </div>
       <div className="h-32">
