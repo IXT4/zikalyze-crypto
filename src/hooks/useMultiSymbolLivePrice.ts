@@ -29,13 +29,51 @@ interface MultiPriceState {
 }
 
 // Cache for 24h price history (persisted for accurate change calculation)
-const HISTORY_CACHE_KEY = "zikalyze_price_history_v1";
+const HISTORY_CACHE_KEY = "zikalyze_price_history_v2";
 const HISTORY_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+// Cache for API-sourced 24h data (from CoinGecko metadata)
+const API_24H_CACHE_KEY = "zikalyze_api_24h_data_v1";
+const API_24H_CACHE_TTL = 10 * 60 * 1000; // 10 minutes (CoinGecko refresh rate)
 
 interface PriceHistoryEntry {
   price: number;
   timestamp: number;
 }
+
+interface API24hData {
+  change24h: number;
+  high24h: number;
+  low24h: number;
+  timestamp: number;
+}
+
+// Load API-sourced 24h data
+const loadAPI24hData = (): Map<string, API24hData> => {
+  try {
+    const cached = localStorage.getItem(API_24H_CACHE_KEY);
+    if (!cached) return new Map();
+    const data = JSON.parse(cached);
+    const now = Date.now();
+    const result = new Map<string, API24hData>();
+    Object.entries(data).forEach(([symbol, entry]) => {
+      const typedEntry = entry as API24hData;
+      // Only use if not stale (10 minutes)
+      if (now - typedEntry.timestamp < API_24H_CACHE_TTL) {
+        result.set(symbol, typedEntry);
+      }
+    });
+    return result;
+  } catch {
+    return new Map();
+  }
+};
+
+const saveAPI24hData = (data: Map<string, API24hData>) => {
+  try {
+    localStorage.setItem(API_24H_CACHE_KEY, JSON.stringify(Object.fromEntries(data)));
+  } catch {}
+};
 
 const loadPriceHistory = (): Map<string, PriceHistoryEntry[]> => {
   try {
@@ -65,9 +103,15 @@ const savePriceHistory = (history: Map<string, PriceHistoryEntry[]>) => {
   } catch {}
 };
 
+// Validate 24h change is reasonable (prevent anomalies)
+const isValidChange24h = (change: number): boolean => {
+  // Allow -99% to +1000% (reasonable crypto ranges)
+  return !isNaN(change) && isFinite(change) && change > -99 && change < 1000;
+};
+
 export const useMultiSymbolLivePrice = (
   symbols: string[],
-  fallbackPrices?: Record<string, { price: number; change24h: number }>
+  fallbackPrices?: Record<string, { price: number; change24h: number; high24h?: number; low24h?: number }>
 ) => {
   const [state, setState] = useState<MultiPriceState>({
     prices: {},
@@ -79,12 +123,36 @@ export const useMultiSymbolLivePrice = (
 
   const isMountedRef = useRef(true);
   const priceHistoryRef = useRef<Map<string, PriceHistoryEntry[]>>(loadPriceHistory());
+  const api24hDataRef = useRef<Map<string, API24hData>>(loadAPI24hData());
   const lastHistorySaveRef = useRef(0);
   
   // Connect to decentralized oracles (all CORS-friendly)
   const { prices: pythPrices, isConnected: pythConnected, lastUpdateTime: pythLastUpdate } = usePythPrices();
   const { prices: diaPrices, isConnected: diaConnected, lastUpdateTime: diaLastUpdate } = useDIAPrices();
   const { prices: redstonePrices, isConnected: redstoneConnected, lastUpdateTime: redstoneLastUpdate } = useRedstonePrices();
+
+  // Update API 24h data from fallback prices (CoinGecko metadata)
+  useEffect(() => {
+    if (!fallbackPrices) return;
+    const now = Date.now();
+    let hasUpdates = false;
+    
+    Object.entries(fallbackPrices).forEach(([symbol, data]) => {
+      if (data.change24h !== undefined && isValidChange24h(data.change24h)) {
+        api24hDataRef.current.set(symbol.toUpperCase(), {
+          change24h: data.change24h,
+          high24h: data.high24h || 0,
+          low24h: data.low24h || 0,
+          timestamp: now,
+        });
+        hasUpdates = true;
+      }
+    });
+    
+    if (hasUpdates) {
+      saveAPI24hData(api24hDataRef.current);
+    }
+  }, [fallbackPrices]);
 
   // Add price to history (sample every minute to avoid storage bloat)
   const addToHistory = useCallback((symbol: string, price: number) => {
@@ -109,36 +177,90 @@ export const useMultiSymbolLivePrice = (
     }
   }, []);
 
-  // Calculate 24h stats from history
+  // Calculate 24h stats - PRIORITY: API data > local history > fallback
   const get24hStats = useCallback((symbol: string, currentPrice: number) => {
-    const history = priceHistoryRef.current.get(symbol) || [];
+    const upperSymbol = symbol.toUpperCase();
     
-    if (history.length === 0) {
-      return { change24h: 0, high24h: currentPrice, low24h: currentPrice };
+    // PRIORITY 1: Use API-sourced 24h data (from CoinGecko) if available and fresh
+    const apiData = api24hDataRef.current.get(upperSymbol);
+    if (apiData && isValidChange24h(apiData.change24h)) {
+      // Calculate dynamic high/low that includes current price
+      const history = priceHistoryRef.current.get(upperSymbol) || [];
+      const historicalPrices = history.map(h => h.price);
+      
+      // Use API high/low as base, but update if current price exceeds
+      let high24h = apiData.high24h || currentPrice;
+      let low24h = apiData.low24h || currentPrice;
+      
+      if (historicalPrices.length > 0) {
+        high24h = Math.max(high24h, ...historicalPrices, currentPrice);
+        low24h = Math.min(low24h, ...historicalPrices, currentPrice);
+      } else {
+        high24h = Math.max(high24h, currentPrice);
+        low24h = Math.min(low24h, currentPrice);
+      }
+      
+      return { 
+        change24h: apiData.change24h, 
+        high24h, 
+        low24h,
+        source: 'API'
+      };
     }
-
-    // Find price from ~24h ago
-    const now = Date.now();
-    const target24hAgo = now - HISTORY_DURATION;
-    let oldestRelevantPrice = history[0].price;
     
-    // Find the entry closest to 24h ago
-    for (const entry of history) {
-      if (entry.timestamp >= target24hAgo) {
-        oldestRelevantPrice = entry.price;
-        break;
+    // PRIORITY 2: Calculate from local price history
+    const history = priceHistoryRef.current.get(upperSymbol) || [];
+    
+    if (history.length > 0) {
+      const now = Date.now();
+      const target24hAgo = now - HISTORY_DURATION;
+      let oldestRelevantPrice = history[0].price;
+      
+      // Find the entry closest to 24h ago
+      for (const entry of history) {
+        if (entry.timestamp >= target24hAgo) {
+          oldestRelevantPrice = entry.price;
+          break;
+        }
+      }
+
+      const allPrices = [...history.map(h => h.price), currentPrice];
+      const high24h = Math.max(...allPrices);
+      const low24h = Math.min(...allPrices);
+      const calculatedChange = oldestRelevantPrice > 0 
+        ? ((currentPrice - oldestRelevantPrice) / oldestRelevantPrice) * 100 
+        : 0;
+
+      // Only use local calculation if it's valid
+      if (isValidChange24h(calculatedChange)) {
+        return { 
+          change24h: calculatedChange, 
+          high24h, 
+          low24h,
+          source: 'History'
+        };
       }
     }
+    
+    // PRIORITY 3: Use fallback data if provided
+    const fallback = fallbackPrices?.[upperSymbol];
+    if (fallback && isValidChange24h(fallback.change24h)) {
+      return { 
+        change24h: fallback.change24h, 
+        high24h: fallback.high24h || currentPrice, 
+        low24h: fallback.low24h || currentPrice,
+        source: 'Fallback'
+      };
+    }
 
-    const allPrices = [...history.map(h => h.price), currentPrice];
-    const high24h = Math.max(...allPrices);
-    const low24h = Math.min(...allPrices);
-    const change24h = oldestRelevantPrice > 0 
-      ? ((currentPrice - oldestRelevantPrice) / oldestRelevantPrice) * 100 
-      : 0;
-
-    return { change24h, high24h, low24h };
-  }, []);
+    // Default: return zeros (insufficient data)
+    return { 
+      change24h: 0, 
+      high24h: currentPrice, 
+      low24h: currentPrice,
+      source: 'None'
+    };
+  }, [fallbackPrices]);
 
   // Update prices from oracles
   useEffect(() => {
@@ -211,13 +333,14 @@ export const useMultiSymbolLivePrice = (
         continue;
       }
       
-      // Use fallback if available
+      // Use fallback if available (with proper 24h data)
       if (fallbackPrices?.[upperSymbol]) {
+        const fb = fallbackPrices[upperSymbol];
         updatedPrices[upperSymbol] = {
-          price: fallbackPrices[upperSymbol].price,
-          change24h: fallbackPrices[upperSymbol].change24h,
-          high24h: 0,
-          low24h: 0,
+          price: fb.price,
+          change24h: isValidChange24h(fb.change24h) ? fb.change24h : 0,
+          high24h: fb.high24h || fb.price,
+          low24h: fb.low24h || fb.price,
           volume: 0,
           lastUpdate: now,
           source: 'Cached',
