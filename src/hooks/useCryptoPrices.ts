@@ -242,9 +242,9 @@ const EXCHANGES = {
     url: "wss://ws.coincap.io/prices?assets=",
     name: "CoinCap",
   },
-  // Kraken - reliable for major pairs
+  // Kraken v2 API - reliable for major pairs with better symbol support
   kraken: {
-    url: "wss://ws.kraken.com",
+    url: "wss://ws.kraken.com/v2",
     name: "Kraken",
   },
 };
@@ -818,7 +818,26 @@ export const useCryptoPrices = () => {
     } catch (err) {}
   }, [updatePrice]);
 
-  // Connect to Kraken WebSocket with improved retry
+  // Kraken symbol mapping - Kraken uses different symbols for some coins
+  const KRAKEN_SYMBOL_MAP: Record<string, string> = {
+    BTC: 'XBT', DOGE: 'XDG',
+  };
+  
+  const KRAKEN_REVERSE_MAP: Record<string, string> = {
+    XBT: 'BTC', XDG: 'DOGE',
+  };
+  
+  // List of symbols that work well on Kraken (major cryptos)
+  const KRAKEN_SUPPORTED = [
+    'BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'AVAX', 'LINK', 'MATIC', 'UNI',
+    'ATOM', 'LTC', 'BCH', 'NEAR', 'APT', 'FIL', 'ARB', 'OP', 'INJ', 'SUI',
+    'TIA', 'SEI', 'PEPE', 'SHIB', 'XLM', 'ALGO', 'FTM', 'ETC', 'AAVE', 'MKR',
+    'GRT', 'STX', 'MINA', 'FLOW', 'XTZ', 'EOS', 'KAVA', 'DOGE', 'TRX', 'HBAR',
+    'VET', 'ICP', 'RUNE', 'SAND', 'MANA', 'AXS', 'ENJ', 'CHZ', 'BAT', 'CRV',
+    'COMP', 'YFI', 'SNX', 'ZEC', 'DASH', 'XMR', 'RENDER', 'FET', 'TAO', 'KAS',
+  ];
+
+  // Connect to Kraken WebSocket v2 API - More reliable with better error handling
   const connectKraken = useCallback(() => {
     if (cryptoListRef.current.length === 0) return;
     
@@ -833,47 +852,74 @@ export const useCryptoPrices = () => {
         if (ws.readyState !== WebSocket.OPEN) {
           ws.close();
         }
-      }, 10000);
+      }, 15000);
       
       ws.onopen = () => {
         clearTimeout(connectTimeout);
-        console.log(`[Kraken] Connected successfully`);
+        console.log(`[Kraken v2] Connected successfully`);
         setConnectedExchanges(prev => 
           prev.includes("Kraken") ? prev : [...prev, "Kraken"]
         );
         setIsLive(true);
         
-        const pairs = cryptoListRef.current.slice(0, 20).map(c => {
-          const symbol = c.symbol === "BTC" ? "XBT" : c.symbol;
-          return `${symbol}/USD`;
-        });
+        // Build symbol list for Kraken v2 API format
+        const krakenSymbols = cryptoListRef.current
+          .filter(c => KRAKEN_SUPPORTED.includes(c.symbol))
+          .slice(0, 50)
+          .map(c => {
+            const krakenSymbol = KRAKEN_SYMBOL_MAP[c.symbol] || c.symbol;
+            return `${krakenSymbol}/USD`;
+          });
         
+        // Kraken v2 subscribe format
         ws.send(JSON.stringify({
-          event: "subscribe",
-          pair: pairs,
-          subscription: { name: "ticker" },
+          method: "subscribe",
+          params: {
+            channel: "ticker",
+            symbol: krakenSymbols,
+            snapshot: true,
+          },
         }));
+        
+        console.log(`[Kraken v2] Subscribed to ${krakenSymbols.length} pairs`);
       };
       
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          if (Array.isArray(message) && message.length >= 4) {
-            const ticker = message[1];
-            const pair = message[3] as string;
+          
+          // Handle Kraken v2 ticker format
+          if (message.channel === 'ticker' && message.data) {
+            const tickerData = Array.isArray(message.data) ? message.data : [message.data];
             
-            if (ticker && pair) {
-              let symbol = pair.replace("/USD", "").replace("XBT", "BTC");
-              
-              const price = parseFloat(ticker.c?.[0] || 0);
-              const baseVolume = parseFloat(ticker.v?.[1] || 0);
-              updatePrice(symbol, {
-                current_price: price,
-                high_24h: parseFloat(ticker.h?.[1] || 0),
-                low_24h: parseFloat(ticker.l?.[1] || 0),
-                total_volume: baseVolume * price,
-              }, "Kraken");
+            for (const ticker of tickerData) {
+              if (ticker.symbol) {
+                // Extract symbol: "XBT/USD" -> "BTC"
+                let symbol = ticker.symbol.replace('/USD', '').replace('/USDT', '');
+                symbol = KRAKEN_REVERSE_MAP[symbol] || symbol;
+                
+                const price = parseFloat(ticker.last || 0);
+                if (price > 0) {
+                  updatePrice(symbol, {
+                    current_price: price,
+                    high_24h: parseFloat(ticker.high || 0),
+                    low_24h: parseFloat(ticker.low || 0),
+                    price_change_percentage_24h: parseFloat(ticker.change_pct || 0),
+                    total_volume: parseFloat(ticker.volume || 0) * price,
+                  }, "Kraken");
+                }
+              }
             }
+          }
+          
+          // Handle heartbeat
+          if (message.channel === 'heartbeat') {
+            // Connection is alive
+          }
+          
+          // Handle subscription confirmation
+          if (message.method === 'subscribe' && message.success) {
+            console.log(`[Kraken v2] Subscription confirmed`);
           }
         } catch (e) {
           // Silent parse errors
@@ -882,13 +928,15 @@ export const useCryptoPrices = () => {
       
       ws.onerror = () => {
         clearTimeout(connectTimeout);
+        console.log(`[Kraken v2] WebSocket error`);
       };
       
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         clearTimeout(connectTimeout);
         setConnectedExchanges(prev => prev.filter(e => e !== "Kraken"));
+        console.log(`[Kraken v2] Disconnected (code: ${event.code})`);
         
-        const delay = Math.min(4000 + Math.random() * 2000, 10000);
+        const delay = Math.min(5000 + Math.random() * 3000, 12000);
         if (reconnectTimeoutsRef.current.kraken) {
           clearTimeout(reconnectTimeoutsRef.current.kraken);
         }
@@ -899,7 +947,8 @@ export const useCryptoPrices = () => {
       
       krakenWsRef.current = ws;
     } catch (err) {
-      setTimeout(() => connectKraken(), 4000);
+      console.log(`[Kraken v2] Connection failed, retrying...`);
+      setTimeout(() => connectKraken(), 5000);
     }
   }, [updatePrice]);
 

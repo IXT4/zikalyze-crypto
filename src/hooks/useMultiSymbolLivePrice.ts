@@ -116,8 +116,8 @@ export const useMultiSymbolLivePrice = (
         try {
           const data = JSON.parse(event.data);
           
-          // Handle ticker updates
-          if (data.type === 'ticker' && data.source === 'binance') {
+          // Handle ticker updates from both Binance and Kraken
+          if (data.type === 'ticker' && (data.source === 'binance' || data.source === 'kraken')) {
             setState(prev => ({
               ...prev,
               prices: {
@@ -133,13 +133,14 @@ export const useMultiSymbolLivePrice = (
               },
               isLive: true,
               isConnecting: false,
+              source: data.source === 'kraken' ? 'Kraken (Proxy)' : 'Binance (Proxy)',
             }));
             return;
           }
           
           // Handle connection confirmation
           if (data.type === 'connected') {
-            console.log(`[MultiPrice] Proxy confirmed ${data.streamCount} streams`);
+            console.log(`[MultiPrice] Proxy confirmed ${data.streamCount} streams via ${data.source}`);
             return;
           }
         } catch {

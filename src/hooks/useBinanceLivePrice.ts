@@ -123,7 +123,7 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
         try {
           const data = JSON.parse(event.data);
           
-          // Handle proxy format
+          // Handle proxy format (Binance)
           if (data.type === 'ticker' && data.source === 'binance') {
             setLiveData({
               price: data.price,
@@ -139,9 +139,25 @@ export const useBinanceLivePrice = (symbol: string, fallbackPrice?: number, fall
             return;
           }
           
+          // Handle proxy format (Kraken v2)
+          if (data.type === 'ticker' && data.source === 'kraken') {
+            setLiveData({
+              price: data.price,
+              change24h: data.change24h,
+              high24h: data.high24h,
+              low24h: data.low24h,
+              volume: data.volume,
+              lastUpdate: Date.now(),
+              isLive: true,
+              isConnecting: false,
+              source: 'Kraken (Proxy)',
+            });
+            return;
+          }
+          
           // Handle proxy connection confirmation
           if (data.type === 'connected') {
-            console.log(`[LivePrice] Proxy confirmed connection for ${symbol}`);
+            console.log(`[LivePrice] Proxy confirmed connection for ${symbol} via ${data.source}`);
             return;
           }
           
