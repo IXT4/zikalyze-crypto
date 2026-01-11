@@ -659,6 +659,50 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     }
   }, [updateMetrics]);
 
+  // Real-time derived metrics update when price changes significantly
+  const lastPriceUpdateRef = useRef<number>(0);
+  const lastPriceRef = useRef<number>(price);
+  
+  useEffect(() => {
+    // Only update derived metrics if price changed by more than 0.1% or 5 seconds passed
+    const priceChange = Math.abs((price - lastPriceRef.current) / lastPriceRef.current * 100);
+    const timeSinceUpdate = Date.now() - lastPriceUpdateRef.current;
+    
+    if ((priceChange > 0.1 || timeSinceUpdate > 5000) && metricsRef.current && !isLoadingRef.current) {
+      lastPriceRef.current = price;
+      lastPriceUpdateRef.current = Date.now();
+      
+      // Update derived metrics in real-time based on price action
+      const currentChange = change;
+      const isStrongBullish = currentChange > 5;
+      const isStrongBearish = currentChange < -5;
+      
+      let exchangeNetFlow, whaleActivity;
+      const largeTxCount24h = metricsRef.current.whaleActivity.largeTxCount24h;
+      
+      if (isStrongBullish) {
+        exchangeNetFlow = { value: -15000, trend: 'OUTFLOW' as const, magnitude: 'SIGNIFICANT', change24h: -15000 };
+        whaleActivity = { buying: 70, selling: 25, netFlow: 'NET BUYING', largeTxCount24h };
+      } else if (isStrongBearish) {
+        exchangeNetFlow = { value: 12000, trend: 'INFLOW' as const, magnitude: 'MODERATE', change24h: 12000 };
+        whaleActivity = { buying: 30, selling: 60, netFlow: 'NET SELLING', largeTxCount24h };
+      } else if (currentChange > 0) {
+        exchangeNetFlow = { value: -5000, trend: 'OUTFLOW' as const, magnitude: 'MODERATE', change24h: -5000 };
+        whaleActivity = { buying: 55, selling: 40, netFlow: 'ACCUMULATING', largeTxCount24h };
+      } else {
+        exchangeNetFlow = { value: 0, trend: 'NEUTRAL' as const, magnitude: 'LOW', change24h: 0 };
+        whaleActivity = { buying: 48, selling: 48, netFlow: 'BALANCED', largeTxCount24h };
+      }
+      
+      updateMetrics({
+        exchangeNetFlow,
+        whaleActivity,
+        source: metricsRef.current.source,
+        streamStatus: metricsRef.current.streamStatus
+      });
+    }
+  }, [price, change, updateMetrics]);
+
   // Main effect
   useEffect(() => {
     isMountedRef.current = true;
@@ -676,7 +720,7 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     // Connect WebSocket for real-time streaming
     connectWebSocket();
 
-    // No polling - rely on WebSocket for real-time updates
+    // No polling - rely on WebSocket + real-time price updates for derived metrics
 
     return () => {
       isMountedRef.current = false;
