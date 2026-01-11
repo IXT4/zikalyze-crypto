@@ -176,20 +176,19 @@ const markEndpointFailed = (url: string) => {
 };
 
 export const useChainlinkPrices = (symbols: string[] = []) => {
-  const [prices, setPrices] = useState<Map<string, ChainlinkPriceData>>(() => loadCache() || new Map());
-  const [isConnected, setIsConnected] = useState(() => {
-    const cached = loadCache();
-    return cached ? cached.size > 0 : false;
-  });
-  const [isLoading, setIsLoading] = useState(() => !loadCache());
+  // Initialize state without calling functions to avoid React queue issues
+  const [prices, setPrices] = useState<Map<string, ChainlinkPriceData>>(new Map());
+  const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const pricesMapRef = useRef<Map<string, ChainlinkPriceData>>(prices);
+  const pricesMapRef = useRef<Map<string, ChainlinkPriceData>>(new Map());
   const rpcIndexRef = useRef(0);
   const isMountedRef = useRef(true);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastFetchRef = useRef<number>(0);
   const isFetchingRef = useRef(false);
+  const initializedRef = useRef(false);
 
   // Memoize symbols to prevent unnecessary effect triggers
   const symbolsKey = useMemo(() => symbols.join(','), [symbols]);
@@ -305,6 +304,20 @@ export const useChainlinkPrices = (symbols: string[] = []) => {
       setError(results.length === 0 && pricesMapRef.current.size === 0 ? "No prices available" : null);
     }
   }, [symbolsKey, fetchPrice]);
+
+  // Load cache on mount
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    
+    const cached = loadCache();
+    if (cached && cached.size > 0) {
+      pricesMapRef.current = cached;
+      setPrices(cached);
+      setIsConnected(true);
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     isMountedRef.current = true;

@@ -85,134 +85,133 @@ export const usePythPrices = (_symbols: string[] = []) => {
     return pricesMapRef.current.get(normalizedSymbol);
   }, []);
 
-  const cleanup = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-  }, []);
-
-  // Connect to Pyth SSE stream
-  const connect = useCallback(() => {
-    if (!isMountedRef.current) return;
-    
-    cleanup();
-    setIsConnecting(true);
-    setError(null);
-
-    const endpoint = HERMES_ENDPOINTS[endpointIndexRef.current];
-    const feedIds = Object.values(PYTH_FEED_IDS);
-    
-    // Build SSE URL with all feed IDs
-    const params = new URLSearchParams();
-    feedIds.forEach(id => params.append("ids[]", id));
-    params.append("parsed", "true");
-    params.append("allow_unordered", "true");
-    params.append("benchmarks_only", "false");
-    
-    const sseUrl = `${endpoint}/v2/updates/price/stream?${params.toString()}`;
-    
-    console.log(`[Pyth] Connecting to SSE stream...`);
-    
-    try {
-      const eventSource = new EventSource(sseUrl);
-      eventSourceRef.current = eventSource;
-
-      eventSource.onopen = () => {
-        if (!isMountedRef.current) return;
-        console.log("[Pyth] ✓ SSE stream connected");
-        reconnectAttemptRef.current = 0;
-        setIsConnected(true);
-        setIsConnecting(false);
-        setError(null);
-      };
-
-      eventSource.onmessage = (event) => {
-        if (!isMountedRef.current) return;
-        
-        try {
-          const data = JSON.parse(event.data);
-          
-          // Handle price updates
-          if (data.parsed && Array.isArray(data.parsed)) {
-            const now = Date.now();
-            let hasUpdates = false;
-            
-            data.parsed.forEach((feed: any) => {
-              const feedId = feed.id;
-              const symbol = FEED_ID_TO_SYMBOL[feedId];
-              
-              if (symbol && feed.price) {
-                const price = parseFloat(feed.price.price) * Math.pow(10, feed.price.expo);
-                const confidence = parseFloat(feed.price.conf) * Math.pow(10, feed.price.expo);
-                
-                if (price > 0) {
-                  const priceData: PythPriceData = {
-                    symbol: symbol.replace("/USD", ""),
-                    price,
-                    confidence,
-                    publishTime: feed.price.publish_time * 1000,
-                    source: "Pyth",
-                  };
-                  
-                  pricesMapRef.current.set(symbol, priceData);
-                  hasUpdates = true;
-                }
-              }
-            });
-            
-            // Throttle state updates to every 200ms
-            if (hasUpdates && now - lastUpdateRef.current > 200) {
-              lastUpdateRef.current = now;
-              setPrices(new Map(pricesMapRef.current));
-            }
-          }
-        } catch {
-          // Ignore parse errors
-        }
-      };
-
-      eventSource.onerror = () => {
-        if (!isMountedRef.current) return;
-        
-        console.log("[Pyth] SSE connection error, reconnecting...");
-        cleanup();
-        
-        setIsConnected(false);
-        setIsConnecting(true);
-        
-        // Try next endpoint after 2 failures
-        if (reconnectAttemptRef.current >= 2) {
-          endpointIndexRef.current = (endpointIndexRef.current + 1) % HERMES_ENDPOINTS.length;
-        }
-        
-        // Reconnect with backoff
-        if (reconnectAttemptRef.current < 10) {
-          reconnectAttemptRef.current++;
-          const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptRef.current), 30000);
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (isMountedRef.current) connect();
-          }, delay);
-        } else {
-          setIsConnecting(false);
-          setError("Failed to connect to Pyth Network");
-        }
-      };
-    } catch (e) {
-      console.error("[Pyth] Connection error:", e);
-      setIsConnecting(false);
-      setError("Failed to initialize Pyth stream");
-    }
-  }, [cleanup]);
-
   useEffect(() => {
     isMountedRef.current = true;
-    
+
+    const cleanup = () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+
+    const connect = () => {
+      if (!isMountedRef.current) return;
+      
+      cleanup();
+      setIsConnecting(true);
+      setError(null);
+
+      const endpoint = HERMES_ENDPOINTS[endpointIndexRef.current];
+      const feedIds = Object.values(PYTH_FEED_IDS);
+      
+      // Build SSE URL with all feed IDs
+      const params = new URLSearchParams();
+      feedIds.forEach(id => params.append("ids[]", id));
+      params.append("parsed", "true");
+      params.append("allow_unordered", "true");
+      params.append("benchmarks_only", "false");
+      
+      const sseUrl = `${endpoint}/v2/updates/price/stream?${params.toString()}`;
+      
+      console.log(`[Pyth] Connecting to SSE stream...`);
+      
+      try {
+        const eventSource = new EventSource(sseUrl);
+        eventSourceRef.current = eventSource;
+
+        eventSource.onopen = () => {
+          if (!isMountedRef.current) return;
+          console.log("[Pyth] ✓ SSE stream connected");
+          reconnectAttemptRef.current = 0;
+          setIsConnected(true);
+          setIsConnecting(false);
+          setError(null);
+        };
+
+        eventSource.onmessage = (event) => {
+          if (!isMountedRef.current) return;
+          
+          try {
+            const data = JSON.parse(event.data);
+            
+            // Handle price updates
+            if (data.parsed && Array.isArray(data.parsed)) {
+              const now = Date.now();
+              let hasUpdates = false;
+              
+              data.parsed.forEach((feed: any) => {
+                const feedId = feed.id;
+                const symbol = FEED_ID_TO_SYMBOL[feedId];
+                
+                if (symbol && feed.price) {
+                  const price = parseFloat(feed.price.price) * Math.pow(10, feed.price.expo);
+                  const confidence = parseFloat(feed.price.conf) * Math.pow(10, feed.price.expo);
+                  
+                  if (price > 0) {
+                    const priceData: PythPriceData = {
+                      symbol: symbol.replace("/USD", ""),
+                      price,
+                      confidence,
+                      publishTime: feed.price.publish_time * 1000,
+                      source: "Pyth",
+                    };
+                    
+                    pricesMapRef.current.set(symbol, priceData);
+                    hasUpdates = true;
+                  }
+                }
+              });
+              
+              // Throttle state updates to every 300ms
+              if (hasUpdates && now - lastUpdateRef.current > 300) {
+                lastUpdateRef.current = now;
+                setPrices(new Map(pricesMapRef.current));
+              }
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        };
+
+        eventSource.onerror = () => {
+          if (!isMountedRef.current) return;
+          
+          console.log("[Pyth] SSE connection error, reconnecting...");
+          cleanup();
+          
+          setIsConnected(false);
+          setIsConnecting(true);
+          
+          // Try next endpoint after 2 failures
+          if (reconnectAttemptRef.current >= 2) {
+            endpointIndexRef.current = (endpointIndexRef.current + 1) % HERMES_ENDPOINTS.length;
+          }
+          
+          // Reconnect with backoff
+          if (reconnectAttemptRef.current < 10) {
+            reconnectAttemptRef.current++;
+            const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptRef.current), 30000);
+            
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (isMountedRef.current) connect();
+            }, delay);
+          } else {
+            setIsConnecting(false);
+            setError("Failed to connect to Pyth Network");
+          }
+        };
+      } catch (e) {
+        console.error("[Pyth] Connection error:", e);
+        setIsConnecting(false);
+        setError("Failed to initialize Pyth stream");
+      }
+    };
+
     // Start connection immediately
     connect();
 
@@ -220,7 +219,7 @@ export const usePythPrices = (_symbols: string[] = []) => {
       isMountedRef.current = false;
       cleanup();
     };
-  }, [connect, cleanup]);
+  }, []);
 
   return {
     prices,

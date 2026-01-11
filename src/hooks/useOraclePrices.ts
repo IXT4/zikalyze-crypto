@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { usePythPrices, PythPriceData } from "./usePythPrices";
 import { useChainlinkPrices, ChainlinkPriceData } from "./useChainlinkPrices";
 
@@ -21,7 +21,7 @@ export interface OracleState {
   chainlinkConnected: boolean;
 }
 
-export const useOraclePrices = (symbols: string[] = []) => {
+export const useOraclePrices = (_symbols: string[] = []) => {
   const [prices, setPrices] = useState<Map<string, OraclePriceData>>(new Map());
   const [isLive, setIsLive] = useState(false);
   const [primarySource, setPrimarySource] = useState<"Pyth" | "Chainlink" | "none">("none");
@@ -29,11 +29,11 @@ export const useOraclePrices = (symbols: string[] = []) => {
   const pricesRef = useRef<Map<string, OraclePriceData>>(new Map());
   const isMountedRef = useRef(true);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastMergeRef = useRef<number>(0);
 
-  // Connect to both oracles - memoize symbols to prevent unnecessary re-renders
-  const memoizedSymbols = useMemo(() => symbols, [symbols.join(',')]);
-  const pyth = usePythPrices(memoizedSymbols);
-  const chainlink = useChainlinkPrices(memoizedSymbols);
+  // Connect to both oracles
+  const pyth = usePythPrices([]);
+  const chainlink = useChainlinkPrices([]);
 
   // Merge prices - Pyth is primary, Chainlink is fallback
   useEffect(() => {
@@ -44,9 +44,14 @@ export const useOraclePrices = (symbols: string[] = []) => {
       clearTimeout(updateTimeoutRef.current);
     }
 
-    // Fast debounce for smooth updates
+    // Debounce and throttle updates
+    const now = Date.now();
+    const timeSinceLastMerge = now - lastMergeRef.current;
+    const delay = timeSinceLastMerge < 200 ? 200 - timeSinceLastMerge : 50;
+
     updateTimeoutRef.current = setTimeout(() => {
       if (!isMountedRef.current) return;
+      lastMergeRef.current = Date.now();
 
       const merged = new Map<string, OraclePriceData>();
 
@@ -83,7 +88,7 @@ export const useOraclePrices = (symbols: string[] = []) => {
       setPrices(new Map(merged));
       setIsLive(newIsLive);
       setPrimarySource(newPrimarySource);
-    }, 100);
+    }, delay);
 
     return () => {
       if (updateTimeoutRef.current) {
