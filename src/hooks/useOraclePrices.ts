@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { usePythPrices, PythPriceData } from "./usePythPrices";
 import { useChainlinkPrices, ChainlinkPriceData } from "./useChainlinkPrices";
 
@@ -22,66 +22,84 @@ export interface OracleState {
 }
 
 export const useOraclePrices = (symbols: string[] = []) => {
-  const [state, setState] = useState<OracleState>({
-    prices: new Map(),
-    isLive: false,
-    primarySource: "none",
-    pythConnected: false,
-    chainlinkConnected: false,
-  });
+  const [prices, setPrices] = useState<Map<string, OraclePriceData>>(new Map());
+  const [isLive, setIsLive] = useState(false);
+  const [primarySource, setPrimarySource] = useState<"Pyth" | "Chainlink" | "none">("none");
 
   const pricesRef = useRef<Map<string, OraclePriceData>>(new Map());
   const isMountedRef = useRef(true);
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Connect to both oracles
-  const pyth = usePythPrices(symbols);
-  const chainlink = useChainlinkPrices(symbols);
+  // Connect to both oracles - memoize symbols to prevent unnecessary re-renders
+  const memoizedSymbols = useMemo(() => symbols, [symbols.join(',')]);
+  const pyth = usePythPrices(memoizedSymbols);
+  const chainlink = useChainlinkPrices(memoizedSymbols);
 
-  // Merge prices: Pyth takes priority, Chainlink fills gaps
+  // Merge prices with debouncing to prevent rapid state updates
   useEffect(() => {
     if (!isMountedRef.current) return;
 
-    const merged = new Map<string, OraclePriceData>();
+    // Clear any pending update
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current);
+    }
 
-    // First add all Chainlink prices as base
-    chainlink.prices.forEach((data: ChainlinkPriceData, key: string) => {
-      const symbol = key.replace("/USD", "");
-      merged.set(symbol, {
-        symbol,
-        price: data.price,
-        lastUpdate: data.updatedAt,
-        source: "Chainlink",
+    // Debounce updates to prevent React queue issues
+    updateTimeoutRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
+
+      const merged = new Map<string, OraclePriceData>();
+
+      // First add all Chainlink prices as base
+      chainlink.prices.forEach((data: ChainlinkPriceData, key: string) => {
+        if (!data || !data.price || data.price <= 0) return;
+        const symbol = key.replace("/USD", "").toUpperCase();
+        merged.set(symbol, {
+          symbol,
+          price: data.price,
+          lastUpdate: data.updatedAt || Date.now(),
+          source: "Chainlink",
+        });
       });
-    });
 
-    // Override with Pyth prices (higher priority - real-time WebSocket)
-    pyth.prices.forEach((data: PythPriceData, key: string) => {
-      const symbol = key.replace("/USD", "");
-      merged.set(symbol, {
-        symbol,
-        price: data.price,
-        confidence: data.confidence,
-        lastUpdate: data.publishTime,
-        source: "Pyth",
+      // Override with Pyth prices (higher priority - real-time WebSocket)
+      pyth.prices.forEach((data: PythPriceData, key: string) => {
+        if (!data || !data.price || data.price <= 0) return;
+        const symbol = key.replace("/USD", "").toUpperCase();
+        merged.set(symbol, {
+          symbol,
+          price: data.price,
+          confidence: data.confidence,
+          lastUpdate: data.publishTime || Date.now(),
+          source: "Pyth",
+        });
       });
-    });
 
-    pricesRef.current = merged;
+      pricesRef.current = merged;
 
-    const primarySource = pyth.isConnected ? "Pyth" : chainlink.isConnected ? "Chainlink" : "none";
+      const newPrimarySource = pyth.isConnected ? "Pyth" : chainlink.isConnected ? "Chainlink" : "none";
+      const newIsLive = pyth.isConnected || chainlink.isConnected;
 
-    setState({
-      prices: merged,
-      isLive: pyth.isConnected || chainlink.isConnected,
-      primarySource,
-      pythConnected: pyth.isConnected,
-      chainlinkConnected: chainlink.isConnected,
-    });
+      setPrices(new Map(merged));
+      setIsLive(newIsLive);
+      setPrimarySource(newPrimarySource);
+    }, 50); // 50ms debounce
+
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+    };
   }, [pyth.prices, pyth.isConnected, chainlink.prices, chainlink.isConnected]);
 
   useEffect(() => {
     isMountedRef.current = true;
-    return () => { isMountedRef.current = false; };
+    return () => { 
+      isMountedRef.current = false;
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+    };
   }, []);
 
   const getPrice = useCallback((symbol: string): OraclePriceData | undefined => {
@@ -90,11 +108,11 @@ export const useOraclePrices = (symbols: string[] = []) => {
   }, []);
 
   return {
-    prices: state.prices,
-    isLive: state.isLive,
-    primarySource: state.primarySource,
-    pythConnected: state.pythConnected,
-    chainlinkConnected: state.chainlinkConnected,
+    prices,
+    isLive,
+    primarySource,
+    pythConnected: pyth.isConnected,
+    chainlinkConnected: chainlink.isConnected,
     getPrice,
     pythStatus: {
       isConnected: pyth.isConnected,
