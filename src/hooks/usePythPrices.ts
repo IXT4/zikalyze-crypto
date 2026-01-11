@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
-// Pyth Network Hermes - Real-time decentralized price streaming
-// Using Hermes REST + SSE for maximum reliability
+// Pyth Network Hermes WebSocket - True decentralized real-time streaming
+// WebSocket is more reliable than SSE for continuous price feeds
 
 export interface PythPriceData {
   symbol: string;
@@ -11,10 +11,10 @@ export interface PythPriceData {
   source: "Pyth";
 }
 
-// Pyth Hermes endpoints
-const HERMES_ENDPOINTS = [
-  "https://hermes.pyth.network",
-  "https://hermes-beta.pyth.network",
+// Pyth Hermes WebSocket endpoints
+const HERMES_WS_ENDPOINTS = [
+  "wss://hermes.pyth.network/ws",
+  "wss://hermes-beta.pyth.network/ws",
 ];
 
 // Pyth Price Feed IDs for top cryptocurrencies
@@ -74,11 +74,12 @@ export const usePythPrices = (_symbols: string[] = []) => {
 
   const pricesMapRef = useRef<Map<string, PythPriceData>>(new Map());
   const isMountedRef = useRef(true);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const endpointIndexRef = useRef(0);
   const reconnectAttemptRef = useRef(0);
   const lastUpdateRef = useRef<number>(0);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const getPrice = useCallback((symbol: string): PythPriceData | undefined => {
     const normalizedSymbol = symbol.toUpperCase().replace(/USD$/, "") + "/USD";
@@ -93,9 +94,13 @@ export const usePythPrices = (_symbols: string[] = []) => {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
       }
     };
 
@@ -106,71 +111,76 @@ export const usePythPrices = (_symbols: string[] = []) => {
       setIsConnecting(true);
       setError(null);
 
-      const endpoint = HERMES_ENDPOINTS[endpointIndexRef.current];
-      const feedIds = Object.values(PYTH_FEED_IDS);
+      const endpoint = HERMES_WS_ENDPOINTS[endpointIndexRef.current];
       
-      // Build SSE URL with all feed IDs
-      const params = new URLSearchParams();
-      feedIds.forEach(id => params.append("ids[]", id));
-      params.append("parsed", "true");
-      params.append("allow_unordered", "true");
-      params.append("benchmarks_only", "false");
-      
-      const sseUrl = `${endpoint}/v2/updates/price/stream?${params.toString()}`;
-      
-      console.log(`[Pyth] Connecting to SSE stream...`);
+      console.log(`[Pyth WS] Connecting to ${endpoint}...`);
       
       try {
-        const eventSource = new EventSource(sseUrl);
-        eventSourceRef.current = eventSource;
+        const ws = new WebSocket(endpoint);
+        wsRef.current = ws;
 
-        eventSource.onopen = () => {
+        ws.onopen = () => {
           if (!isMountedRef.current) return;
-          console.log("[Pyth] ✓ SSE stream connected");
+          console.log("[Pyth WS] ✓ Connected");
           reconnectAttemptRef.current = 0;
           setIsConnected(true);
           setIsConnecting(false);
           setError(null);
+
+          // Subscribe to all price feeds
+          const feedIds = Object.values(PYTH_FEED_IDS);
+          const subscribeMsg = {
+            type: "subscribe",
+            ids: feedIds,
+            verbose: true,
+            binary: false,
+          };
+          
+          ws.send(JSON.stringify(subscribeMsg));
+          console.log(`[Pyth WS] Subscribed to ${feedIds.length} feeds`);
+
+          // Heartbeat to keep connection alive
+          heartbeatIntervalRef.current = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "ping" }));
+            }
+          }, 25000);
         };
 
-        eventSource.onmessage = (event) => {
+        ws.onmessage = (event) => {
           if (!isMountedRef.current) return;
           
           try {
             const data = JSON.parse(event.data);
             
-            // Handle price updates
-            if (data.parsed && Array.isArray(data.parsed)) {
-              const now = Date.now();
-              let hasUpdates = false;
+            // Handle price update messages
+            if (data.type === "price_update" && data.price_feed) {
+              const feed = data.price_feed;
+              const feedId = feed.id;
+              const symbol = FEED_ID_TO_SYMBOL[feedId];
               
-              data.parsed.forEach((feed: any) => {
-                const feedId = feed.id;
-                const symbol = FEED_ID_TO_SYMBOL[feedId];
+              if (symbol && feed.price) {
+                const price = parseFloat(feed.price.price) * Math.pow(10, feed.price.expo);
+                const confidence = parseFloat(feed.price.conf) * Math.pow(10, feed.price.expo);
                 
-                if (symbol && feed.price) {
-                  const price = parseFloat(feed.price.price) * Math.pow(10, feed.price.expo);
-                  const confidence = parseFloat(feed.price.conf) * Math.pow(10, feed.price.expo);
+                if (price > 0) {
+                  const priceData: PythPriceData = {
+                    symbol: symbol.replace("/USD", ""),
+                    price,
+                    confidence,
+                    publishTime: feed.price.publish_time * 1000,
+                    source: "Pyth",
+                  };
                   
-                  if (price > 0) {
-                    const priceData: PythPriceData = {
-                      symbol: symbol.replace("/USD", ""),
-                      price,
-                      confidence,
-                      publishTime: feed.price.publish_time * 1000,
-                      source: "Pyth",
-                    };
-                    
-                    pricesMapRef.current.set(symbol, priceData);
-                    hasUpdates = true;
+                  pricesMapRef.current.set(symbol, priceData);
+                  
+                  // Throttle state updates to every 200ms for smooth UI
+                  const now = Date.now();
+                  if (now - lastUpdateRef.current > 200) {
+                    lastUpdateRef.current = now;
+                    setPrices(new Map(pricesMapRef.current));
                   }
                 }
-              });
-              
-              // Throttle state updates to every 300ms
-              if (hasUpdates && now - lastUpdateRef.current > 300) {
-                lastUpdateRef.current = now;
-                setPrices(new Map(pricesMapRef.current));
               }
             }
           } catch {
@@ -178,24 +188,32 @@ export const usePythPrices = (_symbols: string[] = []) => {
           }
         };
 
-        eventSource.onerror = () => {
+        ws.onerror = (e) => {
+          if (!isMountedRef.current) return;
+          console.log("[Pyth WS] Connection error", e);
+        };
+
+        ws.onclose = () => {
           if (!isMountedRef.current) return;
           
-          console.log("[Pyth] SSE connection error, reconnecting...");
-          cleanup();
-          
+          console.log("[Pyth WS] Connection closed, reconnecting...");
           setIsConnected(false);
           setIsConnecting(true);
           
-          // Try next endpoint after 2 failures
-          if (reconnectAttemptRef.current >= 2) {
-            endpointIndexRef.current = (endpointIndexRef.current + 1) % HERMES_ENDPOINTS.length;
+          if (heartbeatIntervalRef.current) {
+            clearInterval(heartbeatIntervalRef.current);
+            heartbeatIntervalRef.current = null;
           }
           
-          // Reconnect with backoff
-          if (reconnectAttemptRef.current < 10) {
+          // Try next endpoint after 2 failures
+          if (reconnectAttemptRef.current >= 2) {
+            endpointIndexRef.current = (endpointIndexRef.current + 1) % HERMES_WS_ENDPOINTS.length;
+          }
+          
+          // Reconnect with backoff (max 30 retries)
+          if (reconnectAttemptRef.current < 30) {
             reconnectAttemptRef.current++;
-            const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptRef.current), 30000);
+            const delay = Math.min(1000 * Math.pow(1.3, reconnectAttemptRef.current), 30000);
             
             reconnectTimeoutRef.current = setTimeout(() => {
               if (isMountedRef.current) connect();
@@ -206,7 +224,7 @@ export const usePythPrices = (_symbols: string[] = []) => {
           }
         };
       } catch (e) {
-        console.error("[Pyth] Connection error:", e);
+        console.error("[Pyth WS] Connection error:", e);
         setIsConnecting(false);
         setError("Failed to initialize Pyth stream");
       }

@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { usePythPrices, PythPriceData } from "./usePythPrices";
 import { useChainlinkPrices, ChainlinkPriceData } from "./useChainlinkPrices";
 
-// Unified Oracle Price Hook - Pyth Primary, Chainlink Fallback
-// Pure decentralized streaming with no centralized API dependencies
+// Unified Oracle Price Hook - Pyth WebSocket Primary, Chainlink Fallback
+// 100% decentralized streaming with no centralized API dependencies
 
 export interface OraclePriceData {
   symbol: string;
@@ -28,10 +28,9 @@ export const useOraclePrices = (_symbols: string[] = []) => {
 
   const pricesRef = useRef<Map<string, OraclePriceData>>(new Map());
   const isMountedRef = useRef(true);
-  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastMergeRef = useRef<number>(0);
+  const lastUpdateRef = useRef<number>(0);
 
-  // Connect to both oracles
+  // Connect to both oracles - Pyth WebSocket is primary
   const pyth = usePythPrices([]);
   const chainlink = useChainlinkPrices([]);
 
@@ -39,71 +38,52 @@ export const useOraclePrices = (_symbols: string[] = []) => {
   useEffect(() => {
     if (!isMountedRef.current) return;
 
-    // Clear pending update
-    if (updateTimeoutRef.current) {
-      clearTimeout(updateTimeoutRef.current);
-    }
-
-    // Debounce and throttle updates
+    // Throttle updates to 150ms for smooth UI
     const now = Date.now();
-    const timeSinceLastMerge = now - lastMergeRef.current;
-    const delay = timeSinceLastMerge < 200 ? 200 - timeSinceLastMerge : 50;
+    if (now - lastUpdateRef.current < 150) return;
+    lastUpdateRef.current = now;
 
-    updateTimeoutRef.current = setTimeout(() => {
-      if (!isMountedRef.current) return;
-      lastMergeRef.current = Date.now();
+    const merged = new Map<string, OraclePriceData>();
 
-      const merged = new Map<string, OraclePriceData>();
-
-      // Add Chainlink prices as base (fallback)
-      chainlink.prices.forEach((data: ChainlinkPriceData, key: string) => {
-        if (!data || !data.price || data.price <= 0) return;
-        const symbol = key.replace("/USD", "").toUpperCase();
-        merged.set(symbol, {
-          symbol,
-          price: data.price,
-          lastUpdate: data.updatedAt || Date.now(),
-          source: "Chainlink",
-        });
+    // Add Chainlink prices as base (fallback - one-time fetch)
+    chainlink.prices.forEach((data: ChainlinkPriceData, key: string) => {
+      if (!data || !data.price || data.price <= 0) return;
+      const symbol = key.replace("/USD", "").toUpperCase();
+      merged.set(symbol, {
+        symbol,
+        price: data.price,
+        lastUpdate: data.updatedAt || Date.now(),
+        source: "Chainlink",
       });
+    });
 
-      // Override with Pyth prices (primary - real-time SSE)
-      pyth.prices.forEach((data: PythPriceData, key: string) => {
-        if (!data || !data.price || data.price <= 0) return;
-        const symbol = key.replace("/USD", "").toUpperCase();
-        merged.set(symbol, {
-          symbol,
-          price: data.price,
-          confidence: data.confidence,
-          lastUpdate: data.publishTime || Date.now(),
-          source: "Pyth",
-        });
+    // Override with Pyth prices (primary - real-time WebSocket)
+    pyth.prices.forEach((data: PythPriceData, key: string) => {
+      if (!data || !data.price || data.price <= 0) return;
+      const symbol = key.replace("/USD", "").toUpperCase();
+      merged.set(symbol, {
+        symbol,
+        price: data.price,
+        confidence: data.confidence,
+        lastUpdate: data.publishTime || Date.now(),
+        source: "Pyth",
       });
+    });
 
-      pricesRef.current = merged;
+    pricesRef.current = merged;
 
-      const newPrimarySource = pyth.isConnected ? "Pyth" : chainlink.isConnected ? "Chainlink" : "none";
-      const newIsLive = pyth.isConnected || chainlink.isConnected;
+    const newPrimarySource = pyth.isConnected ? "Pyth" : chainlink.isConnected ? "Chainlink" : "none";
+    const newIsLive = pyth.isConnected || chainlink.isConnected;
 
-      setPrices(new Map(merged));
-      setIsLive(newIsLive);
-      setPrimarySource(newPrimarySource);
-    }, delay);
-
-    return () => {
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
-    };
+    setPrices(new Map(merged));
+    setIsLive(newIsLive);
+    setPrimarySource(newPrimarySource);
   }, [pyth.prices, pyth.isConnected, chainlink.prices, chainlink.isConnected]);
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => { 
       isMountedRef.current = false;
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
     };
   }, []);
 

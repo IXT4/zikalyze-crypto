@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePythPrices, PythPriceData, PYTH_FEED_IDS } from "./usePythPrices";
-import { useChainlinkPrices, ChainlinkPriceData, CHAINLINK_FEEDS_ETH, CHAINLINK_FEEDS_ARB } from "./useChainlinkPrices";
+import { useChainlinkPrices, ChainlinkPriceData, CHAINLINK_FEEDS_ETH } from "./useChainlinkPrices";
 import { toast } from "sonner";
 
 // Oracle Cross-Validation Hook
@@ -38,10 +38,7 @@ const ALERT_COOLDOWN_MS = 60 * 1000; // 1 minute
 // Get symbols that exist in both oracles - limit to top assets to reduce API calls
 const getCommonSymbols = (): string[] => {
   const pythSymbols = Object.keys(PYTH_FEED_IDS).map(s => s.replace("/USD", ""));
-  const chainlinkSymbols = [
-    ...Object.keys(CHAINLINK_FEEDS_ETH),
-    ...Object.keys(CHAINLINK_FEEDS_ARB),
-  ].map(s => s.replace("/USD", ""));
+  const chainlinkSymbols = Object.keys(CHAINLINK_FEEDS_ETH).map(s => s.replace("/USD", ""));
   
   // Only monitor top assets that exist in both oracles
   const prioritySymbols = ["BTC", "ETH", "SOL", "LINK", "AAVE", "UNI", "AVAX", "ATOM", "DOT", "LTC"];
