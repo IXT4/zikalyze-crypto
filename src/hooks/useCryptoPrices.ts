@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { fetchWithRetry, safeFetch } from "@/lib/fetchWithRetry";
+import { safeFetch } from "@/lib/fetchWithRetry";
 import { useOraclePrices } from "./useOraclePrices";
 
 export interface CryptoPrice {
@@ -81,141 +81,7 @@ const PRIORITY_TOKENS = [
 
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
 
-// CoinGecko ID to CoinCap ID mapping (they differ for many coins)
-const COINGECKO_TO_COINCAP: Record<string, string> = {
-  "bitcoin": "bitcoin",
-  "ethereum": "ethereum",
-  "tether": "tether",
-  "ripple": "xrp",
-  "solana": "solana",
-  "binancecoin": "binance-coin",
-  "dogecoin": "dogecoin",
-  "usd-coin": "usd-coin",
-  "cardano": "cardano",
-  "tron": "tron",
-  "avalanche-2": "avalanche",
-  "chainlink": "chainlink",
-  "the-open-network": "the-open-network",
-  "shiba-inu": "shiba-inu",
-  "sui": "sui",
-  "stellar": "stellar",
-  "polkadot": "polkadot",
-  "hedera-hashgraph": "hedera-hashgraph",
-  "bitcoin-cash": "bitcoin-cash",
-  "unus-sed-leo": "unus-sed-leo",
-  "litecoin": "litecoin",
-  "cosmos": "cosmos",
-  "uniswap": "uniswap",
-  "near": "near-protocol",
-  "ethereum-classic": "ethereum-classic",
-  "aptos": "aptos",
-  "render-token": "render-token",
-  "vechain": "vechain",
-  "internet-computer": "internet-computer",
-  "matic-network": "polygon",
-  "polygon": "polygon",
-  "crypto-com-chain": "crypto-com-coin",
-  "filecoin": "filecoin",
-  "arbitrum": "arbitrum",
-  "maker": "maker",
-  "algorand": "algorand",
-  "kaspa": "kaspa",
-  "optimism": "optimism",
-  "aave": "aave",
-  "immutable-x": "immutable-x",
-  "injective-protocol": "injective-protocol",
-  "fantom": "fantom",
-  "blockstack": "stacks",
-  "stacks": "stacks",
-  "monero": "monero",
-  "theta-token": "theta",
-  "the-graph": "the-graph",
-  "dogwifcoin": "dogwifcoin",
-  "bonk": "bonk",
-  "pepe": "pepe",
-  "floki": "floki-inu",
-  "fetch-ai": "fetch-ai",
-  "thorchain": "thorchain",
-  "the-sandbox": "the-sandbox",
-  "decentraland": "decentraland",
-  "axie-infinity": "axie-infinity",
-  "gala": "gala",
-  "apecoin": "apecoin",
-  "curve-dao-token": "curve-dao-token",
-  "synthetix-network-token": "synthetix-network-token",
-  "compound-governance-token": "compound",
-  "lido-dao": "lido-dao",
-  "ethereum-name-service": "ethereum-name-service",
-  "eos": "eos",
-  "tezos": "tezos",
-  "neo": "neo",
-  "kava": "kava",
-  "zcash": "zcash",
-  "dash": "dash",
-  "elrond-erd-2": "elrond-erd-2",
-  "flow": "flow",
-  "mina-protocol": "mina",
-  "oasis-network": "oasis-network",
-  "harmony": "harmony",
-  "zilliqa": "zilliqa",
-  "enjincoin": "enjin-coin",
-  "chiliz": "chiliz",
-  "basic-attention-token": "basic-attention-token",
-  "pancakeswap-token": "pancakeswap-token",
-  "sushi": "sushiswap",
-  "yearn-finance": "yearn-finance",
-  "wrapped-bitcoin": "wrapped-bitcoin",
-  "okb": "okb",
-  "celestia": "celestia",
-  "sei-network": "sei-network",
-  "bittensor": "bittensor",
-  "pyth-network": "pyth-network",
-  "ordi": "ordi",
-  "blur": "blur",
-  "pendle": "pendle",
-  "worldcoin-wld": "worldcoin-wld",
-  "jupiter-exchange-solana": "jupiter-exchange-solana",
-  "ondo-finance": "ondo-finance",
-  "xdc-network": "xdc-network",
-  "jasmy": "jasmy",
-  "iota": "iota",
-  "quant-network": "quant",
-  "core": "core",
-  "stepn": "green-metaverse-token",
-  "starknet": "starknet-token",
-  "notcoin": "notcoin",
-  "zksync": "zksync",
-  "eigenlayer": "eigenlayer",
-  "popcat": "popcat-sol",
-  "arweave": "arweave",
-  "storj": "storj",
-  "livepeer": "livepeer",
-  "osmosis": "osmosis",
-  "celo": "celo",
-  "klaytn": "klaytn",
-  "gmx": "gmx",
-  "balancer": "balancer",
-  "ocean-protocol": "ocean-protocol",
-  "singularitynet": "singularitynet",
-  "akash-network": "akash-network",
-  "mantle": "mantle",
-  "beam-2": "beam",
-  "ronin": "ronin",
-  "flare-networks": "flare-networks",
-  "conflux-token": "conflux-network",
-  "theta-fuel": "theta-fuel",
-  "bittorrent": "bittorrent",
-  "wink": "wink",
-  "just": "just",
-  "gomining-token": "gomining",
-  "gomining": "gomining",
-};
-
-// No caching - always fetch fresh data from WebSocket
-// CoinGecko is only used for initial metadata (images, names)
-
-// Fallback prices are placeholders - will be replaced with live CoinGecko data
-// These are only used for initial render before API data loads
+// Fallback prices are placeholders - will be replaced with live Oracle data
 const FALLBACK_CRYPTOS: CryptoPrice[] = [
   { id: "bitcoin", symbol: "btc", name: "Bitcoin", image: "https://assets.coingecko.com/coins/images/1/large/bitcoin.png", current_price: 0, price_change_percentage_24h: 0, high_24h: 0, low_24h: 0, total_volume: 0, market_cap: 0, market_cap_rank: 1, circulating_supply: 19600000, lastUpdate: Date.now(), source: "Loading" },
   { id: "ethereum", symbol: "eth", name: "Ethereum", image: "https://assets.coingecko.com/coins/images/279/large/ethereum.png", current_price: 0, price_change_percentage_24h: 0, high_24h: 0, low_24h: 0, total_volume: 0, market_cap: 0, market_cap_rank: 2, circulating_supply: 120000000, lastUpdate: Date.now(), source: "Loading" },
@@ -224,70 +90,38 @@ const FALLBACK_CRYPTOS: CryptoPrice[] = [
   { id: "ripple", symbol: "xrp", name: "XRP", image: "https://assets.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png", current_price: 0, price_change_percentage_24h: 0, high_24h: 0, low_24h: 0, total_volume: 0, market_cap: 0, market_cap_rank: 5, circulating_supply: 57000000000, lastUpdate: Date.now(), source: "Loading" },
 ];
 
-// Exchange WebSocket endpoints - prioritize most reliable free sources
-const EXCHANGES = {
-  // Binance combined stream - most reliable, handles 100+ symbols
-  binance: {
-    url: "wss://stream.binance.com:9443/ws",
-    combinedUrl: "wss://stream.binance.com:9443/stream?streams=",
-    name: "Binance",
-  },
-  // Binance.US fallback for US users
-  binanceUs: {
-    url: "wss://stream.binance.us:9443/ws",
-    combinedUrl: "wss://stream.binance.us:9443/stream?streams=",
-    name: "BinanceUS",
-  },
-  // CoinCap - free, supports many altcoins
-  coincap: {
-    url: "wss://ws.coincap.io/prices?assets=",
-    name: "CoinCap",
-  },
-  // Kraken v2 API - reliable for major pairs with better symbol support
-  kraken: {
-    url: "wss://ws.kraken.com/v2",
-    name: "Kraken",
-  },
-};
-
 export const useCryptoPrices = () => {
   const [prices, setPrices] = useState<CryptoPrice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [connectedExchanges, setConnectedExchanges] = useState<string[]>([]);
+  const [connectedSources, setConnectedSources] = useState<string[]>([]);
   const [isLive, setIsLive] = useState(false);
   
   // Decentralized Oracle Integration - Pyth Primary, Chainlink Fallback
   const oracle = useOraclePrices();
   
-  // WebSocket refs - simplified to most reliable free sources
-  const binanceWsRef = useRef<WebSocket | null>(null);
-  const coincapWsRef = useRef<WebSocket | null>(null);
-  const krakenWsRef = useRef<WebSocket | null>(null);
-  
-  const reconnectTimeoutsRef = useRef<Record<string, number>>({});
   const cryptoListRef = useRef<{ symbol: string; name: string; id: string }[]>([]);
   const pricesRef = useRef<Map<string, CryptoPrice>>(new Map());
   const lastUpdateTimeRef = useRef<Map<string, number>>(new Map());
-  const coinIdMapRef = useRef<Map<string, string>>(new Map()); // CoinCap ID to symbol mapping
-  const exchangesConnectedRef = useRef(false);
-  const pricesInitializedRef = useRef(false); // Track if prices have been initialized
+  const pricesInitializedRef = useRef(false);
   
-  // Throttle interval - 100ms for true real-time updates while preventing UI flicker
+  // Throttle interval for readable updates
   const UPDATE_THROTTLE_MS = 100;
   
-  // Apply Oracle prices as primary source (Pyth/Chainlink)
+  // Apply Oracle prices as primary source (Pyth/Chainlink) - DECENTRALIZED ONLY
   useEffect(() => {
     if (!oracle.isLive || oracle.prices.size === 0) return;
     
     const now = Date.now();
+    let hasUpdates = false;
+    
     oracle.prices.forEach((oracleData, _key) => {
       const symbol = oracleData.symbol.toLowerCase();
       const existing = pricesRef.current.get(symbol);
       
       if (existing && oracleData.price > 0) {
         // Oracle prices take priority - update if significantly different or fresher
-        const priceDiff = Math.abs(existing.current_price - oracleData.price) / existing.current_price;
+        const priceDiff = Math.abs(existing.current_price - oracleData.price) / (existing.current_price || 1);
         const isSignificant = priceDiff > 0.0001; // 0.01% threshold
         
         if (isSignificant) {
@@ -299,15 +133,18 @@ export const useCryptoPrices = () => {
             source: oracleSource,
           };
           pricesRef.current.set(symbol, updated);
+          hasUpdates = true;
         }
       }
     });
     
-    // Batch update state
-    setPrices(Array.from(pricesRef.current.values()));
+    // Batch update state only if there were changes
+    if (hasUpdates) {
+      setPrices(Array.from(pricesRef.current.values()));
+    }
   }, [oracle.prices, oracle.isLive]);
 
-  // Update price with source tracking and throttling for readable updates
+  // Update price with source tracking and throttling
   const updatePrice = useCallback((symbol: string, updates: Partial<CryptoPrice>, source: string) => {
     const normalizedSymbol = symbol.toLowerCase();
     const now = Date.now();
@@ -334,46 +171,19 @@ export const useCryptoPrices = () => {
       return;
     }
     
-    // Throttle updates - only update if enough time has passed
+    // Throttle updates
     const lastUpdate = lastUpdateTimeRef.current.get(normalizedSymbol) || 0;
     if (now - lastUpdate < UPDATE_THROTTLE_MS) {
-      return; // Skip this update, too soon
+      return;
     }
     
     lastUpdateTimeRef.current.set(normalizedSymbol, now);
     
     setPrices(prev => prev.map(coin => {
       if (coin.symbol === normalizedSymbol) {
-        // Smart volume handling: WebSocket gives single-exchange volume which is always lower
-        // than CoinGecko's aggregated multi-exchange volume
-        let finalUpdates = { ...updates };
-        
-        if (updates.total_volume !== undefined && coin.total_volume > 0) {
-          const volumeRatio = updates.total_volume / coin.total_volume;
-          
-          // Case 1: WebSocket volume is unreasonably low (< 5% of current) - ignore it
-          if (volumeRatio < 0.05) {
-            delete finalUpdates.total_volume;
-          }
-          // Case 2: WebSocket volume is significantly higher (> 120%) - could be a spike, use it
-          else if (volumeRatio > 1.2) {
-            finalUpdates.total_volume = updates.total_volume;
-          }
-          // Case 3: WebSocket volume is between 5% and 50% of current - blend conservatively
-          // This handles single-exchange vs multi-exchange discrepancy
-          else if (volumeRatio < 0.5) {
-            // Keep mostly the CoinGecko value, slight movement for realism
-            finalUpdates.total_volume = coin.total_volume * 0.95 + updates.total_volume * 0.05;
-          }
-          // Case 4: WebSocket volume is between 50% and 120% - normal range, blend moderately
-          else {
-            finalUpdates.total_volume = coin.total_volume * 0.8 + updates.total_volume * 0.2;
-          }
-        }
-        
         const updated = {
           ...coin,
-          ...finalUpdates,
+          ...updates,
           lastUpdate: now,
           source,
         };
@@ -389,9 +199,9 @@ export const useCryptoPrices = () => {
   
   // Live prices cache - persists current prices for instant load
   const LIVE_PRICES_CACHE_KEY = "zikalyze_live_prices_v1";
-  const LIVE_PRICES_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h - prices are still useful even if stale
+  const LIVE_PRICES_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
   const lastPriceSaveRef = useRef<number>(0);
-  const PRICE_SAVE_THROTTLE_MS = 5000; // Save at most every 5 seconds
+  const PRICE_SAVE_THROTTLE_MS = 5000;
 
   const loadCachedTop100 = (): CoinGeckoCoin[] | null => {
     try {
@@ -422,7 +232,6 @@ export const useCryptoPrices = () => {
       const parsed = JSON.parse(raw) as { ts: number; data: CryptoPrice[] };
       if (!parsed?.ts || !Array.isArray(parsed.data)) return null;
       if (Date.now() - parsed.ts > LIVE_PRICES_CACHE_TTL_MS) return null;
-      // Filter out any with zero prices
       return parsed.data.filter(p => p.current_price > 0);
     } catch {
       return null;
@@ -436,7 +245,6 @@ export const useCryptoPrices = () => {
     lastPriceSaveRef.current = now;
     
     try {
-      // Only save prices with valid data
       const validPrices = pricesToSave.filter(p => p.current_price > 0);
       if (validPrices.length > 0) {
         localStorage.setItem(LIVE_PRICES_CACHE_KEY, JSON.stringify({ 
@@ -454,11 +262,9 @@ export const useCryptoPrices = () => {
     if (pricesInitializedRef.current) return;
     pricesInitializedRef.current = true;
     
-    // PRIORITY 1: Load persisted live prices first (most recent data)
-    // Since we only run once (pricesInitializedRef guards this), prices will be empty here
+    // PRIORITY 1: Load persisted live prices first
     const livePricesCache = loadCachedLivePrices();
     if (livePricesCache && livePricesCache.length > 0) {
-      // Use live prices cache - these are the most recent prices from last session
       cryptoListRef.current = livePricesCache.map((coin) => ({
         symbol: coin.symbol.toUpperCase(),
         name: coin.name,
@@ -557,13 +363,13 @@ export const useCryptoPrices = () => {
       cryptoPrices.forEach((p) => pricesRef.current.set(p.symbol, p));
       setPrices(cryptoPrices);
       setError(null);
-      console.log(`[Top100] ✓ Loaded ${cryptoPrices.length} coins from ${source}`);
+      console.log(`[Top100] ✓ Loaded ${cryptoPrices.length} coins metadata from ${source}`);
     };
 
     try {
       setLoading(true);
 
-      // Fetch enough rows so that after filtering stablecoins/restakes we still have 100
+      // Fetch metadata from CoinGecko (only for images, names, market cap - NOT live prices)
       const page1Url = `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false`;
       const page2Url = `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=false`;
 
@@ -573,8 +379,6 @@ export const useCryptoPrices = () => {
         const cached = loadCachedTop100();
         if (cached) {
           buildTop100(cached, "Cache");
-        } else {
-          console.log("[CoinGecko] Fetch failed and no cache available");
         }
         return;
       }
@@ -584,8 +388,6 @@ export const useCryptoPrices = () => {
         if (cached) {
           console.log("[CoinGecko] Rate limited, using cache");
           buildTop100(cached, "Cache");
-        } else {
-          console.log("[CoinGecko] Rate limited and no cache available");
         }
         return;
       }
@@ -619,424 +421,31 @@ export const useCryptoPrices = () => {
       const cached = loadCachedTop100();
       if (cached) {
         buildTop100(cached, "Cache");
-      } else {
-        console.log("[CoinGecko] Fetch failed, using fallback data");
       }
     } finally {
       setLoading(false);
     }
-  }, []); // Empty deps - only run once on mount, use ref to track initialization
+  }, []);
 
-  // Connect to CoinCap WebSocket - FREE, supports ALL cryptocurrencies
-  const connectCoinCap = useCallback(() => {
-    if (cryptoListRef.current.length === 0) return;
-    
-    if (coincapWsRef.current) {
-      try { coincapWsRef.current.close(); } catch (e) {}
-    }
-
-    try {
-      // Build CoinCap asset list - convert CoinGecko IDs to CoinCap IDs
-      const coincapIds: string[] = [];
-      cryptoListRef.current.forEach(c => {
-        const coincapId = COINGECKO_TO_COINCAP[c.id] || c.id;
-        coincapIds.push(coincapId);
-        coinIdMapRef.current.set(coincapId, c.symbol.toLowerCase());
-        coinIdMapRef.current.set(c.id, c.symbol.toLowerCase());
-      });
-      
-      const assetIds = coincapIds.join(",");
-      const ws = new WebSocket(`wss://ws.coincap.io/prices?assets=${assetIds}`);
-      
-      // Connection timeout
-      const connectTimeout = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          console.log(`[CoinCap] Connection timeout, retrying...`);
-          ws.close();
-        }
-      }, 10000);
-      
-      ws.onopen = () => {
-        clearTimeout(connectTimeout);
-        console.log(`[CoinCap] Connected successfully`);
-        setConnectedExchanges(prev => 
-          prev.includes("CoinCap") ? prev : [...prev, "CoinCap"]
-        );
-        setIsLive(true);
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          Object.entries(data).forEach(([coinId, priceStr]) => {
-            const symbol = coinIdMapRef.current.get(coinId);
-            if (symbol && priceStr) {
-              const price = parseFloat(priceStr as string);
-              if (!isNaN(price) && price > 0) {
-                updatePrice(symbol, {
-                  current_price: price,
-                }, "CoinCap");
-              }
-            }
-          });
-        } catch (e) {
-          // Silent parse errors
-        }
-      };
-      
-      ws.onerror = (e) => {
-        clearTimeout(connectTimeout);
-        console.log(`[CoinCap] WebSocket error, will retry...`);
-      };
-      
-      ws.onclose = () => {
-        clearTimeout(connectTimeout);
-        setConnectedExchanges(prev => prev.filter(e => e !== "CoinCap"));
-        
-        // Fast reconnection for real-time streaming
-        const delay = 500 + Math.random() * 500;
-        if (reconnectTimeoutsRef.current.coincap) {
-          clearTimeout(reconnectTimeoutsRef.current.coincap);
-        }
-        reconnectTimeoutsRef.current.coincap = window.setTimeout(() => {
-          connectCoinCap();
-        }, delay);
-      };
-      
-      coincapWsRef.current = ws;
-    } catch (err) {
-      console.log(`[CoinCap] Connection failed, retrying...`);
-      setTimeout(() => connectCoinCap(), 500);
-    }
-  }, [updatePrice]);
-
-  // Connect to Binance WebSocket - Most reliable free source for real-time prices
-  const connectBinance = useCallback(() => {
-    if (cryptoListRef.current.length === 0) return;
-
-    // Close existing connection
-    if (binanceWsRef.current) {
-      try { binanceWsRef.current.close(); } catch (e) {}
-    }
-
-    const cryptoList = cryptoListRef.current;
-    
-    // Build combined stream for all symbols (Binance supports up to 1024 streams)
-    // Use both ticker and miniTicker for comprehensive data
-    const streams = cryptoList
-      .slice(0, 100)
-      .map(c => `${c.symbol.toLowerCase()}usdt@ticker`)
-      .join("/");
-    
-    try {
-      const wsUrl = `${EXCHANGES.binance.combinedUrl}${streams}`;
-      console.log(`[Binance] Connecting to ${cryptoList.length} streams...`);
-      const ws = new WebSocket(wsUrl);
-      
-      const connectTimeout = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          console.log(`[Binance] Connection timeout after 8s, trying fallback...`);
-          ws.close();
-          // Try Binance.US as fallback
-          connectBinanceUS();
-        }
-      }, 8000);
-      
-      ws.onopen = () => {
-        clearTimeout(connectTimeout);
-        console.log(`[Binance] ✓ Connected - Real-time prices active`);
-        setConnectedExchanges(prev => 
-          prev.includes("Binance") ? prev : [...prev, "Binance"]
-        );
-        setIsLive(true);
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          if (message.data) {
-            const ticker = message.data;
-            // Extract symbol: BTCUSDT -> BTC
-            const rawSymbol = ticker.s || '';
-            const symbol = rawSymbol.replace(/USDT$/, '');
-            
-            if (symbol && ticker.c) {
-              const price = parseFloat(ticker.c);
-              const change24h = parseFloat(ticker.P || '0');
-              const high24h = parseFloat(ticker.h || '0');
-              const low24h = parseFloat(ticker.l || '0');
-              const volume = parseFloat(ticker.q || '0'); // Quote volume in USDT
-              
-              if (price > 0) {
-                updatePrice(symbol, {
-                  current_price: price,
-                  price_change_percentage_24h: change24h,
-                  high_24h: high24h,
-                  low_24h: low24h,
-                  total_volume: volume,
-                }, "Binance");
-              }
-            }
-          }
-        } catch (e) {
-          // Silent parse errors
-        }
-      };
-      
-      ws.onerror = (e) => {
-        clearTimeout(connectTimeout);
-        console.log(`[Binance] WebSocket error, will reconnect...`);
-      };
-      
-      ws.onclose = (e) => {
-        clearTimeout(connectTimeout);
-        setConnectedExchanges(prev => prev.filter(ex => ex !== "Binance"));
-        
-        // Fast reconnection for real-time streaming
-        const delay = 500 + Math.random() * 500;
-        if (reconnectTimeoutsRef.current.binance) {
-          clearTimeout(reconnectTimeoutsRef.current.binance);
-        }
-        console.log(`[Binance] Disconnected (code: ${e.code}), reconnecting...`);
-        reconnectTimeoutsRef.current.binance = window.setTimeout(() => {
-          connectBinance();
-        }, delay);
-      };
-      
-      binanceWsRef.current = ws;
-    } catch (err) {
-      console.log(`[Binance] Connection failed, trying fallback...`);
-      connectBinanceUS();
-    }
-  }, [updatePrice]);
-
-  // Binance.US fallback
-  const connectBinanceUS = useCallback(() => {
-    if (cryptoListRef.current.length === 0) return;
-
-    const cryptoList = cryptoListRef.current;
-    const streams = cryptoList.slice(0, 50).map(c => `${c.symbol.toLowerCase()}usd@ticker`).join("/");
-    
-    try {
-      const ws = new WebSocket(`${EXCHANGES.binanceUs.combinedUrl}${streams}`);
-      
-      ws.onopen = () => {
-        console.log(`[BinanceUS] ✓ Connected as fallback`);
-        setConnectedExchanges(prev => 
-          prev.includes("BinanceUS") ? prev : [...prev, "BinanceUS"]
-        );
-        setIsLive(true);
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          if (message.data) {
-            const ticker = message.data;
-            const symbol = ticker.s?.replace("USD", "");
-            
-            if (symbol && ticker.c) {
-              updatePrice(symbol, {
-                current_price: parseFloat(ticker.c),
-                price_change_percentage_24h: parseFloat(ticker.P || 0),
-                high_24h: parseFloat(ticker.h || 0),
-                low_24h: parseFloat(ticker.l || 0),
-              }, "BinanceUS");
-            }
-          }
-        } catch (e) {}
-      };
-      
-      ws.onclose = () => {
-        setConnectedExchanges(prev => prev.filter(e => e !== "BinanceUS"));
-      };
-    } catch (err) {}
-  }, [updatePrice]);
-
-  // Kraken symbol mapping - Kraken uses different symbols for some coins
-  const KRAKEN_SYMBOL_MAP: Record<string, string> = {
-    BTC: 'XBT', DOGE: 'XDG',
-  };
-  
-  const KRAKEN_REVERSE_MAP: Record<string, string> = {
-    XBT: 'BTC', XDG: 'DOGE',
-  };
-  
-  // List of symbols that work well on Kraken (major cryptos)
-  const KRAKEN_SUPPORTED = [
-    'BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'AVAX', 'LINK', 'MATIC', 'UNI',
-    'ATOM', 'LTC', 'BCH', 'NEAR', 'APT', 'FIL', 'ARB', 'OP', 'INJ', 'SUI',
-    'TIA', 'SEI', 'PEPE', 'SHIB', 'XLM', 'ALGO', 'FTM', 'ETC', 'AAVE', 'MKR',
-    'GRT', 'STX', 'MINA', 'FLOW', 'XTZ', 'EOS', 'KAVA', 'DOGE', 'TRX', 'HBAR',
-    'VET', 'ICP', 'RUNE', 'SAND', 'MANA', 'AXS', 'ENJ', 'CHZ', 'BAT', 'CRV',
-    'COMP', 'YFI', 'SNX', 'ZEC', 'DASH', 'XMR', 'RENDER', 'FET', 'TAO', 'KAS',
-  ];
-
-  // Connect to Kraken WebSocket v2 API - More reliable with better error handling
-  const connectKraken = useCallback(() => {
-    if (cryptoListRef.current.length === 0) return;
-    
-    if (krakenWsRef.current) {
-      try { krakenWsRef.current.close(); } catch (e) {}
-    }
-
-    try {
-      const ws = new WebSocket(EXCHANGES.kraken.url);
-      
-      const connectTimeout = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          ws.close();
-        }
-      }, 15000);
-      
-      ws.onopen = () => {
-        clearTimeout(connectTimeout);
-        console.log(`[Kraken v2] Connected successfully`);
-        setConnectedExchanges(prev => 
-          prev.includes("Kraken") ? prev : [...prev, "Kraken"]
-        );
-        setIsLive(true);
-        
-        // Build symbol list for Kraken v2 API format
-        const krakenSymbols = cryptoListRef.current
-          .filter(c => KRAKEN_SUPPORTED.includes(c.symbol))
-          .slice(0, 50)
-          .map(c => {
-            const krakenSymbol = KRAKEN_SYMBOL_MAP[c.symbol] || c.symbol;
-            return `${krakenSymbol}/USD`;
-          });
-        
-        // Kraken v2 subscribe format
-        ws.send(JSON.stringify({
-          method: "subscribe",
-          params: {
-            channel: "ticker",
-            symbol: krakenSymbols,
-            snapshot: true,
-          },
-        }));
-        
-        console.log(`[Kraken v2] Subscribed to ${krakenSymbols.length} pairs`);
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          
-          // Handle Kraken v2 ticker format
-          if (message.channel === 'ticker' && message.data) {
-            const tickerData = Array.isArray(message.data) ? message.data : [message.data];
-            
-            for (const ticker of tickerData) {
-              if (ticker.symbol) {
-                // Extract symbol: "XBT/USD" -> "BTC"
-                let symbol = ticker.symbol.replace('/USD', '').replace('/USDT', '');
-                symbol = KRAKEN_REVERSE_MAP[symbol] || symbol;
-                
-                const price = parseFloat(ticker.last || 0);
-                if (price > 0) {
-                  updatePrice(symbol, {
-                    current_price: price,
-                    high_24h: parseFloat(ticker.high || 0),
-                    low_24h: parseFloat(ticker.low || 0),
-                    price_change_percentage_24h: parseFloat(ticker.change_pct || 0),
-                    total_volume: parseFloat(ticker.volume || 0) * price,
-                  }, "Kraken");
-                }
-              }
-            }
-          }
-          
-          // Handle heartbeat
-          if (message.channel === 'heartbeat') {
-            // Connection is alive
-          }
-          
-          // Handle subscription confirmation
-          if (message.method === 'subscribe' && message.success) {
-            console.log(`[Kraken v2] Subscription confirmed`);
-          }
-        } catch (e) {
-          // Silent parse errors
-        }
-      };
-      
-      ws.onerror = () => {
-        clearTimeout(connectTimeout);
-        console.log(`[Kraken v2] WebSocket error`);
-      };
-      
-      ws.onclose = (event) => {
-        clearTimeout(connectTimeout);
-        setConnectedExchanges(prev => prev.filter(e => e !== "Kraken"));
-        console.log(`[Kraken v2] Disconnected (code: ${event.code})`);
-        
-        // Fast reconnection for real-time streaming
-        const delay = 500 + Math.random() * 500;
-        if (reconnectTimeoutsRef.current.kraken) {
-          clearTimeout(reconnectTimeoutsRef.current.kraken);
-        }
-        reconnectTimeoutsRef.current.kraken = window.setTimeout(() => {
-          connectKraken();
-        }, delay);
-      };
-      
-      krakenWsRef.current = ws;
-    } catch (err) {
-      console.log(`[Kraken v2] Connection failed, retrying...`);
-      setTimeout(() => connectKraken(), 500);
-    }
-  }, [updatePrice]);
-
-  // Initial fetch
+  // Initial fetch - only for metadata
   useEffect(() => {
     fetchPrices();
   }, [fetchPrices]);
 
-  // Connect to reliable free WebSockets when crypto list is populated
+  // Track live status from decentralized oracles ONLY
   useEffect(() => {
-    const checkAndConnect = () => {
-      if (cryptoListRef.current.length > 0 && !exchangesConnectedRef.current) {
-        exchangesConnectedRef.current = true;
-        
-        // Connect to ALL exchanges simultaneously for instant live streaming
-        console.log('[WebSocket] ⚡ Connecting to all exchanges for real-time prices...');
-        connectBinance();
-        connectCoinCap();
-        connectKraken();
-      }
-    };
+    const sources: string[] = [];
     
-    // Try to connect immediately
-    checkAndConnect();
-    // Retry check after a short delay in case crypto list wasn't ready
-    const timeoutId = setTimeout(checkAndConnect, 500);
-    
-    return () => {
-      clearTimeout(timeoutId);
-      Object.values(reconnectTimeoutsRef.current).forEach(timeout => {
-        clearTimeout(timeout);
-      });
-      
-      if (binanceWsRef.current) binanceWsRef.current.close();
-      if (coincapWsRef.current) coincapWsRef.current.close();
-      if (krakenWsRef.current) krakenWsRef.current.close();
-    };
-  }, [connectBinance, connectCoinCap, connectKraken]);
-
-  // Track live status - include oracle connections
-  useEffect(() => {
-    const hasExchanges = connectedExchanges.length > 0;
-    const hasOracles = oracle.isLive;
-    setIsLive(hasExchanges || hasOracles);
-    
-    // Update connected exchanges to include oracles
-    if (oracle.pythConnected && !connectedExchanges.includes("Pyth")) {
-      setConnectedExchanges(prev => [...prev.filter(e => e !== "Chainlink"), "Pyth"]);
-    } else if (oracle.chainlinkConnected && !connectedExchanges.includes("Chainlink") && !oracle.pythConnected) {
-      setConnectedExchanges(prev => [...prev.filter(e => e !== "Pyth"), "Chainlink"]);
+    if (oracle.pythConnected) {
+      sources.push("Pyth Oracle");
     }
-  }, [connectedExchanges, oracle.isLive, oracle.pythConnected, oracle.chainlinkConnected]);
+    if (oracle.chainlinkConnected) {
+      sources.push("Chainlink Oracle");
+    }
+    
+    setConnectedSources(sources);
+    setIsLive(oracle.isLive);
+  }, [oracle.isLive, oracle.pythConnected, oracle.chainlinkConnected]);
 
   // Persist live prices to localStorage for session restoration
   useEffect(() => {
@@ -1044,9 +453,6 @@ export const useCryptoPrices = () => {
       saveLivePrices(prices);
     }
   }, [prices, isLive, saveLivePrices]);
-
-  // No polling - rely on real-time WebSocket/Oracle data for 24h updates
-  // Initial fetch provides market cap and other static data
 
   const getPriceBySymbol = useCallback((symbol: string): CryptoPrice | undefined => {
     return prices.find((p) => p.symbol.toUpperCase() === symbol.toUpperCase());
@@ -1060,12 +466,12 @@ export const useCryptoPrices = () => {
     prices, 
     loading, 
     error, 
-    connectedExchanges,
+    connectedExchanges: connectedSources,
     isLive,
     getPriceBySymbol, 
     getPriceById, 
     refetch: fetchPrices,
-    // Oracle status
+    // Oracle status - fully decentralized
     oracleStatus: {
       isLive: oracle.isLive,
       primarySource: oracle.primarySource,

@@ -9,278 +9,10 @@ export interface ChartDataPoint {
   positive: boolean;
 }
 
-// Supported exchanges in priority order - Pyth Oracle first (decentralized), then CoinCap
-type Exchange = "pyth" | "coincap" | "binance" | "coinbase" | "kraken" | "coingecko";
+// Data sources - Pyth Oracle (decentralized) primary, CoinGecko fallback for historical
+type DataSource = "pyth" | "coingecko";
 
-// Map symbols to CoinCap v2 API IDs (verified correct IDs)
-// CoinCap uses lowercase names with hyphens, NOT the same as CoinGecko
-const COINCAP_ID_MAP: Record<string, string> = {
-  // Top 50 by Market Cap
-  BTC: "bitcoin",
-  ETH: "ethereum", 
-  USDT: "tether",
-  XRP: "xrp",
-  SOL: "solana",
-  BNB: "binance-coin",
-  DOGE: "dogecoin",
-  USDC: "usd-coin",
-  ADA: "cardano",
-  TRX: "tron",
-  AVAX: "avalanche",
-  LINK: "chainlink",
-  TON: "the-open-network",
-  SHIB: "shiba-inu",
-  SUI: "sui",
-  XLM: "stellar",
-  DOT: "polkadot",
-  HBAR: "hedera-hashgraph",
-  BCH: "bitcoin-cash",
-  LEO: "unus-sed-leo",
-  LTC: "litecoin",
-  ATOM: "cosmos",
-  UNI: "uniswap",
-  NEAR: "near-protocol",
-  ETC: "ethereum-classic",
-  APT: "aptos",
-  RNDR: "render-token",
-  VET: "vechain",
-  ICP: "internet-computer",
-  MATIC: "polygon",
-  CRO: "crypto-com-coin",
-  FIL: "filecoin",
-  ARB: "arbitrum",
-  MKR: "maker",
-  ALGO: "algorand",
-  KAS: "kaspa",
-  OP: "optimism",
-  AAVE: "aave",
-  IMX: "immutable-x",
-  INJ: "injective-protocol",
-  FTM: "fantom",
-  STX: "stacks",
-  XMR: "monero",
-  THETA: "theta",
-  GRT: "the-graph",
-  
-  // Trending Meme Coins
-  WIF: "dogwifcoin",
-  BONK: "bonk",
-  PEPE: "pepe",
-  FLOKI: "floki-inu",
-  POPCAT: "popcat-sol",
-  MEW: "cat-in-a-dogs-world",
-  BRETT: "brett",
-  NEIRO: "neiro-on-ethereum",
-  MOG: "mog-coin",
-  TURBO: "turbo",
-  LADYS: "milady-meme-coin",
-  WOJAK: "wojak",
-  ANDY: "andy-on-eth",
-  SPX: "spx6900",
-  PNUT: "peanut-the-squirrel",
-  GOAT: "goat",
-  GIGA: "gigachad",
-  MICHI: "michi",
-  MOTHER: "mother-iggy",
-  SUNDOG: "sundog",
-  BOME: "book-of-meme",
-  SLERF: "slerf",
-  MYRO: "myro",
-  WEN: "wen-token",
-  TOSHI: "toshi",
-  PONKE: "ponke",
-  
-  // AI & DePIN Tokens
-  FET: "fetch-ai",
-  TAO: "bittensor",
-  RENDER: "render-token",
-  AGIX: "singularitynet",
-  OCEAN: "ocean-protocol",
-  AKT: "akash-network",
-  AR: "arweave",
-  STORJ: "storj",
-  LPT: "livepeer",
-  IO: "io-net",
-  AIOZ: "aioz-network",
-  PHB: "phoenix-global",
-  NMR: "numeraire",
-  CTXC: "cortex",
-  AGI: "delysium",
-  ORAI: "oraichain",
-  VANA: "vana",
-  GRASS: "grass",
-  ATH: "aethir",
-  HNT: "helium",
-  MOBILE: "helium-mobile",
-  IOT: "helium-iot",
-  DIMO: "dimo",
-  HONEY: "hivemapper",
-  
-  // Layer 2 & Scaling
-  STRK: "starknet-token",
-  ZK: "zksync",
-  MANTA: "manta-network",
-  BLAST: "blast",
-  MODE: "mode",
-  SCROLL: "scroll",
-  LINEA: "linea",
-  METIS: "metis-token",
-  BOBA: "boba-network",
-  ZETA: "zetachain",
-  
-  // DeFi Tokens
-  RUNE: "thorchain",
-  CRV: "curve-dao-token",
-  SNX: "synthetix-network-token",
-  COMP: "compound",
-  LDO: "lido-dao",
-  PENDLE: "pendle",
-  GMX: "gmx",
-  BAL: "balancer",
-  SUSHI: "sushiswap",
-  YFI: "yearn-finance",
-  CAKE: "pancakeswap-token",
-  JUP: "jupiter-exchange-solana",
-  RAY: "raydium",
-  ORCA: "orca",
-  DRIFT: "drift-protocol",
-  AERO: "aerodrome-finance",
-  VELO: "velodrome-finance",
-  MORPHO: "morpho",
-  EIGEN: "eigenlayer",
-  ETHFI: "ether-fi",
-  REZ: "renzo",
-  PUFFER: "puffer-finance",
-  USUAL: "usual",
-  ENA: "ethena",
-  DYDX: "dydx",
-  
-  // Gaming & Metaverse
-  SAND: "the-sandbox",
-  MANA: "decentraland",
-  AXS: "axie-infinity",
-  GALA: "gala",
-  APE: "apecoin",
-  ENJ: "enjin-coin",
-  PRIME: "echelon-prime",
-  BEAM: "beam",
-  PIXEL: "pixels",
-  PORTAL: "portal",
-  RONIN: "ronin",
-  SUPER: "superfarm",
-  MAGIC: "magic",
-  ILV: "illuvium",
-  GODS: "gods-unchained",
-  GMT: "green-metaverse-token",
-  
-  // Infrastructure & Layer 1
-  SEI: "sei-network",
-  TIA: "celestia",
-  PYTH: "pyth-network",
-  WLD: "worldcoin-wld",
-  ONDO: "ondo-finance",
-  XDC: "xdc-network",
-  JASMY: "jasmy",
-  IOTA: "iota",
-  QNT: "quant",
-  CORE: "core",
-  NOT: "notcoin",
-  ORDI: "ordi",
-  SATS: "sats-ordinals",
-  BLUR: "blur",
-  ENS: "ethereum-name-service",
-  EOS: "eos",
-  XTZ: "tezos",
-  NEO: "neo",
-  KAVA: "kava",
-  ZEC: "zcash",
-  DASH: "dash",
-  EGLD: "elrond-erd-2",
-  FLOW: "flow",
-  MINA: "mina",
-  ROSE: "oasis-network",
-  ONE: "harmony",
-  ZIL: "zilliqa",
-  CHZ: "chiliz",
-  BAT: "basic-attention-token",
-  WBTC: "wrapped-bitcoin",
-  OKB: "okb",
-  OSMO: "osmosis",
-  CELO: "celo",
-  KLAY: "klaytn",
-  MOVE: "movement",
-  HYPE: "hyperliquid",
-  ME: "magic-eden",
-  VIRTUAL: "virtuals-protocol",
-  AI16Z: "ai16z",
-  FARTCOIN: "fartcoin",
-  ARC: "arc",
-  GRIFFAIN: "griffain",
-  AIXBT: "aixbt",
-  ZEREBRO: "zerebro",
-  
-  // Stablecoins & Wrapped
-  DAI: "multi-collateral-dai",
-  FRAX: "frax",
-  TUSD: "true-usd",
-  USDP: "pax-dollar",
-  GUSD: "gemini-dollar",
-  LUSD: "liquity-usd",
-  SUSD: "susd",
-  USDD: "usdd",
-  FDUSD: "first-digital-usd",
-  PYUSD: "paypal-usd",
-  
-  // Additional Popular
-  RSR: "reserve-rights-token",
-  RVN: "ravencoin",
-  ANKR: "ankr",
-  SKL: "skale",
-  CELR: "celer-network",
-  COTI: "coti",
-  OGN: "origin-protocol",
-  BAND: "band-protocol",
-  ICX: "icon",
-  QTUM: "qtum",
-  ONT: "ontology",
-  SC: "siacoin",
-  DGB: "digibyte",
-  WAVES: "waves",
-  KDA: "kadena",
-  CFX: "conflux-network",
-  FLR: "flare-networks",
-  SGB: "songbird",
-  XEM: "nem",
-  LSK: "lisk",
-  IOST: "iost",
-  ZRX: "0x",
-  OMG: "omg-network",
-  HOT: "holotoken",
-  TFUEL: "theta-fuel",
-  VTHO: "vethor-token",
-  WIN: "wink",
-  BTT: "bittorrent",
-  JST: "just",
-  SUN: "sun-token",
-  NFT: "apenft",
-  MASK: "mask-network",
-  API3: "api3",
-  AUDIO: "audius",
-  LQTY: "liquity",
-  RPL: "rocket-pool",
-  SSV: "ssv-network",
-  ARKM: "arkham",
-  CYBER: "cyberconnect",
-  ID: "space-id",
-  HOOK: "hooked-protocol",
-  EDU: "open-campus",
-  ACH: "alchemy-pay",
-  PEOPLE: "constitutiondao",
-  LUNC: "terra-luna",
-  USTC: "terrausd",
-};
-
-// Map symbols to CoinGecko IDs for fallback
+// Map symbols to CoinGecko IDs for historical data fallback
 const COINGECKO_ID_MAP: Record<string, string> = {
   BTC: "bitcoin", ETH: "ethereum", SOL: "solana", XRP: "ripple", DOGE: "dogecoin",
   BNB: "binancecoin", ADA: "cardano", AVAX: "avalanche-2", DOT: "polkadot",
@@ -306,53 +38,6 @@ const COINGECKO_ID_MAP: Record<string, string> = {
   WLD: "worldcoin", JUP: "jupiter", JTO: "jito-governance-token", KAS: "kaspa",
   TAO: "bittensor", PYTH: "pyth-network", TRB: "tellor", ORDI: "ordi",
   STG: "stargate-finance", BLUR: "blur", PENDLE: "pendle", DYDX: "dydx-chain",
-};
-
-const COINBASE_SYMBOL_MAP: Record<string, string> = {
-  BTC: "BTC-USD", ETH: "ETH-USD", SOL: "SOL-USD", XRP: "XRP-USD", DOGE: "DOGE-USD",
-  ADA: "ADA-USD", AVAX: "AVAX-USD", DOT: "DOT-USD", MATIC: "MATIC-USD",
-  LINK: "LINK-USD", UNI: "UNI-USD", ATOM: "ATOM-USD", LTC: "LTC-USD",
-  BCH: "BCH-USD", NEAR: "NEAR-USD", APT: "APT-USD", FIL: "FIL-USD",
-  ARB: "ARB-USD", OP: "OP-USD", INJ: "INJ-USD", SUI: "SUI-USD", SHIB: "SHIB-USD",
-  AAVE: "AAVE-USD", MKR: "MKR-USD", GRT: "GRT-USD", IMX: "IMX-USD",
-  SAND: "SAND-USD", MANA: "MANA-USD", AXS: "AXS-USD", GALA: "GALA-USD",
-  APE: "APE-USD", CRV: "CRV-USD", SNX: "SNX-USD", COMP: "COMP-USD",
-  LDO: "LDO-USD", ENS: "ENS-USD", ALGO: "ALGO-USD", XLM: "XLM-USD",
-  ICP: "ICP-USD", HBAR: "HBAR-USD", ETC: "ETC-USD", EOS: "EOS-USD",
-  XTZ: "XTZ-USD", ZEC: "ZEC-USD", DASH: "DASH-USD", FLOW: "FLOW-USD",
-  ENJ: "ENJ-USD", CHZ: "CHZ-USD", BAT: "BAT-USD", SUSHI: "SUSHI-USD", YFI: "YFI-USD",
-};
-
-const KRAKEN_SYMBOL_MAP: Record<string, string> = {
-  BTC: "XBT/USD", ETH: "ETH/USD", SOL: "SOL/USD", XRP: "XRP/USD", DOGE: "DOGE/USD",
-  ADA: "ADA/USD", AVAX: "AVAX/USD", DOT: "DOT/USD", MATIC: "MATIC/USD",
-  LINK: "LINK/USD", UNI: "UNI/USD", ATOM: "ATOM/USD", LTC: "LTC/USD",
-  BCH: "BCH/USD", NEAR: "NEAR/USD", APT: "APT/USD", FIL: "FIL/USD", SHIB: "SHIB/USD",
-  AAVE: "AAVE/USD", MKR: "MKR/USD", GRT: "GRT/USD", SAND: "SAND/USD",
-  MANA: "MANA/USD", AXS: "AXS/USD", GALA: "GALA/USD", APE: "APE/USD",
-  CRV: "CRV/USD", SNX: "SNX/USD", COMP: "COMP/USD", LDO: "LDO/USD",
-  ENS: "ENS/USD", ALGO: "ALGO/USD", XLM: "XLM/USD", ETC: "ETC/USD",
-  EOS: "EOS/USD", XTZ: "XTZ/USD", ZEC: "ZEC/USD", DASH: "DASH/USD",
-  FLOW: "FLOW/USD", ENJ: "ENJ/USD", BAT: "BAT/USD", SUSHI: "SUSHI/USD",
-  YFI: "YFI/USD", TRX: "TRX/USD", XMR: "XMR/USD",
-};
-
-const BINANCE_SYMBOL_MAP: Record<string, string> = {
-  BTC: "BTC", ETH: "ETH", SOL: "SOL", XRP: "XRP", DOGE: "DOGE", BNB: "BNB",
-  ADA: "ADA", AVAX: "AVAX", DOT: "DOT", MATIC: "MATIC", LINK: "LINK", UNI: "UNI",
-  ATOM: "ATOM", LTC: "LTC", BCH: "BCH", NEAR: "NEAR", APT: "APT", FIL: "FIL",
-  ARB: "ARB", OP: "OP", INJ: "INJ", SUI: "SUI", TIA: "TIA", SEI: "SEI",
-  PEPE: "PEPE", SHIB: "SHIB", WIF: "WIF", BONK: "BONK", FLOKI: "FLOKI",
-  RENDER: "RENDER", FET: "FET", AAVE: "AAVE", MKR: "MKR", GRT: "GRT", IMX: "IMX",
-  STX: "STX", RUNE: "RUNE", SAND: "SAND", MANA: "MANA", AXS: "AXS", GALA: "GALA",
-  APE: "APE", CRV: "CRV", SNX: "SNX", COMP: "COMP", LDO: "LDO", ENS: "ENS",
-  ALGO: "ALGO", XLM: "XLM", VET: "VET", ICP: "ICP", HBAR: "HBAR", ETC: "ETC",
-  FTM: "FTM", TRX: "TRX", XMR: "XMR", EOS: "EOS", THETA: "THETA", XTZ: "XTZ",
-  NEO: "NEO", KAVA: "KAVA", ZEC: "ZEC", DASH: "DASH", EGLD: "EGLD", FLOW: "FLOW",
-  MINA: "MINA", ROSE: "ROSE", ONE: "ONE", ZIL: "ZIL", ENJ: "ENJ", CHZ: "CHZ",
-  BAT: "BAT", CAKE: "CAKE", SUSHI: "SUSHI", YFI: "YFI", DYDX: "DYDX", GMT: "GMT",
-  BLUR: "BLUR", MASK: "MASK", WLD: "WLD", JTO: "JTO", PYTH: "PYTH", JUP: "JUP",
-  STRK: "STRK", DYM: "DYM", ALT: "ALT", PIXEL: "PIXEL", ORDI: "ORDI",
 };
 
 const formatTime = (date: Date): string => {
@@ -386,659 +71,220 @@ interface CacheEntry {
   data: ChartDataPoint[];
   priceChange: number;
   timestamp: number;
-  exchange: Exchange;
+  source: DataSource;
 }
 
 const dataCache = new Map<string, CacheEntry>();
 const CACHE_TTL = 5 * 60 * 1000;
-
-// Backoff state
-const backoffState = new Map<string, { attempts: number; nextRetry: number }>();
-const BASE_BACKOFF = 1000;
-const MAX_BACKOFF = 30 * 1000;
-
-const getBackoffKey = (symbol: string, exchange: Exchange) => `${symbol}-${exchange}`;
-const getBackoffDelay = (attempts: number) => Math.min(BASE_BACKOFF * Math.pow(2, attempts), MAX_BACKOFF);
-
-const canRetry = (key: string): boolean => {
-  const state = backoffState.get(key);
-  return !state || Date.now() >= state.nextRetry;
-};
-
-const recordFailure = (key: string) => {
-  const state = backoffState.get(key) || { attempts: 0, nextRetry: 0 };
-  state.attempts += 1;
-  state.nextRetry = Date.now() + getBackoffDelay(state.attempts);
-  backoffState.set(key, state);
-};
-
-const recordSuccess = (key: string) => backoffState.delete(key);
 
 const getCachedData = (symbol: string): CacheEntry | null => dataCache.get(symbol.toUpperCase()) || null;
 const isCacheValid = (symbol: string): boolean => {
   const cached = dataCache.get(symbol.toUpperCase());
   return cached ? Date.now() - cached.timestamp < CACHE_TTL : false;
 };
-const setCacheData = (symbol: string, data: ChartDataPoint[], priceChange: number, exchange: Exchange) => {
-  dataCache.set(symbol.toUpperCase(), { data, priceChange, timestamp: Date.now(), exchange });
+const setCacheData = (symbol: string, data: ChartDataPoint[], priceChange: number, source: DataSource) => {
+  dataCache.set(symbol.toUpperCase(), { data, priceChange, timestamp: Date.now(), source });
 };
 
-// Dynamic CoinCap ID lookup cache
-const coinCapIdCache = new Map<string, string | null>();
+// Get CoinGecko ID for a symbol
+const getCoinGeckoId = (symbol: string, providedId?: string): string | null => {
+  if (providedId) return providedId;
+  return COINGECKO_ID_MAP[symbol.toUpperCase()] || null;
+};
 
-// Search CoinCap API for asset ID by symbol
-const searchCoinCapId = async (symbol: string): Promise<string | null> => {
-  const upperSym = symbol.toUpperCase();
-  
-  // Check cache first
-  if (coinCapIdCache.has(upperSym)) {
-    return coinCapIdCache.get(upperSym) || null;
-  }
-  
+// Fetch historical data from CoinGecko (decentralized-friendly, no API key needed)
+const fetchCoinGeckoData = async (symbol: string, coinGeckoId: string): Promise<ChartDataPoint[] | null> => {
   try {
-    const response = await fetchWithTimeout(`https://api.coincap.io/v2/assets?search=${symbol.toLowerCase()}&limit=5`);
-    if (!response.ok) return null;
+    console.log(`[CoinGecko] Fetching historical data for ${symbol} (${coinGeckoId})`);
     
-    const data = await response.json();
-    if (!data.data || data.data.length === 0) {
-      coinCapIdCache.set(upperSym, null);
+    const response = await fetchWithTimeout(
+      `https://api.coingecko.com/api/v3/coins/${coinGeckoId}/market_chart?vs_currency=usd&days=1&interval=hourly`
+    );
+    
+    if (!response.ok) {
+      console.log(`[CoinGecko] Historical fetch failed: ${response.status}`);
       return null;
     }
     
-    // Find exact symbol match
-    const exactMatch = data.data.find((asset: any) => 
-      asset.symbol?.toUpperCase() === upperSym
-    );
+    const data = await response.json();
     
-    if (exactMatch) {
-      console.log(`[CoinCap] Found ID for ${upperSym}: ${exactMatch.id}`);
-      coinCapIdCache.set(upperSym, exactMatch.id);
-      return exactMatch.id;
+    if (!data.prices || data.prices.length < 2) {
+      return null;
     }
     
-    // Use first result as fallback
-    const fallbackId = data.data[0].id;
-    console.log(`[CoinCap] Using fallback ID for ${upperSym}: ${fallbackId}`);
-    coinCapIdCache.set(upperSym, fallbackId);
-    return fallbackId;
-  } catch (err) {
-    console.log(`[CoinCap] Search failed for ${upperSym}:`, err);
-    coinCapIdCache.set(upperSym, null);
-    return null;
-  }
-};
-
-// Get exchange symbol
-const getExchangeSymbol = (sym: string, exchange: Exchange, coinGeckoId?: string): string | null => {
-  const upperSym = sym.toUpperCase();
-  switch (exchange) {
-    case "coincap": return COINCAP_ID_MAP[upperSym] || null; // Will use dynamic lookup in fetch
-    case "binance": return BINANCE_SYMBOL_MAP[upperSym] || null;
-    case "coinbase": return COINBASE_SYMBOL_MAP[upperSym] || null;
-    case "kraken": return KRAKEN_SYMBOL_MAP[upperSym] || null;
-    case "coingecko": return coinGeckoId || COINGECKO_ID_MAP[upperSym] || null;
-    default: return null;
-  }
-};
-
-// Fetch functions (pure, no hooks)
-
-// CoinCap - free, supports all cryptos, no rate limits
-const fetchCoinCapData = async (symbol: string, coinCapId: string): Promise<ChartDataPoint[] | null> => {
-  const backoffKey = getBackoffKey(symbol, "coincap");
-  if (!canRetry(backoffKey)) {
-    console.log(`[CoinCap] ${symbol} in backoff, skipping`);
-    return null;
-  }
-  try {
-    // First get current price and 24h volume
-    console.log(`[CoinCap] Fetching ${symbol} with ID: ${coinCapId}`);
-    const assetResponse = await fetchWithTimeout(`https://api.coincap.io/v2/assets/${coinCapId}`);
-    if (!assetResponse.ok) { 
-      console.log(`[CoinCap] ${symbol} asset fetch failed: ${assetResponse.status}`);
-      recordFailure(backoffKey); 
-      return null; 
-    }
-    const assetData = await assetResponse.json();
-    if (!assetData.data) { 
-      console.log(`[CoinCap] ${symbol} no asset data`);
-      recordFailure(backoffKey); 
-      return null; 
-    }
-
-    const volume24h = parseFloat(assetData.data.volumeUsd24Hr) || 0;
-
-    // Get historical data for chart (last 20 minutes)
-    const end = Date.now();
-    const start = end - 20 * 60 * 1000;
-    const historyResponse = await fetchWithTimeout(
-      `https://api.coincap.io/v2/assets/${coinCapId}/history?interval=m1&start=${start}&end=${end}`
-    );
-    if (!historyResponse.ok) { 
-      console.log(`[CoinCap] ${symbol} history fetch failed: ${historyResponse.status}`);
-      recordFailure(backoffKey); 
-      return null; 
-    }
-    const historyData = await historyResponse.json();
-    if (!historyData.data || historyData.data.length === 0) { 
-      console.log(`[CoinCap] ${symbol} no history data`);
-      recordFailure(backoffKey); 
-      return null; 
-    }
-
-    recordSuccess(backoffKey);
-    console.log(`[CoinCap] ${symbol} success! Got ${historyData.data.length} data points`);
-    const points = historyData.data.slice(-20);
-    const volumePerPoint = volume24h / (24 * 60); // Distribute 24h volume across minutes
-
-    return points.map((point: any, index: number) => {
-      const price = parseFloat(point.priceUsd);
-      const prevPrice = index > 0 ? parseFloat(points[index - 1].priceUsd) : price;
-      return {
-        time: formatTime(new Date(point.time)),
-        price,
-        volume: volumePerPoint,
-        positive: price >= prevPrice,
-      };
-    });
-  } catch (err) { 
-    console.log(`[CoinCap] ${symbol} error:`, err);
-    recordFailure(backoffKey); 
-    return null; 
-  }
-};
-
-const fetchBinanceData = async (symbol: string, binanceSymbol: string): Promise<ChartDataPoint[] | null> => {
-  const backoffKey = getBackoffKey(symbol, "binance");
-  if (!canRetry(backoffKey)) return null;
-  try {
-    const response = await fetchWithTimeout(
-      `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}USDT&interval=1m&limit=20`
-    );
-    if (!response.ok) { recordFailure(backoffKey); return null; }
-    const data = await response.json();
-    if (!Array.isArray(data) || data.length === 0) { recordFailure(backoffKey); return null; }
-    recordSuccess(backoffKey);
-    return data.map((kline: any[]) => ({
-      time: formatTime(new Date(kline[6])),
-      price: parseFloat(kline[4]),
-      volume: parseFloat(kline[5]),
-      positive: parseFloat(kline[4]) >= parseFloat(kline[1]),
-    }));
-  } catch { recordFailure(backoffKey); return null; }
-};
-
-const fetchCoinbaseData = async (symbol: string, coinbaseSymbol: string): Promise<ChartDataPoint[] | null> => {
-  const backoffKey = getBackoffKey(symbol, "coinbase");
-  if (!canRetry(backoffKey)) return null;
-  try {
-    const end = new Date();
-    const start = new Date(end.getTime() - 20 * 60 * 1000);
-    const response = await fetchWithTimeout(
-      `https://api.exchange.coinbase.com/products/${coinbaseSymbol}/candles?granularity=60&start=${start.toISOString()}&end=${end.toISOString()}`
-    );
-    if (!response.ok) { recordFailure(backoffKey); return null; }
-    const data = await response.json();
-    if (!Array.isArray(data) || data.length === 0) { recordFailure(backoffKey); return null; }
-    recordSuccess(backoffKey);
-    return data.reverse().slice(-20).map((candle: number[]) => ({
-      time: formatTime(new Date(candle[0] * 1000)),
-      price: candle[4],
-      volume: candle[5],
-      positive: candle[4] >= candle[3],
-    }));
-  } catch { recordFailure(backoffKey); return null; }
-};
-
-const fetchKrakenData = async (symbol: string, krakenSymbol: string): Promise<ChartDataPoint[] | null> => {
-  const backoffKey = getBackoffKey(symbol, "kraken");
-  if (!canRetry(backoffKey)) return null;
-  try {
-    const pair = krakenSymbol.replace("/", "");
-    const response = await fetchWithTimeout(`https://api.kraken.com/0/public/OHLC?pair=${pair}&interval=1`);
-    if (!response.ok) { recordFailure(backoffKey); return null; }
-    const data = await response.json();
-    if (data.error?.length > 0) { recordFailure(backoffKey); return null; }
-    const resultKey = Object.keys(data.result).find(k => k !== "last");
-    if (!resultKey || !Array.isArray(data.result[resultKey])) { recordFailure(backoffKey); return null; }
-    recordSuccess(backoffKey);
-    const ohlc = data.result[resultKey].slice(-20);
-    return ohlc.map((candle: any[]) => ({
-      time: formatTime(new Date(candle[0] * 1000)),
-      price: parseFloat(candle[4]),
-      volume: parseFloat(candle[6]),
-      positive: parseFloat(candle[4]) >= parseFloat(candle[1]),
-    }));
-  } catch { recordFailure(backoffKey); return null; }
-};
-
-const fetchCoinGeckoData = async (symbol: string, cgId: string): Promise<ChartDataPoint[] | null> => {
-  const backoffKey = getBackoffKey(symbol, "coingecko");
-  if (!canRetry(backoffKey)) return null;
-  try {
-    const response = await fetchWithTimeout(
-      `https://api.coingecko.com/api/v3/coins/${cgId}/market_chart?vs_currency=usd&days=1`
-    );
-    if (!response.ok) { recordFailure(backoffKey); return null; }
-    const data = await response.json();
-    if (!data.prices || data.prices.length === 0) { recordFailure(backoffKey); return null; }
-    recordSuccess(backoffKey);
-    const recentPrices = data.prices.slice(-20);
-    const recentVolumes = data.total_volumes?.slice(-20) || [];
-    return recentPrices.map((pricePoint: [number, number], index: number) => {
-      const [timestamp, price] = pricePoint;
-      const prevPrice = index > 0 ? recentPrices[index - 1][1] : price;
+    // Take last 24 data points (hourly for 24h)
+    const prices = data.prices.slice(-24);
+    const volumes = data.total_volumes?.slice(-24) || [];
+    
+    const chartData: ChartDataPoint[] = prices.map((point: [number, number], i: number) => {
+      const [timestamp, price] = point;
+      const prevPrice = i > 0 ? prices[i - 1][1] : price;
+      const volume = volumes[i] ? volumes[i][1] : 0;
+      
       return {
         time: formatTime(new Date(timestamp)),
-        price,
-        volume: recentVolumes[index]?.[1] || 0,
+        price: price,
+        volume: volume,
         positive: price >= prevPrice,
       };
     });
-  } catch { recordFailure(backoffKey); return null; }
+    
+    console.log(`[CoinGecko] ✓ Got ${chartData.length} data points for ${symbol}`);
+    return chartData;
+  } catch (err) {
+    console.log(`[CoinGecko] Error fetching ${symbol}:`, err);
+    return null;
+  }
 };
 
-// Parse WebSocket messages
-const parseWebSocketMessage = (exchange: Exchange, data: any): { price: number; volume: number; time: Date } | null => {
-  try {
-    switch (exchange) {
-      case "binance":
-        if (data.k) return { price: parseFloat(data.k.c), volume: parseFloat(data.k.v), time: new Date(data.k.T) };
-        break;
-      case "coinbase":
-        if (data.type === "ticker" && data.price)
-          return { price: parseFloat(data.price), volume: parseFloat(data.volume_24h || "0"), time: new Date(data.time || Date.now()) };
-        break;
-      case "kraken":
-        if (Array.isArray(data) && data.length >= 2 && typeof data[1] === "object") {
-          const ticker = data[1];
-          if (ticker.c && Array.isArray(ticker.c))
-            return { price: parseFloat(ticker.c[0]), volume: parseFloat(ticker.v?.[1] || "0"), time: new Date() };
-        }
-        break;
-    }
-  } catch {}
-  return null;
+// Check if symbol is supported by Pyth Oracle
+const isPythSupported = (symbol: string): boolean => {
+  const upperSymbol = symbol.toUpperCase();
+  return Object.keys(PYTH_FEED_IDS).includes(upperSymbol);
 };
 
-export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
+export const useRealtimeChartData = (crypto: string, coinGeckoId?: string) => {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
-  const [priceChange, setPriceChange] = useState(0);
+  const [priceChange, setPriceChange] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSupported, setIsSupported] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dataSource, setDataSource] = useState<Exchange | null>(null);
-
-  // Pyth Oracle integration for decentralized streaming
-  const pythFeedKey = `${symbol.toUpperCase()}/USD`;
-  const hasPythFeed = pythFeedKey in PYTH_FEED_IDS;
-  const pyth = usePythPrices(hasPythFeed ? [symbol] : []);
-
-  const wsRef = useRef<WebSocket | null>(null);
-  const lastPriceRef = useRef<number | null>(null);
-  const reconnectTimeoutRef = useRef<number | null>(null);
-  const refreshIntervalRef = useRef<number | null>(null);
+  const [dataSource, setDataSource] = useState<DataSource | null>(null);
+  const [isPythStreaming, setIsPythStreaming] = useState(false);
+  const [oracleConnected, setOracleConnected] = useState(false);
+  
+  const symbol = crypto.toUpperCase();
   const mountedRef = useRef(true);
-  const pythPriceRef = useRef<number | null>(null);
-
-  // Cleanup function
-  const cleanup = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    if (refreshIntervalRef.current) {
-      clearInterval(refreshIntervalRef.current);
-      refreshIntervalRef.current = null;
-    }
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-  }, []);
-
-  // Process Pyth oracle price updates for chart streaming
+  const pythDataRef = useRef<ChartDataPoint[]>([]);
+  const lastPythPriceRef = useRef<number | null>(null);
+  
+  // Connect to Pyth Oracle for real-time streaming
+  const { prices: pythPrices, isConnected: pythConnected } = usePythPrices();
+  
+  // Update oracle connection status
   useEffect(() => {
-    if (!pyth.isConnected || !hasPythFeed || !mountedRef.current) return;
-
-    const pythData = pyth.getPrice(symbol);
-    if (!pythData || pythData.price <= 0) return;
-
-    const price = pythData.price;
-    const timeStr = formatTime(new Date(pythData.publishTime));
-
-    // Skip if price hasn't changed significantly
-    if (pythPriceRef.current !== null) {
-      const priceDiff = Math.abs(price - pythPriceRef.current) / pythPriceRef.current;
-      if (priceDiff < 0.00001) return; // Less than 0.001% change
+    setOracleConnected(pythConnected);
+    if (pythConnected && isPythSupported(symbol)) {
+      setIsPythStreaming(true);
     }
-
-    pythPriceRef.current = price;
-
-    // Update chart data with Pyth oracle tick
-    if (lastPriceRef.current === null) lastPriceRef.current = price;
-    const change = ((price - lastPriceRef.current) / lastPriceRef.current) * 100;
-    setPriceChange(change);
-    setDataSource("pyth");
-
-    setChartData((prev) => {
-      const newPoint: ChartDataPoint = {
-        time: timeStr,
-        price,
-        volume: prev[prev.length - 1]?.volume || 0,
-        positive: price >= (prev[prev.length - 1]?.price || price),
-      };
-
-      // Check if we already have a point for this time
-      const existingIndex = prev.findIndex(p => p.time === timeStr);
-      if (existingIndex !== -1) {
-        const updated = [...prev];
-        updated[existingIndex] = newPoint;
-        return updated;
+  }, [pythConnected, symbol]);
+  
+  // Handle Pyth Oracle price updates
+  useEffect(() => {
+    if (!pythConnected || !isPythSupported(symbol)) return;
+    
+    const pythPrice = pythPrices.get(symbol);
+    if (!pythPrice || pythPrice.price <= 0) return;
+    
+    const now = Date.now();
+    const newPrice = pythPrice.price;
+    
+    // Only add if price changed significantly (0.01%)
+    if (lastPythPriceRef.current !== null) {
+      const priceDiff = Math.abs(newPrice - lastPythPriceRef.current) / lastPythPriceRef.current;
+      if (priceDiff < 0.0001) return;
+    }
+    
+    lastPythPriceRef.current = newPrice;
+    
+    const newPoint: ChartDataPoint = {
+      time: formatTime(new Date(now)),
+      price: newPrice,
+      volume: 0, // Pyth doesn't provide volume
+      positive: pythDataRef.current.length > 0 
+        ? newPrice >= pythDataRef.current[pythDataRef.current.length - 1].price
+        : true,
+    };
+    
+    // Keep last 50 data points for smooth chart
+    pythDataRef.current = [...pythDataRef.current.slice(-49), newPoint];
+    
+    if (mountedRef.current) {
+      setChartData([...pythDataRef.current]);
+      setDataSource("pyth");
+      setIsLoading(false);
+      
+      // Calculate 24h change from first to last price
+      if (pythDataRef.current.length > 1) {
+        const firstPrice = pythDataRef.current[0].price;
+        const change = ((newPrice - firstPrice) / firstPrice) * 100;
+        setPriceChange(change);
       }
+    }
+  }, [pythPrices, pythConnected, symbol]);
 
-      const updated = [...prev, newPoint];
-      // Keep max 50 points for performance
-      if (updated.length > 50) {
-        updated.shift();
-        lastPriceRef.current = updated[0]?.price || null;
-      }
-      return updated;
-    });
-
-    if (isLoading) setIsLoading(false);
-  }, [pyth.prices, pyth.isConnected, hasPythFeed, symbol, isLoading, pyth]);
-
+  // Fetch initial/fallback historical data
   useEffect(() => {
     mountedRef.current = true;
     
-    // For Pyth-supported assets, skip exchange data and build purely from oracle ticks
-    if (hasPythFeed) {
-      console.log(`[Chart] ${symbol} - Pure Pyth Oracle mode, building chart from oracle ticks only`);
-      setChartData([]);
-      lastPriceRef.current = null;
-      setPriceChange(0);
-      setDataSource("pyth");
-      setIsSupported(true);
-      setError(null);
-      // Chart will build from Pyth ticks via the useEffect above
-      // Mark as not loading since we're waiting for first oracle tick
-      if (pyth.isConnected) {
-        setIsLoading(false);
-      }
-      return;
-    }
-    
-    // For non-Pyth assets, use exchange data
-    const cached = getCachedData(symbol);
-    if (cached && isCacheValid(symbol)) {
-      setChartData(cached.data);
-      setPriceChange(cached.priceChange);
-      setDataSource(cached.exchange);
-      setIsLoading(false);
-      lastPriceRef.current = cached.data[0]?.price || null;
-    } else {
-      setChartData([]);
-      lastPriceRef.current = null;
-      setPriceChange(0);
-      setIsLoading(true);
-    }
-    
-    setIsSupported(true);
-    setError(null);
-    cleanup();
-
-    const connectWebSocket = (exchange: Exchange, exchangeSymbol: string) => {
-      if (!mountedRef.current) return;
-      
-      let wsUrl: string;
-      let subscribeMessage: string | null = null;
-
-      switch (exchange) {
-        case "binance":
-          wsUrl = `wss://stream.binance.com:9443/ws/${exchangeSymbol.toLowerCase()}usdt@kline_1m`;
-          break;
-        case "coinbase":
-          wsUrl = "wss://ws-feed.exchange.coinbase.com";
-          subscribeMessage = JSON.stringify({ type: "subscribe", product_ids: [exchangeSymbol], channels: ["ticker"] });
-          break;
-        case "kraken":
-          wsUrl = "wss://ws.kraken.com";
-          subscribeMessage = JSON.stringify({ event: "subscribe", pair: [exchangeSymbol], subscription: { name: "ticker" } });
-          break;
-        default:
-          return;
-      }
-
-      try {
-        const ws = new WebSocket(wsUrl);
-
-        ws.onopen = () => {
-          if (!mountedRef.current) { ws.close(); return; }
-          if (subscribeMessage) ws.send(subscribeMessage);
-        };
-
-        ws.onmessage = (event) => {
-          if (!mountedRef.current) return;
-          try {
-            const data = JSON.parse(event.data);
-            const parsed = parseWebSocketMessage(exchange, data);
-            if (parsed) {
-              const timeStr = formatTime(parsed.time);
-              if (lastPriceRef.current === null) lastPriceRef.current = parsed.price;
-              const change = ((parsed.price - lastPriceRef.current) / lastPriceRef.current) * 100;
-              setPriceChange(change);
-              setChartData((prev) => {
-                const newPoint: ChartDataPoint = {
-                  time: timeStr,
-                  price: parsed.price,
-                  volume: parsed.volume,
-                  positive: parsed.price >= (prev[prev.length - 1]?.price || parsed.price),
-                };
-                const existingIndex = prev.findIndex(p => p.time === timeStr);
-                if (existingIndex !== -1) {
-                  const updated = [...prev];
-                  updated[existingIndex] = newPoint;
-                  return updated;
-                }
-                const updated = [...prev, newPoint];
-                if (updated.length > 20) {
-                  updated.shift();
-                  lastPriceRef.current = updated[0]?.price || null;
-                }
-                return updated;
-              });
-            }
-          } catch {}
-        };
-
-        ws.onclose = () => {
-          if (mountedRef.current && !reconnectTimeoutRef.current) {
-            reconnectTimeoutRef.current = window.setTimeout(() => {
-              reconnectTimeoutRef.current = null;
-              connectWebSocket(exchange, exchangeSymbol);
-            }, 500);
-          }
-        };
-
-        wsRef.current = ws;
-      } catch {}
-    };
-
-    // CoinCap WebSocket for real-time price updates
-    const setupCoinCapWebSocket = (coinCapId: string) => {
-      try {
-        const ws = new WebSocket(`wss://ws.coincap.io/prices?assets=${coinCapId}`);
-        
-        ws.onmessage = (event) => {
-          if (!mountedRef.current) return;
-          try {
-            const data = JSON.parse(event.data);
-            const price = parseFloat(data[coinCapId]);
-            if (price && !isNaN(price)) {
-              const timeStr = formatTime(new Date());
-              if (lastPriceRef.current === null) lastPriceRef.current = price;
-              const change = ((price - lastPriceRef.current) / lastPriceRef.current) * 100;
-              setPriceChange(change);
-              setChartData((prev) => {
-                const newPoint: ChartDataPoint = {
-                  time: timeStr,
-                  price,
-                  volume: prev[prev.length - 1]?.volume || 0,
-                  positive: price >= (prev[prev.length - 1]?.price || price),
-                };
-                const existingIndex = prev.findIndex(p => p.time === timeStr);
-                if (existingIndex !== -1) {
-                  const updated = [...prev];
-                  updated[existingIndex] = newPoint;
-                  return updated;
-                }
-                const updated = [...prev, newPoint];
-                if (updated.length > 20) {
-                  updated.shift();
-                  lastPriceRef.current = updated[0]?.price || null;
-                }
-                return updated;
-              });
-            }
-          } catch {}
-        };
-
-        ws.onclose = () => {
-          if (mountedRef.current && !reconnectTimeoutRef.current) {
-            reconnectTimeoutRef.current = window.setTimeout(() => {
-              reconnectTimeoutRef.current = null;
-              setupCoinCapWebSocket(coinCapId);
-            }, 2000);
-          }
-        };
-
-        wsRef.current = ws;
-      } catch {}
-    };
-
-    // No polling - Pyth Oracle and CoinCap WebSocket are the primary streaming sources
-    const setupCoinGeckoRefresh = (_cgId: string) => {
-      // intentionally no-op - pure streaming mode
-    };
-
-    const loadData = async () => {
-      // For Pyth-supported assets, build chart purely from oracle ticks - no exchange data
-      if (hasPythFeed) {
-        console.log(`[Chart] ${symbol} - Pure decentralized mode: chart builds from Pyth Oracle ticks only`);
-        setDataSource("pyth");
-        setIsLoading(false);
-        // Chart data will accumulate from Pyth ticks via the useEffect above
-        return;
-      }
-
-      // For non-Pyth assets, fall back to exchange data
-
-      // Exchanges for initial historical data (Pyth Oracle handles live updates if available)
-      const exchanges: Exchange[] = ["coincap", "binance", "coinbase", "kraken", "coingecko"];
-
-      for (const exchange of exchanges) {
-        if (!mountedRef.current) return;
-
-        let exchangeSymbol = getExchangeSymbol(symbol, exchange, coinGeckoId);
-        
-        // For CoinCap, try dynamic lookup if not in static map
-        if (exchange === "coincap" && !exchangeSymbol) {
-          console.log(`[CoinCap] ${symbol} not in map, searching...`);
-          exchangeSymbol = await searchCoinCapId(symbol);
-        }
-        
-        if (!exchangeSymbol) continue;
-
-        let data: ChartDataPoint[] | null = null;
-
-        switch (exchange) {
-          case "coincap":
-            data = await fetchWithRetry(() => fetchCoinCapData(symbol, exchangeSymbol!));
-            break;
-          case "binance": 
-            data = await fetchWithRetry(() => fetchBinanceData(symbol, exchangeSymbol!)); 
-            break;
-          case "coinbase": 
-            data = await fetchWithRetry(() => fetchCoinbaseData(symbol, exchangeSymbol!)); 
-            break;
-          case "kraken": 
-            data = await fetchWithRetry(() => fetchKrakenData(symbol, exchangeSymbol!)); 
-            break;
-          case "coingecko": 
-            data = await fetchWithRetry(() => fetchCoinGeckoData(symbol, exchangeSymbol!)); 
-            break;
-        }
-
-        if (data && data.length > 0 && mountedRef.current) {
-          const change = ((data[data.length - 1].price - data[0].price) / data[0].price) * 100;
-          setChartData(data);
-          setPriceChange(change);
+    const fetchData = async () => {
+      // Check cache first
+      if (isCacheValid(symbol)) {
+        const cached = getCachedData(symbol);
+        if (cached) {
+          setChartData(cached.data);
+          setPriceChange(cached.priceChange);
+          setDataSource(cached.source);
           setIsLoading(false);
-          setCacheData(symbol, data, change, exchange);
-          lastPriceRef.current = data[0]?.price || null;
-
-          // If Pyth oracle is available, use it for live streaming (already handled by useEffect)
-          if (hasPythFeed) {
-            setDataSource("pyth");
-            console.log(`[Chart] ${symbol} initial data from ${exchange}, live streaming via Pyth Oracle`);
-            return;
-          }
-
-          // Otherwise fall back to exchange WebSockets
-          setDataSource(exchange);
-          if (exchange === "coincap") {
-            setupCoinCapWebSocket(exchangeSymbol);
-          } else if (exchange !== "coingecko") {
-            connectWebSocket(exchange, exchangeSymbol);
-          } else {
-            // CoinGecko snapshot only; try to stream live ticks via CoinCap WS
-            const staticCoinCapId = COINCAP_ID_MAP[symbol.toUpperCase()];
-            if (staticCoinCapId) {
-              setupCoinCapWebSocket(staticCoinCapId);
-            } else {
-              searchCoinCapId(symbol).then((id) => {
-                if (id && mountedRef.current) setupCoinCapWebSocket(id);
-              });
-            }
-            setupCoinGeckoRefresh(exchangeSymbol);
+          return;
+        }
+      }
+      
+      // If Pyth is streaming and we have data, don't fetch fallback
+      if (isPythStreaming && pythDataRef.current.length > 5) {
+        return;
+      }
+      
+      setIsLoading(true);
+      setError(null);
+      
+      // Try CoinGecko for historical data (decentralized-friendly)
+      const geckoId = getCoinGeckoId(symbol, coinGeckoId);
+      if (geckoId) {
+        const data = await fetchWithRetry(() => fetchCoinGeckoData(symbol, geckoId));
+        if (data && data.length > 0 && mountedRef.current) {
+          setChartData(data);
+          setDataSource("coingecko");
+          setIsLoading(false);
+          
+          // Calculate price change
+          if (data.length > 1) {
+            const firstPrice = data[0].price;
+            const lastPrice = data[data.length - 1].price;
+            const change = ((lastPrice - firstPrice) / firstPrice) * 100;
+            setPriceChange(change);
+            setCacheData(symbol, data, change, "coingecko");
           }
           return;
         }
       }
-
-      // If we have Pyth but no historical data, still mark as supported (Pyth will stream)
-      if (hasPythFeed) {
-        console.log(`[Chart] ${symbol} no historical data, will build from Pyth Oracle stream`);
-        setDataSource("pyth");
-        setIsLoading(false);
-        return;
-      }
-
+      
+      // If nothing worked, mark as unsupported
       if (mountedRef.current) {
         setIsSupported(false);
-        setError("Data not available for this asset");
         setIsLoading(false);
+        setError("No data available from decentralized sources");
       }
     };
-
-    loadData();
-
+    
+    // Only fetch if not already streaming from Pyth
+    if (!isPythStreaming || pythDataRef.current.length === 0) {
+      fetchData();
+    }
+    
     return () => {
       mountedRef.current = false;
-      cleanup();
     };
-  }, [symbol, coinGeckoId, cleanup, hasPythFeed, pyth.isConnected]);
+  }, [symbol, coinGeckoId, isPythStreaming]);
 
-  return { 
-    chartData, 
-    priceChange, 
-    isLoading, 
-    isSupported, 
-    error, 
+  return {
+    chartData,
+    priceChange,
+    isLoading,
+    isSupported,
+    error,
     dataSource,
-    // Oracle status for UI
-    isPythStreaming: dataSource === "pyth" && pyth.isConnected,
-    oracleConnected: pyth.isConnected,
+    isPythStreaming,
+    oracleConnected,
   };
 };
