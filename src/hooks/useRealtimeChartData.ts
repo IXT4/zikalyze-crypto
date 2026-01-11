@@ -842,17 +842,10 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
       } catch {}
     };
 
-    const setupCoinGeckoRefresh = (cgId: string) => {
-      refreshIntervalRef.current = window.setInterval(async () => {
-        if (!mountedRef.current) return;
-        const data = await fetchCoinGeckoData(symbol, cgId);
-        if (data && data.length > 0 && mountedRef.current) {
-          const change = ((data[data.length - 1].price - data[0].price) / data[0].price) * 100;
-          setChartData(data);
-          setPriceChange(change);
-          setCacheData(symbol, data, change, "coingecko");
-        }
-      }, 60000);
+    // No polling - CoinGecko is only used for initial snapshot.
+    // After that, we attempt CoinCap WebSocket streaming for real-time ticks.
+    const setupCoinGeckoRefresh = (_cgId: string) => {
+      // intentionally no-op
     };
 
     const loadData = async () => {
@@ -901,13 +894,21 @@ export const useRealtimeChartData = (symbol: string, coinGeckoId?: string) => {
           setCacheData(symbol, data, change, exchange);
           lastPriceRef.current = data[0]?.price || null;
 
-          // Set up live updates - WebSocket for supported exchanges, polling for CoinCap/CoinGecko
+          // Set up live updates - WebSocket only (no polling)
           if (exchange === "coincap") {
-            // CoinCap WebSocket for live updates
             setupCoinCapWebSocket(exchangeSymbol);
           } else if (exchange !== "coingecko") {
             connectWebSocket(exchange, exchangeSymbol);
           } else {
+            // CoinGecko snapshot only; try to stream live ticks via CoinCap WS
+            const staticCoinCapId = COINCAP_ID_MAP[symbol.toUpperCase()];
+            if (staticCoinCapId) {
+              setupCoinCapWebSocket(staticCoinCapId);
+            } else {
+              searchCoinCapId(symbol).then((id) => {
+                if (id && mountedRef.current) setupCoinCapWebSocket(id);
+              });
+            }
             setupCoinGeckoRefresh(exchangeSymbol);
           }
           return;
