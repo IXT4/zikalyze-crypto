@@ -1,7 +1,7 @@
-import { ComposedChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
+import { ComposedChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useState } from "react";
-import { Zap, Activity, TrendingUp, TrendingDown } from "lucide-react";
-import { usePythOHLC, CandleInterval } from "@/hooks/usePythOHLC";
+import { Zap, Activity, TrendingUp, TrendingDown, Clock } from "lucide-react";
+import { usePythOHLC, CandleInterval, INTERVAL_LABELS } from "@/hooks/usePythOHLC";
 
 interface CandlestickChartProps {
   crypto?: string;
@@ -136,6 +136,15 @@ const CandlestickChart = ({ crypto = "BTC" }: CandlestickChartProps) => {
 
   // Building candles from ticks
   if (isStreaming && candles.length === 0) {
+    // Calculate time remaining for longer intervals
+    const getTimeRemaining = () => {
+      if (interval === "1h") return "~1 hour";
+      if (interval === "4h") return "~4 hours";
+      if (interval === "1d") return "~24 hours";
+      return null;
+    };
+    const timeNote = getTimeRemaining();
+    
     return (
       <div className="rounded-2xl border border-border bg-card p-6">
         <div className="mb-4 flex items-center justify-between">
@@ -143,18 +152,39 @@ const CandlestickChart = ({ crypto = "BTC" }: CandlestickChartProps) => {
             <h3 className="text-lg font-semibold text-foreground">OHLC Candlesticks</h3>
             <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 animate-pulse">
               <Zap className="h-3 w-3" />
-              Building...
+              Building {INTERVAL_LABELS[interval]}...
             </span>
+          </div>
+          <div className="flex gap-0.5">
+            {(["1m", "5m", "15m", "1h", "4h", "1d"] as CandleInterval[]).map((int) => (
+              <button
+                key={int}
+                onClick={() => setInterval(int)}
+                className={`rounded px-1.5 py-0.5 text-[9px] transition-colors ${
+                  interval === int
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {int}
+              </button>
+            ))}
           </div>
         </div>
         <div className="h-48 flex flex-col items-center justify-center gap-2">
           <div className="flex items-center gap-2 text-emerald-400">
             <Zap className="h-5 w-5 animate-pulse" />
-            <span className="text-sm font-medium">Building from Pyth Oracle ticks...</span>
+            <span className="text-sm font-medium">Building {INTERVAL_LABELS[interval]} candles from Pyth Oracle...</span>
           </div>
           <span className="text-xs text-muted-foreground">
             {ticksReceived} tick{ticksReceived !== 1 ? 's' : ''} received • Last: ${lastTick?.toLocaleString() ?? '-'}
           </span>
+          {timeNote && (
+            <span className="flex items-center gap-1 text-[10px] text-amber-400/80">
+              <Clock className="h-3 w-3" />
+              First candle completes in {timeNote}
+            </span>
+          )}
         </div>
       </div>
     );
@@ -186,16 +216,17 @@ const CandlestickChart = ({ crypto = "BTC" }: CandlestickChartProps) => {
           <span className="text-[10px] text-muted-foreground">
             {ticksReceived} ticks
           </span>
-          <div className="flex gap-1">
-            {(["1m", "5m", "15m"] as CandleInterval[]).map((int) => (
+          <div className="flex gap-0.5">
+            {(["1m", "5m", "15m", "1h", "4h", "1d"] as CandleInterval[]).map((int) => (
               <button
                 key={int}
                 onClick={() => setInterval(int)}
-                className={`rounded-lg px-2 py-1 text-[10px] transition-colors ${
+                className={`rounded px-1.5 py-0.5 text-[9px] transition-colors ${
                   interval === int
                     ? "bg-primary text-primary-foreground"
                     : "bg-secondary text-muted-foreground hover:text-foreground"
                 }`}
+                title={INTERVAL_LABELS[int]}
               >
                 {int}
               </button>

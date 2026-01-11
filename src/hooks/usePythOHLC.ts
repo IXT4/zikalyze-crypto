@@ -28,19 +28,52 @@ const CANDLE_INTERVALS = {
   "5m": 5 * 60 * 1000,
   "15m": 15 * 60 * 1000,
   "1h": 60 * 60 * 1000,
+  "4h": 4 * 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
 };
 
 type CandleInterval = keyof typeof CANDLE_INTERVALS;
 
+// Format labels for different intervals
+const INTERVAL_LABELS: Record<CandleInterval, string> = {
+  "1m": "1 Min",
+  "5m": "5 Min",
+  "15m": "15 Min",
+  "1h": "1 Hour",
+  "4h": "4 Hour",
+  "1d": "Daily",
+};
+
 const formatCandleTime = (timestamp: number, interval: CandleInterval): string => {
   const date = new Date(timestamp);
-  if (interval === "1m" || interval === "5m") {
+  
+  // For daily candles, show date
+  if (interval === "1d") {
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  }
+  
+  // For 4h candles, show date + time
+  if (interval === "4h") {
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      hour12: true,
+    }).replace(",", "");
+  }
+  
+  // For 1h candles, show hour
+  if (interval === "1h") {
     return date.toLocaleTimeString("en-US", {
       hour: "2-digit",
-      minute: "2-digit",
       hour12: true,
     });
   }
+  
+  // For minute candles, show time
   return date.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
@@ -173,5 +206,5 @@ export const usePythOHLC = (
   };
 };
 
-export { CANDLE_INTERVALS };
+export { CANDLE_INTERVALS, INTERVAL_LABELS };
 export type { CandleInterval };
