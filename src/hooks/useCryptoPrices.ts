@@ -110,8 +110,8 @@ export const useCryptoPrices = () => {
   // Throttle interval for readable updates
   const UPDATE_THROTTLE_MS = 150;
   
-  // Apply Oracle prices as primary source (Pyth/Chainlink) - DECENTRALIZED ONLY
-  // Debounced to prevent React queue issues
+  // Apply Oracle prices as primary source (Pyth/DIA/Redstone) - DECENTRALIZED ONLY
+  // Preserves 24h change data from CoinGecko while updating live prices
   useEffect(() => {
     if (!oracle.isLive || oracle.prices.size === 0) return;
     
@@ -137,10 +137,25 @@ export const useCryptoPrices = () => {
           const isSignificant = priceDiff > 0.0001; // 0.01% threshold
         
           if (isSignificant) {
-            const oracleSource = oracleData.source === "Pyth" ? "Pyth Oracle" : "Chainlink Oracle";
+            const oracleSource = oracleData.source === "Pyth" ? "Pyth Oracle" : 
+                                 oracleData.source === "DIA" ? "DIA Oracle" : "Redstone Oracle";
+            
+            // CRITICAL: Preserve CoinGecko 24h data while updating live price
+            // Only update high_24h/low_24h if new price breaks the range
+            const newHigh24h = existing.high_24h > 0 
+              ? Math.max(existing.high_24h, oracleData.price) 
+              : oracleData.price;
+            const newLow24h = existing.low_24h > 0 
+              ? Math.min(existing.low_24h, oracleData.price) 
+              : oracleData.price;
+            
             const updated = {
               ...existing,
               current_price: oracleData.price,
+              // Preserve API 24h change - this is the accurate value from CoinGecko
+              price_change_percentage_24h: existing.price_change_percentage_24h,
+              high_24h: newHigh24h,
+              low_24h: newLow24h,
               lastUpdate: now,
               source: oracleSource,
             };
