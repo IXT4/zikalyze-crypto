@@ -154,12 +154,12 @@ function decodeLatestRoundData(data: string): {
   return { roundId, answer, updatedAt };
 }
 
-// Longer refresh interval to reduce rate limiting
-const REFRESH_INTERVAL = 45000; // 45 seconds
+// Longer refresh interval - Chainlink is backup to Pyth
+const REFRESH_INTERVAL = 60000; // 60 seconds
 
-// Track failed endpoints to skip them temporarily
+// Track failed endpoints with cooldown
 const failedEndpoints = new Map<string, number>();
-const ENDPOINT_COOLDOWN = 120000; // 2 minute cooldown for failed endpoints
+const ENDPOINT_COOLDOWN = 180000; // 3 minute cooldown
 
 const isEndpointAvailable = (url: string): boolean => {
   const failedAt = failedEndpoints.get(url);
@@ -309,12 +309,12 @@ export const useChainlinkPrices = (symbols: string[] = []) => {
   useEffect(() => {
     isMountedRef.current = true;
 
-    // Delay initial fetch to let Pyth connect first (Pyth is primary)
+    // Delay initial fetch - Pyth SSE is primary, Chainlink is backup
     const initTimeout = setTimeout(() => {
       if (isMountedRef.current) {
         fetchAllPrices();
       }
-    }, 3000);
+    }, 5000);
 
     // Set up refresh interval
     refreshIntervalRef.current = setInterval(() => {

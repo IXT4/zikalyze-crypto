@@ -35,22 +35,22 @@ export const useOraclePrices = (symbols: string[] = []) => {
   const pyth = usePythPrices(memoizedSymbols);
   const chainlink = useChainlinkPrices(memoizedSymbols);
 
-  // Merge prices with debouncing to prevent rapid state updates
+  // Merge prices - Pyth is primary, Chainlink is fallback
   useEffect(() => {
     if (!isMountedRef.current) return;
 
-    // Clear any pending update
+    // Clear pending update
     if (updateTimeoutRef.current) {
       clearTimeout(updateTimeoutRef.current);
     }
 
-    // Debounce updates to prevent React queue issues
+    // Fast debounce for smooth updates
     updateTimeoutRef.current = setTimeout(() => {
       if (!isMountedRef.current) return;
 
       const merged = new Map<string, OraclePriceData>();
 
-      // First add all Chainlink prices as base
+      // Add Chainlink prices as base (fallback)
       chainlink.prices.forEach((data: ChainlinkPriceData, key: string) => {
         if (!data || !data.price || data.price <= 0) return;
         const symbol = key.replace("/USD", "").toUpperCase();
@@ -62,7 +62,7 @@ export const useOraclePrices = (symbols: string[] = []) => {
         });
       });
 
-      // Override with Pyth prices (higher priority - real-time WebSocket)
+      // Override with Pyth prices (primary - real-time SSE)
       pyth.prices.forEach((data: PythPriceData, key: string) => {
         if (!data || !data.price || data.price <= 0) return;
         const symbol = key.replace("/USD", "").toUpperCase();
@@ -83,7 +83,7 @@ export const useOraclePrices = (symbols: string[] = []) => {
       setPrices(new Map(merged));
       setIsLive(newIsLive);
       setPrimarySource(newPrimarySource);
-    }, 50); // 50ms debounce
+    }, 100);
 
     return () => {
       if (updateTimeoutRef.current) {
