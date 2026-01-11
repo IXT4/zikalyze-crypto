@@ -56,25 +56,26 @@ export const useMultiSymbolLivePrice = (
     // Process requested symbols
     for (const symbol of symbols) {
       const upperSymbol = symbol.toUpperCase();
-      
+      const pythKey = `${upperSymbol}/USD`;
+
       // Try Pyth first (primary decentralized source)
-      const pythPrice = pythPrices.get(upperSymbol);
+      const pythPrice = pythPrices.get(pythKey);
       if (pythPrice && pythPrice.price > 0) {
         // Track price history for 24h high/low estimation
         const history = priceHistoryRef.current.get(upperSymbol) || [];
         history.push(pythPrice.price);
         if (history.length > 1440) history.shift(); // Keep ~24h of minute data
         priceHistoryRef.current.set(upperSymbol, history);
-        
+
         const high24h = Math.max(...history);
         const low24h = Math.min(...history);
-        
+
         // Calculate change from oldest price in history
         const oldestPrice = history[0];
-        const change24h = oldestPrice > 0 
-          ? ((pythPrice.price - oldestPrice) / oldestPrice) * 100 
+        const change24h = oldestPrice > 0
+          ? ((pythPrice.price - oldestPrice) / oldestPrice) * 100
           : 0;
-        
+
         updatedPrices[upperSymbol] = {
           price: pythPrice.price,
           change24h,
@@ -82,27 +83,27 @@ export const useMultiSymbolLivePrice = (
           low24h,
           volume: 0, // Pyth doesn't provide volume
           lastUpdate: now,
-          source: 'Pyth Oracle',
+          source: "Pyth Oracle",
         };
         connectedSymbols.push(upperSymbol);
         continue;
       }
-      
+
       // Try Chainlink as fallback
-      const chainlinkPrice = chainlinkPrices.get(upperSymbol);
+      const chainlinkPrice = chainlinkPrices.get(pythKey);
       if (chainlinkPrice && chainlinkPrice.price > 0) {
         const history = priceHistoryRef.current.get(upperSymbol) || [];
         history.push(chainlinkPrice.price);
         if (history.length > 1440) history.shift();
         priceHistoryRef.current.set(upperSymbol, history);
-        
+
         const high24h = Math.max(...history);
         const low24h = Math.min(...history);
         const oldestPrice = history[0];
-        const change24h = oldestPrice > 0 
-          ? ((chainlinkPrice.price - oldestPrice) / oldestPrice) * 100 
+        const change24h = oldestPrice > 0
+          ? ((chainlinkPrice.price - oldestPrice) / oldestPrice) * 100
           : 0;
-        
+
         updatedPrices[upperSymbol] = {
           price: chainlinkPrice.price,
           change24h,
@@ -110,7 +111,7 @@ export const useMultiSymbolLivePrice = (
           low24h,
           volume: 0,
           lastUpdate: now,
-          source: 'Chainlink Oracle',
+          source: "Chainlink Oracle",
         };
         connectedSymbols.push(upperSymbol);
         continue;
