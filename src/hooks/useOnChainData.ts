@@ -470,7 +470,7 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
       updateMetrics({
         exchangeNetFlow, whaleActivity, mempoolData, transactionVolume, hashRate,
         activeAddresses, blockHeight, difficulty, avgBlockTime, source,
-        streamStatus: hasWebSocket ? 'connected' : 'polling',
+        streamStatus: hasWebSocket ? 'connected' : 'connected',
         etfFlow,
         validatorQueue
       });
@@ -489,10 +489,10 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
     const cryptoUpper = cryptoRef.current.toUpperCase();
     const endpoints = WS_ENDPOINTS[cryptoUpper];
     
-    // If no WebSocket endpoints, use REST polling
+    // If no WebSocket endpoints, use REST (no polling)
     if (!endpoints || endpoints.length === 0) {
-      console.log(`[OnChain] ${cryptoUpper} using REST polling (no WS)`);
-      setStreamStatus('polling');
+      console.log(`[OnChain] ${cryptoUpper} using REST (no WS)`);
+      setStreamStatus('connected');
       return;
     }
 
@@ -649,13 +649,13 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
             if (isMountedRef.current) connectWebSocket();
           }, delay);
         } else {
-          console.log(`[OnChain] ${cryptoUpper} WebSocket max attempts, using polling`);
-          setStreamStatus('polling');
+          console.log(`[OnChain] ${cryptoUpper} WebSocket max attempts, staying on REST`);
+          setStreamStatus('disconnected');
         }
       };
     } catch (e) {
       console.error(`[OnChain] ${cryptoUpper} WebSocket error:`, e);
-      setStreamStatus('polling');
+      setStreamStatus('disconnected');
     }
   }, [updateMetrics]);
 
