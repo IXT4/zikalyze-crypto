@@ -1,7 +1,11 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🔮 usePythPrices — Decentralized Oracle Real-time Streaming via SSE
+// ═══════════════════════════════════════════════════════════════════════════════
+// Uses Pyth Network Hermes SSE for true real-time decentralized price streaming
+// SSE works in browsers (no CORS issues) and provides ~400ms updates
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// Pyth Network Price Fetcher - Uses REST API polling as SSE has CORS issues
-// This provides decentralized price data as a supplementary source
+import { useState, useEffect, useRef, useCallback } from "react";
 
 export interface PythPriceData {
   symbol: string;
@@ -11,10 +15,13 @@ export interface PythPriceData {
   source: "Pyth";
 }
 
-// Pyth Hermes REST endpoint
-const HERMES_API = "https://hermes.pyth.network";
+// Pyth Hermes endpoints (multiple for resilience)
+const HERMES_ENDPOINTS = [
+  "https://hermes.pyth.network",
+  "https://hermes-beta.pyth.network",
+];
 
-// Pyth Price Feed IDs for top cryptocurrencies
+// Pyth Price Feed IDs for top cryptocurrencies (without 0x prefix - added at request time)
 export const PYTH_FEED_IDS: Record<string, string> = {
   "BTC/USD": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
   "ETH/USD": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
@@ -58,8 +65,8 @@ const FEED_ID_TO_SYMBOL = Object.entries(PYTH_FEED_IDS).reduce((acc, [symbol, fe
 }, {} as Record<string, string>);
 
 // Cache for prices
-const CACHE_KEY = "zikalyze_pyth_cache_v1";
-const CACHE_TTL = 30 * 1000; // 30 seconds
+const CACHE_KEY = "zikalyze_pyth_cache_v3";
+const CACHE_TTL = 60 * 1000; // 1 minute
 
 const loadCache = (): Map<string, PythPriceData> | null => {
   try {
@@ -87,41 +94,165 @@ export const usePythPrices = (_symbols: string[] = []) => {
   const [isConnecting, setIsConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [prices, setPrices] = useState<Map<string, PythPriceData>>(() => loadCache() || new Map());
+  const [lastUpdateTime, setLastUpdateTime] = useState<number>(0);
 
   const pricesMapRef = useRef<Map<string, PythPriceData>>(new Map());
   const isMountedRef = useRef(true);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const fetchingRef = useRef(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const endpointIndexRef = useRef(0);
+  const reconnectAttemptsRef = useRef(0);
+  const lastSaveRef = useRef(0);
 
   const getPrice = useCallback((symbol: string): PythPriceData | undefined => {
     const normalizedSymbol = symbol.toUpperCase().replace(/USD$/, "") + "/USD";
     return pricesMapRef.current.get(normalizedSymbol);
   }, []);
 
-  // Fetch prices from Pyth REST API
-  const fetchPrices = useCallback(async () => {
-    if (fetchingRef.current || !isMountedRef.current) return;
-    fetchingRef.current = true;
+  // Build SSE URL with all feed IDs (proper format with 0x prefix)
+  const buildSSEUrl = useCallback((endpointIndex: number) => {
+    const baseUrl = HERMES_ENDPOINTS[endpointIndex % HERMES_ENDPOINTS.length];
+    const feedIds = Object.values(PYTH_FEED_IDS);
+    // Build query string manually to avoid encoding issues
+    const idsParams = feedIds.map(id => `ids[]=0x${id}`).join("&");
+    return `${baseUrl}/v2/updates/price/stream?${idsParams}&parsed=true`;
+  }, []);
+
+  // Parse SSE message and update prices
+  const handleSSEMessage = useCallback((event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data);
+      
+      // Handle parsed format from SSE
+      if (data.parsed && Array.isArray(data.parsed)) {
+        let updated = false;
+        
+        data.parsed.forEach((feed: any) => {
+          const feedId = feed.id?.replace(/^0x/, "");
+          const symbol = FEED_ID_TO_SYMBOL[feedId];
+
+          if (symbol && feed.price) {
+            const price = parseFloat(feed.price.price) * Math.pow(10, feed.price.expo);
+            const confidence = parseFloat(feed.price.conf) * Math.pow(10, feed.price.expo);
+
+            if (price > 0) {
+              pricesMapRef.current.set(symbol, {
+                symbol: symbol.replace("/USD", ""),
+                price,
+                confidence,
+                publishTime: feed.price.publish_time * 1000,
+                source: "Pyth",
+              });
+              updated = true;
+            }
+          }
+        });
+
+        if (updated && isMountedRef.current) {
+          setPrices(new Map(pricesMapRef.current));
+          setLastUpdateTime(Date.now());
+          setIsConnected(true);
+          setIsConnecting(false);
+          setError(null);
+          reconnectAttemptsRef.current = 0;
+
+          // Save cache every 10 seconds
+          const now = Date.now();
+          if (now - lastSaveRef.current > 10000) {
+            saveCache(pricesMapRef.current);
+            lastSaveRef.current = now;
+          }
+        }
+      }
+    } catch (e) {
+      // Silently ignore parse errors for individual messages
+    }
+  }, []);
+
+  // Connect to SSE stream
+  const connectSSE = useCallback(() => {
+    if (!isMountedRef.current) return;
+    
+    // Clean up existing connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    const url = buildSSEUrl(endpointIndexRef.current);
+    console.log("[Pyth SSE] Connecting to:", HERMES_ENDPOINTS[endpointIndexRef.current % HERMES_ENDPOINTS.length]);
 
     try {
+      const eventSource = new EventSource(url);
+      eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => {
+        console.log("[Pyth SSE] Connected successfully");
+        if (isMountedRef.current) {
+          setIsConnected(true);
+          setIsConnecting(false);
+          setError(null);
+          reconnectAttemptsRef.current = 0;
+        }
+      };
+
+      eventSource.onmessage = handleSSEMessage;
+
+      eventSource.onerror = (e) => {
+        console.log("[Pyth SSE] Connection error, will reconnect...");
+        eventSource.close();
+        eventSourceRef.current = null;
+        
+        if (isMountedRef.current) {
+          // Keep showing as connected if we have cached data
+          if (pricesMapRef.current.size === 0) {
+            setIsConnected(false);
+          }
+          
+          // Exponential backoff with max 30 seconds
+          reconnectAttemptsRef.current++;
+          const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptsRef.current), 30000);
+          
+          // Try next endpoint after 3 failed attempts
+          if (reconnectAttemptsRef.current % 3 === 0) {
+            endpointIndexRef.current++;
+          }
+          
+          reconnectTimeoutRef.current = setTimeout(connectSSE, delay);
+        }
+      };
+    } catch (e: any) {
+      console.error("[Pyth SSE] Failed to create connection:", e);
+      if (isMountedRef.current) {
+        setError(e.message);
+        // Retry after delay
+        reconnectTimeoutRef.current = setTimeout(connectSSE, 5000);
+      }
+    }
+  }, [buildSSEUrl, handleSSEMessage]);
+
+  // Initial REST fetch for immediate data while SSE connects
+  const fetchInitialPrices = useCallback(async () => {
+    try {
       const feedIds = Object.values(PYTH_FEED_IDS);
-      const params = new URLSearchParams();
-      feedIds.forEach(id => params.append("ids[]", id));
+      // Build query string with 0x prefix
+      const idsParams = feedIds.map(id => `ids[]=0x${id}`).join("&");
       
       const response = await fetch(
-        `${HERMES_API}/v2/updates/price/latest?${params.toString()}`,
+        `${HERMES_ENDPOINTS[0]}/v2/updates/price/latest?${idsParams}`,
         { signal: AbortSignal.timeout(10000) }
       );
 
       if (!response.ok) {
-        throw new Error(`Pyth API error: ${response.status}`);
+        console.log("[Pyth] REST API error:", response.status);
+        return;
       }
 
       const data = await response.json();
 
       if (data.parsed && Array.isArray(data.parsed)) {
         data.parsed.forEach((feed: any) => {
-          const feedId = feed.id;
+          const feedId = feed.id?.replace(/^0x/, "");
           const symbol = FEED_ID_TO_SYMBOL[feedId];
 
           if (symbol && feed.price) {
@@ -140,54 +271,51 @@ export const usePythPrices = (_symbols: string[] = []) => {
           }
         });
 
-        if (isMountedRef.current) {
+        if (isMountedRef.current && pricesMapRef.current.size > 0) {
           saveCache(pricesMapRef.current);
           setPrices(new Map(pricesMapRef.current));
+          setLastUpdateTime(Date.now());
           setIsConnected(true);
           setIsConnecting(false);
-          setError(null);
+          console.log(`[Pyth] Fetched ${pricesMapRef.current.size} prices via REST`);
         }
       }
     } catch (e: any) {
-      console.log("[Pyth] Fetch error:", e.message);
-      if (isMountedRef.current) {
-        setError(e.message);
-        // Keep connected=true if we have cached data
-        if (pricesMapRef.current.size === 0) {
-          setIsConnected(false);
-        }
-        setIsConnecting(false);
-      }
-    } finally {
-      fetchingRef.current = false;
+      console.log("[Pyth] REST fetch error:", e.message);
+      // Silently fail - SSE will provide data
     }
   }, []);
 
   useEffect(() => {
     isMountedRef.current = true;
 
-    // Load cache immediately
+    // Load cache immediately for instant UI
     const cached = loadCache();
     if (cached && cached.size > 0) {
       pricesMapRef.current = cached;
       setPrices(cached);
       setIsConnected(true);
       setIsConnecting(false);
+      console.log("[Pyth] Loaded from cache");
     }
 
-    // Initial fetch
-    fetchPrices();
+    // Fetch initial data for quick display
+    fetchInitialPrices();
 
-    // Refresh every 5 seconds (Pyth updates ~400ms on-chain, but we poll less frequently)
-    intervalRef.current = setInterval(fetchPrices, 5000);
+    // Start SSE connection for real-time updates
+    connectSSE();
 
     return () => {
       isMountedRef.current = false;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
       }
     };
-  }, [fetchPrices]);
+  }, [connectSSE, fetchInitialPrices]);
 
   return {
     prices,
@@ -196,5 +324,6 @@ export const usePythPrices = (_symbols: string[] = []) => {
     error,
     getPrice,
     feedIds: PYTH_FEED_IDS,
+    lastUpdateTime,
   };
 };
