@@ -58,10 +58,47 @@ All colors MUST be HSL.
   }
 }
 
-/* Price Flash Animations - HIGHLY VISIBLE Real-Time Updates */
+/* Price Flash Animations - Binance Futures Style */
 .price-display {
   transition: transform 0.15s ease-out, color 0.3s ease-out;
   border-radius: 4px;
+}
+
+/* Rolling digit animations - Binance Futures style */
+@keyframes rollUp {
+  0% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes rollDown {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-roll-up {
+  animation: rollUp 0.25s ease-out forwards;
+}
+
+.animate-roll-down {
+  animation: rollDown 0.25s ease-out forwards;
 }
 
 @keyframes flashGreen {
