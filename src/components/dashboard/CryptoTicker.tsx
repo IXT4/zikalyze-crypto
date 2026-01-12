@@ -3,6 +3,8 @@ import { CryptoPrice } from "@/hooks/useCryptoPrices";
 import { Zap, Link2 } from "lucide-react";
 import { PriceChange } from "./PriceChange";
 import { LivePriceLarge } from "./LivePrice";
+import MiniSparkline from "./MiniSparkline";
+import { usePriceHistory } from "@/hooks/usePriceHistory";
 
 const cryptoMeta = [
   { symbol: "BTC", name: "Bitcoin", color: "text-warning" },
@@ -46,6 +48,10 @@ const CryptoTicker = ({
   isLive,
   connectedExchanges = []
 }: CryptoTickerProps) => {
+  
+  // Get price history for sparklines
+  const tickerSymbols = cryptoMeta.map(c => c.symbol);
+  const { getHistory } = usePriceHistory(tickerSymbols);
   
   // Determine oracle display
   const getOracleIcon = () => {
@@ -114,6 +120,7 @@ const CryptoTicker = ({
           const livePrice = getPriceBySymbol(crypto.symbol);
           const price = livePrice?.current_price || 0;
           const change = livePrice?.price_change_percentage_24h || 0;
+          const sparklineData = getHistory(crypto.symbol);
           
           // Show live dot for all cryptos when stream is live and price is available
           const showTickDot = !!isLive && price > 0;
@@ -144,7 +151,16 @@ const CryptoTicker = ({
                   showBadge={false}
                 />
               </div>
-              <LivePriceLarge value={price} />
+              
+              <div className="flex items-center gap-2">
+                <LivePriceLarge value={price} />
+                <MiniSparkline 
+                  data={sparklineData} 
+                  width={40} 
+                  height={16} 
+                  className="opacity-80"
+                />
+              </div>
             </button>
           );
         })}
