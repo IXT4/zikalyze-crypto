@@ -208,6 +208,14 @@ export default {
             opacity: "1",
           },
         },
+        "live-glow": {
+          "0%, 100%": {
+            boxShadow: "0 0 0 1px hsl(var(--success) / 0.15), 0 0 8px 0 hsl(var(--success) / 0.1)",
+          },
+          "50%": {
+            boxShadow: "0 0 0 1px hsl(var(--success) / 0.3), 0 0 16px 2px hsl(var(--success) / 0.2)",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -223,6 +231,7 @@ export default {
         "spin-slow": "spin-slow 2.5s linear infinite",
         "roll-up": "roll-up 0.2s ease-out forwards",
         "roll-down": "roll-down 0.2s ease-out forwards",
+        "live-glow": "live-glow 2s ease-in-out infinite",
       },
     },
   },

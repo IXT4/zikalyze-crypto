@@ -7,6 +7,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Grid3X3, TrendingUp, TrendingDown, Maximize2, Minimize2, CheckCircle, Radio } from "lucide-react";
@@ -226,7 +227,10 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
   };
   
   return (
-    <Card className="border-border bg-card/95 backdrop-blur-sm overflow-hidden">
+    <Card className={cn(
+      "border-border bg-card/95 backdrop-blur-sm overflow-hidden transition-shadow duration-500",
+      websocket.connected && "animate-live-glow"
+    )}>
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
         <div className="flex items-center gap-3">
           <Grid3X3 className="h-5 w-5 text-primary" />
