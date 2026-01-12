@@ -3,14 +3,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { cn } from "@/lib/utils";
-import { Zap, Link2, Radio, Layers } from "lucide-react";
+import { Zap, Radio, Layers } from "lucide-react";
 
-type OracleSource = "Pyth" | "DIA" | "API3" | "Redstone" | "none" | null;
+type OracleSource = "Pyth" | "DIA" | "Redstone" | "none" | null;
 
 interface OracleStatusProps {
   pythConnected: boolean;
   diaConnected: boolean;
-  api3Connected: boolean;
   redstoneConnected: boolean;
   primarySource: OracleSource;
 }
@@ -25,11 +24,6 @@ const SOURCE_CONFIG: Record<string, { icon: React.ReactNode; color: string; bg: 
     icon: <Radio className="h-3 w-3" />, 
     color: "text-chart-purple", 
     bg: "bg-chart-purple/20" 
-  },
-  API3: { 
-    icon: <Link2 className="h-3 w-3" />, 
-    color: "text-chart-blue", 
-    bg: "bg-chart-blue/20" 
   },
   Redstone: { 
     icon: <Layers className="h-3 w-3" />, 
@@ -60,7 +54,6 @@ export const OracleConnectionDots = ({ status }: { status: OracleStatusProps }) 
   const dots = [
     { connected: status.pythConnected, label: "Pyth", color: "bg-chart-cyan" },
     { connected: status.diaConnected, label: "DIA", color: "bg-chart-purple" },
-    { connected: status.api3Connected, label: "API3", color: "bg-chart-blue" },
     { connected: status.redstoneConnected, label: "Redstone", color: "bg-chart-orange" },
   ];
 
