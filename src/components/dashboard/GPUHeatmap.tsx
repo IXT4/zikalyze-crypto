@@ -6,10 +6,10 @@
 // Uses CoinMarketCap WebSocket for verified metadata & images
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Grid3X3, TrendingUp, TrendingDown, Maximize2, Minimize2, CheckCircle } from "lucide-react";
+import { Grid3X3, TrendingUp, TrendingDown, Maximize2, Minimize2, CheckCircle, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCurrency } from "@/hooks/useCurrency";
 import {
@@ -19,6 +19,7 @@ import {
 } from "@/lib/gpu/gpu-heatmap-renderer";
 import type { CryptoPrice } from "@/hooks/useCryptoPrices";
 import { useCoinMarketCapWebSocket, getCMCImageBySymbol } from "@/hooks/useCoinMarketCapWebSocket";
+import { useGlobalPriceWebSocket } from "@/hooks/useGlobalPriceWebSocket";
 
 interface GPUHeatmapProps {
   prices: CryptoPrice[];
@@ -45,6 +46,10 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
   // CoinMarketCap WebSocket for verified metadata & images
   const { connected: cmcConnected, getImageUrl: getCMCImage } = useCoinMarketCapWebSocket();
   
+  // Direct WebSocket access for real-time price updates
+  const allSymbols = useMemo(() => prices.map(p => p.symbol.toUpperCase()), [prices]);
+  const websocket = useGlobalPriceWebSocket(allSymbols);
+  
   // Format large numbers (market cap, volume)
   const formatLargeNumber = useCallback((value: number): string => {
     if (value >= 1_000_000_000_000) return `${currencySymbol}${(value / 1_000_000_000_000).toFixed(2)}T`;
@@ -54,7 +59,7 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
     return `${currencySymbol}${value.toFixed(2)}`;
   }, [currencySymbol]);
   
-  // Convert prices to heatmap cells with CMC verified images
+  // Convert prices to heatmap cells with CMC verified images + WebSocket prices
   const convertToHeatmapCells = useCallback((prices: CryptoPrice[]): HeatmapCell[] => {
     return prices
       .filter((p) => p.current_price > 0)
@@ -62,12 +67,15 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
       .slice(0, 100)
       .map((price) => {
         const symbol = price.symbol.toUpperCase();
+        // Use WebSocket price as primary, fallback to prop price
+        const wsPrice = websocket.getPrice(symbol);
+        const currentPrice = wsPrice?.price || price.current_price;
         // Use CMC image if available, fallback to price.image
         const cmcImage = getCMCImage(symbol, 64);
         return {
           symbol,
           name: price.name,
-          price: price.current_price,
+          price: currentPrice,
           change24h: price.price_change_percentage_24h || 0,
           marketCap: price.market_cap,
           volume24h: price.total_volume || 0,
@@ -75,7 +83,7 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
           image: cmcImage || price.image,
         };
       });
-  }, [getCMCImage]);
+  }, [getCMCImage, websocket]);
   
   // Calculate market stats
   useEffect(() => {
@@ -129,7 +137,7 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
     };
   }, [isExpanded]);
   
-  // Update data when prices change - throttled for performance
+  // Update data when prices or WebSocket prices change - throttled for performance
   const lastUpdateRef = useRef<number>(0);
   useEffect(() => {
     if (animatorRef.current && prices.length > 0) {
@@ -142,7 +150,7 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
         lastUpdateRef.current = now;
       }
     }
-  }, [prices, convertToHeatmapCells]);
+  }, [prices, websocket.prices, convertToHeatmapCells]);
   
   // Calculate which cell is at a given position
   const getCellAtPosition = useCallback(
@@ -230,6 +238,12 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
             <Badge variant="outline" className="text-xs bg-success/10 border-success/30 text-success flex items-center gap-1">
               <CheckCircle className="h-3 w-3" />
               CMC
+            </Badge>
+          )}
+          {websocket.connected && (
+            <Badge variant="outline" className="text-xs bg-red-400/10 border-red-400/30 text-red-400 flex items-center gap-1">
+              <Radio className="h-3 w-3" />
+              WS Live
             </Badge>
           )}
         </div>

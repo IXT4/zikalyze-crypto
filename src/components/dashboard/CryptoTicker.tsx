@@ -5,6 +5,8 @@ import { PriceChange } from "./PriceChange";
 import { LivePriceLarge } from "./LivePrice";
 import MiniSparkline from "./MiniSparkline";
 import { usePriceHistory } from "@/hooks/usePriceHistory";
+import { useGlobalPriceWebSocket } from "@/hooks/useGlobalPriceWebSocket";
+import { useMemo } from "react";
 
 const cryptoMeta = [
   { symbol: "BTC", name: "Bitcoin", color: "text-warning" },
@@ -50,8 +52,11 @@ const CryptoTicker = ({
 }: CryptoTickerProps) => {
   
   // Get price history for sparklines
-  const tickerSymbols = cryptoMeta.map(c => c.symbol);
+  const tickerSymbols = useMemo(() => cryptoMeta.map(c => c.symbol), []);
   const { getHistory } = usePriceHistory(tickerSymbols);
+  
+  // Direct WebSocket access for real-time price updates
+  const websocket = useGlobalPriceWebSocket(tickerSymbols);
   
   // Determine oracle display
   const getOracleIcon = () => {
@@ -118,12 +123,14 @@ const CryptoTicker = ({
       <div className="flex flex-wrap gap-3">
         {cryptoMeta.map((crypto) => {
           const livePrice = getPriceBySymbol(crypto.symbol);
-          const price = livePrice?.current_price || 0;
+          // Use WebSocket price as primary, fallback to prop price
+          const wsPrice = websocket.getPrice(crypto.symbol);
+          const price = wsPrice?.price || livePrice?.current_price || 0;
           const change = livePrice?.price_change_percentage_24h || 0;
           const sparklineData = getHistory(crypto.symbol);
           
-          // Show live dot for all cryptos when stream is live and price is available
-          const showTickDot = !!isLive && price > 0;
+          // Show live dot when WebSocket is connected or stream is live
+          const showTickDot = (websocket.connected || !!isLive) && price > 0;
           
           return (
             <button
