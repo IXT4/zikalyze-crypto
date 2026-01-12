@@ -56,8 +56,8 @@ const AnimatedDigit = ({
       key={animationKey}
       className={cn(
         "inline-block",
-        direction === "up" && "animate-[slideUp_0.3s_ease-out]",
-        direction === "down" && "animate-[slideDown_0.3s_ease-out]"
+        direction === "up" && "animate-[slideUp_0.5s_cubic-bezier(0.34,1.56,0.64,1)]",
+        direction === "down" && "animate-[slideDown_0.5s_cubic-bezier(0.34,1.56,0.64,1)]"
       )}
     >
       {char}
