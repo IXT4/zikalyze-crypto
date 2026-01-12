@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // 📊 useDecentralizedOHLC — 100% Decentralized OHLC Candles from Oracle Ticks
 // ═══════════════════════════════════════════════════════════════════════════════
-// Aggregates real-time oracle ticks (Pyth, DIA, Redstone, API3) into OHLC candles
+// Aggregates real-time oracle ticks (Pyth, DIA, Redstone) into OHLC candles
 // Persists candle history in localStorage for multi-timeframe analysis
 // Zero centralized exchange dependencies
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -18,7 +18,7 @@ export interface OHLCCandle {
   close: number;
   volume: number;
   tickCount: number;
-  source: "Pyth" | "DIA" | "API3" | "Redstone" | "Oracle";
+  source: "Pyth" | "DIA" | "Redstone" | "Oracle";
 }
 
 export type CandleInterval = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
@@ -384,7 +384,6 @@ export const useDecentralizedOHLC = (symbol: string = "BTC") => {
     oracleStatus: {
       pythConnected: oracle.pythConnected,
       diaConnected: oracle.diaConnected,
-      api3Connected: oracle.api3Connected,
       redstoneConnected: oracle.redstoneConnected,
       primarySource: oracle.primarySource,
     },

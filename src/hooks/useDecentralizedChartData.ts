@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🔮 useDecentralizedChartData — 100% Decentralized Oracle-Only Chart Streaming
 // ═══════════════════════════════════════════════════════════════════════════════
-// Builds charts exclusively from Pyth, DIA, API3, and Redstone oracle ticks
+// Builds charts exclusively from Pyth, DIA, and Redstone oracle ticks
 // Zero centralized exchange or API dependencies
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -13,7 +13,7 @@ export interface ChartDataPoint {
   price: number;
   volume: number;
   positive: boolean;
-  source: "Pyth" | "DIA" | "API3" | "Redstone";
+  source: "Pyth" | "DIA" | "Redstone";
 }
 
 // LocalStorage persistence for chart data
@@ -62,7 +62,7 @@ export const useDecentralizedChartData = (crypto: string) => {
   const [chartData, setChartData] = useState<ChartDataPoint[]>(() => loadCachedChart(symbol));
   const [priceChange, setPriceChange] = useState<number>(0);
   const [isBuilding, setIsBuilding] = useState(true);
-  const [currentSource, setCurrentSource] = useState<"Pyth" | "DIA" | "API3" | "Redstone" | null>(null);
+  const [currentSource, setCurrentSource] = useState<"Pyth" | "DIA" | "Redstone" | null>(null);
   
   const chartDataRef = useRef<ChartDataPoint[]>([]);
   const lastPriceRef = useRef<number | null>(null);
@@ -163,7 +163,6 @@ export const useDecentralizedChartData = (crypto: string) => {
     oracleStatus: {
       pythConnected: oracle.pythConnected,
       diaConnected: oracle.diaConnected,
-      api3Connected: oracle.api3Connected,
       redstoneConnected: oracle.redstoneConnected,
       primarySource: oracle.primarySource,
     },

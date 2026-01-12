@@ -551,8 +551,7 @@ export const useCryptoPrices = () => {
         
           if (isSignificant) {
             const oracleSource = oracleData.source === "Pyth" ? "Pyth Oracle" : 
-                                 oracleData.source === "DIA" ? "DIA Oracle" : 
-                                 oracleData.source === "API3" ? "API3 Oracle" : "Redstone Oracle";
+                                 oracleData.source === "DIA" ? "DIA Oracle" : "Redstone Oracle";
             
             // Add to price history for 24h calculations
             addToHistory(symbol, oracleData.price);
