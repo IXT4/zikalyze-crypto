@@ -120,12 +120,18 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
     };
   }, [isExpanded]);
   
-  // Update data when prices change
+  // Update data when prices change - throttled for performance
+  const lastUpdateRef = useRef<number>(0);
   useEffect(() => {
     if (animatorRef.current && prices.length > 0) {
-      const cells = convertToHeatmapCells(prices);
-      cellsRef.current = cells;
-      animatorRef.current.updateData(cells);
+      const now = Date.now();
+      // Throttle updates to max 10 per second for smooth performance
+      if (now - lastUpdateRef.current >= 100) {
+        const cells = convertToHeatmapCells(prices);
+        cellsRef.current = cells;
+        animatorRef.current.updateData(cells);
+        lastUpdateRef.current = now;
+      }
     }
   }, [prices, convertToHeatmapCells]);
   

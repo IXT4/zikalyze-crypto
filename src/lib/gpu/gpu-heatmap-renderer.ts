@@ -127,14 +127,36 @@ const calculateGridDimensions = (count: number, width: number, height: number): 
   return { cols, rows };
 };
 
-// Load and cache crypto icon images
+// Multi-layer fallback URLs for crypto icons
+const getIconUrls = (symbol: string, primaryUrl?: string): string[] => {
+  const upper = symbol.toUpperCase();
+  const lower = symbol.toLowerCase();
+  const urls: string[] = [];
+  
+  // Primary URL from CryptoPrice data
+  if (primaryUrl) urls.push(primaryUrl);
+  
+  // Web3Icons CDN (2700+ tokens)
+  urls.push(`https://cdn.jsdelivr.net/npm/@web3icons/core@latest/svgs/tokens/branded/${upper}.svg`);
+  
+  // Spothq cryptocurrency-icons (400+ tokens)
+  urls.push(`https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/color/${lower}.svg`);
+  
+  // CoinGecko CDN
+  urls.push(`https://assets.coingecko.com/coins/images/1/small/${lower}.png`);
+  
+  // DiceBear deterministic fallback
+  urls.push(`https://api.dicebear.com/7.x/identicon/svg?seed=${upper}&backgroundColor=0d1117`);
+  
+  return urls;
+};
+
+// Load and cache crypto icon images with multi-layer fallback
 const loadImage = (
   state: HeatmapState,
   symbol: string,
   imageUrl: string | undefined
 ): HTMLImageElement | null => {
-  if (!imageUrl) return null;
-  
   // Check cache first
   if (state.imageCache.has(symbol)) {
     return state.imageCache.get(symbol) || null;
@@ -147,18 +169,30 @@ const loadImage = (
   
   state.pendingImages.add(symbol);
   
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.onload = () => {
-    state.imageCache.set(symbol, img);
-    state.pendingImages.delete(symbol);
-  };
-  img.onerror = () => {
-    state.imageCache.set(symbol, null); // Cache failure to prevent retries
-    state.pendingImages.delete(symbol);
-  };
-  img.src = imageUrl;
+  const urls = getIconUrls(symbol, imageUrl);
+  let urlIndex = 0;
   
+  const tryNextUrl = () => {
+    if (urlIndex >= urls.length) {
+      state.imageCache.set(symbol, null); // All failed
+      state.pendingImages.delete(symbol);
+      return;
+    }
+    
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      state.imageCache.set(symbol, img);
+      state.pendingImages.delete(symbol);
+    };
+    img.onerror = () => {
+      urlIndex++;
+      tryNextUrl(); // Try next fallback
+    };
+    img.src = urls[urlIndex];
+  };
+  
+  tryNextUrl();
   return null; // Image not yet loaded
 };
 
