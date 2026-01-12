@@ -296,7 +296,7 @@ export function useLiveMarketData(
   const isFullyLive = livePrice.isLive && (onChainData?.isLive || false) && (sentimentData?.isLive || false);
   
   const dataSources: string[] = [];
-  if (livePrice.isLive) dataSources.push('price');
+  if (livePrice.isLive) dataSources.push(`${livePrice.source} Oracle`);
   if (onChainData?.isLive) dataSources.push('on-chain');
   if (sentimentData?.isLive) dataSources.push('sentiment');
 
@@ -311,7 +311,7 @@ export function useLiveMarketData(
     sentiment: sentimentData,
     isFullyLive,
     lastUpdated: livePrice.lastUpdate,
-    dataSourcesSummary: dataSources.length > 0 ? dataSources.join('+') : 'cached',
+    dataSourcesSummary: dataSources.length > 0 ? dataSources.join(' + ') : 'cached',
   };
 
   return liveMarketData;
