@@ -85,18 +85,6 @@ const DonutChart = () => {
           </PieChart>
         </ResponsiveContainer>
       </div>
-      {/* Legend */}
-      <div className="mt-4 flex flex-wrap gap-2 justify-center">
-        {chartData.map((entry, index) => (
-          <div key={index} className="flex items-center gap-1">
-            <div 
-              className="h-2 w-2 rounded-full" 
-              style={{ backgroundColor: entry.color }}
-            />
-            <span className="text-[10px] text-muted-foreground">{entry.name}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 };

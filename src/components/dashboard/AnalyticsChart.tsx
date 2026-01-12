@@ -68,12 +68,7 @@ const AnalyticsChart = () => {
                 <stop offset="100%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <XAxis
-              dataKey="time"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "hsl(215, 20%, 65%)", fontSize: 10 }}
-            />
+            <XAxis dataKey="time" hide />
             <YAxis hide />
             <Tooltip
               contentStyle={{

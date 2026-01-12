@@ -218,25 +218,6 @@ const OracleCrossValidation = ({ crypto }: OracleCrossValidationProps) => {
         </button>
       )}
 
-      {/* Legend */}
-      <div className="mt-3 pt-2 border-t border-border flex items-center justify-center gap-3 text-[9px] text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          &lt;0.5%
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-amber-500" />
-          0.5-2%
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-orange-500" />
-          2-5%
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-red-500" />
-          &gt;5%
-        </span>
-      </div>
     </div>
   );
 };
