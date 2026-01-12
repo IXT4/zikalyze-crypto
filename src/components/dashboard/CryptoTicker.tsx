@@ -123,13 +123,18 @@ const CryptoTicker = ({
       {/* Oracle Status Bar */}
       <div className="flex items-center gap-3 text-xs">
         <div className="flex items-center gap-1.5">
-          <Circle 
+          <span 
             className={cn(
-              "h-2 w-2",
-              isLive ? "fill-success text-success animate-pulse" : "fill-muted text-muted"
+              "h-2.5 w-2.5 rounded-full",
+              isLive 
+                ? "bg-success animate-[pulse_1.5s_ease-in-out_infinite] shadow-[0_0_8px_2px_hsl(var(--success)/0.6)]" 
+                : "bg-muted-foreground/50 animate-[pulse_2s_ease-in-out_infinite]"
             )} 
           />
-          <span className="text-muted-foreground">
+          <span className={cn(
+            "font-medium",
+            isLive ? "text-success" : "text-muted-foreground"
+          )}>
             {isLive ? "Live" : "Connecting..."}
           </span>
         </div>
