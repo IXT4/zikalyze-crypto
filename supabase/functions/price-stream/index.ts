@@ -310,7 +310,7 @@ serve(async (req) => {
       clearInterval(streamInterval);
     }
 
-    // Stream prices every 250ms for CoinMarketCap-like real-time feel
+    // Stream prices every 200ms for ultra-responsive CoinMarketCap-like feel
     streamInterval = setInterval(async () => {
       if (!isConnected || socket.readyState !== WebSocket.OPEN) {
         if (streamInterval) clearInterval(streamInterval);
@@ -333,7 +333,7 @@ serve(async (req) => {
         llamaPrices.forEach((data, symbol) => merged.set(symbol, data));
         pythPrices.forEach((data, symbol) => merged.set(symbol, data)); // Pyth overwrites
 
-        // Stream real prices - CoinMarketCap style with all updates
+        // Stream ALL price updates - even tiny movements for smooth rolling digits
         const updates: Array<{ symbol: string; price: number; source: string; change?: number }> = [];
         
         merged.forEach((data, symbol) => {
@@ -345,8 +345,9 @@ serve(async (req) => {
             priceChange = ((data.price - lastPrice) / lastPrice) * 100;
           }
           
-          // Skip only if price is exactly the same (no movement)
-          if (lastPrice && Math.abs(data.price - lastPrice) < 0.0000001) {
+          // Stream ANY price change - even micro-movements (for rolling digit animation)
+          // Only skip if EXACTLY the same price (within floating point precision)
+          if (lastPrice && data.price === lastPrice) {
             return;
           }
           
@@ -359,7 +360,7 @@ serve(async (req) => {
           });
         });
 
-        // Always send updates if we have any - CoinMarketCap streams constantly
+        // Send batch update if we have any changes
         if (updates.length > 0 && isConnected && socket.readyState === WebSocket.OPEN) {
           const batchUpdate: BatchPriceUpdate = {
             type: "prices",
@@ -374,7 +375,7 @@ serve(async (req) => {
           console.error("[PriceStream] Error:", err);
         }
       }
-    }, 300); // Poll every 300ms for CoinMarketCap-like real-time feel
+    }, 200); // Ultra-fast 200ms polling for real-time feel
   };
 
   socket.onopen = () => {

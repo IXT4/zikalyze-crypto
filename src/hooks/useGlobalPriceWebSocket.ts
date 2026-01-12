@@ -288,11 +288,11 @@ export function useGlobalPriceWebSocket(symbols: string[] = []) {
     setPrices(new Map(globalPrices));
     setState({ ...globalState });
     
-    // Fast state sync every 200ms for CoinMarketCap-like responsiveness
+    // Ultra-fast state sync every 100ms for instant rolling digit updates
     const syncInterval = setInterval(() => {
       setPrices(new Map(globalPrices));
       setState({ ...globalState });
-    }, 200);
+    }, 100);
     
     return () => {
       clearInterval(syncInterval);
