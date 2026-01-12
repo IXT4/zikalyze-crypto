@@ -56,18 +56,17 @@ export async function fetchWithRetry(
         (err as Error).name === 'AbortError' ||
         (err as Error).name === 'TypeError';
 
-      // Only retry on network/timeout errors
+      // Only retry on network/timeout errors, silently
       if (!isNetworkError) {
         throw err;
       }
 
-      // Log retry attempt (not the last one)
+      // Calculate delay for retry (silently - no console log for cleaner UX)
       if (attempt < config.maxRetries - 1) {
         const delay = Math.min(
           config.baseDelayMs * Math.pow(1.5, attempt) + Math.random() * 500,
           config.maxDelayMs
         );
-        console.log(`[FetchRetry] Attempt ${attempt + 1}/${config.maxRetries} failed for ${url.split('?')[0]}, retrying in ${Math.round(delay)}ms`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }

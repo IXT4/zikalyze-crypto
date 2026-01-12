@@ -92,16 +92,18 @@ const DecentralizedVolumeChart = ({ crypto }: DecentralizedVolumeChartProps) => 
   const isLive = ws.connected;
   const dataPointCount = activityData.length;
   const isBuilding = dataPointCount < 3;
-  const currentSource = ws.connected ? "WebSocket" : null;
+  const currentSource = ws.connected 
+    ? (ws.primarySource === "Binance" ? "WebSocket" : ws.primarySource)
+    : null;
 
   const oracleStatus = {
-    pythConnected: false,
+    pythConnected: ws.primarySource === "Pyth",
     diaConnected: false,
     redstoneConnected: false,
-    primarySource: "WebSocket" as const,
+    primarySource: (ws.primarySource === "Binance" ? "WebSocket" : ws.primarySource || "WebSocket") as "WebSocket" | "Pyth",
   };
 
-  const activeSource = currentSource || oracleStatus.primarySource;
+  const activeSource = currentSource || "WebSocket";
 
   const renderChart = () => (
     <ResponsiveContainer width="100%" height="100%">
