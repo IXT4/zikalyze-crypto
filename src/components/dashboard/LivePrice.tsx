@@ -17,17 +17,31 @@ export const LivePriceLarge = ({ value, className }: LivePriceProps) => {
   const [displayValue, setDisplayValue] = useState(value);
   const [direction, setDirection] = useState<"up" | "down" | null>(null);
   const prevValueRef = useRef(value);
+  const isFirstRender = useRef(true);
   const animationRef = useRef<number | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // Skip animation on first render to prevent aggressive jumps on page load
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      setDisplayValue(value);
+      prevValueRef.current = value;
+      return;
+    }
+
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
     const startValue = prevValueRef.current;
     const diff = value - startValue;
 
-    if (Math.abs(diff) < 0.0000001) return;
+    // Only animate meaningful changes (>0.5% to prevent micro-jitter)
+    if (Math.abs(diff / startValue) < 0.005 || startValue === 0) {
+      setDisplayValue(value);
+      prevValueRef.current = value;
+      return;
+    }
 
     setDirection(diff > 0 ? "up" : "down");
 
@@ -78,11 +92,20 @@ export const LivePriceCompact = ({ value, className }: LivePriceProps) => {
   const { formatPrice } = useCurrency();
   const [direction, setDirection] = useState<"up" | "down" | null>(null);
   const prevValueRef = useRef(value);
+  const isFirstRender = useRef(true);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // Skip animation on first render
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      prevValueRef.current = value;
+      return;
+    }
+
     const diff = value - prevValueRef.current;
-    const threshold = prevValueRef.current * 0.0001;
+    // Only animate meaningful changes (>0.5%)
+    const threshold = prevValueRef.current * 0.005;
 
     if (Math.abs(diff) > threshold && prevValueRef.current !== 0) {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
