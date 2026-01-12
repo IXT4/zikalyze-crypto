@@ -812,11 +812,22 @@ export function useGlobalPriceWebSocket(symbols: string[] = []) {
     setPrices(new Map(globalPrices));
     setState({ ...globalState });
 
-    // Fast sync interval
+    // Sync interval - throttled to prevent excessive updates
     const syncInterval = setInterval(() => {
-      setPrices(new Map(globalPrices));
-      setState({ ...globalState });
-    }, 100);
+      const newPrices = new Map(globalPrices);
+      const newState = { ...globalState };
+      // Only update if actually changed
+      setPrices(prev => {
+        if (prev.size !== newPrices.size) return newPrices;
+        return prev;
+      });
+      setState(prev => {
+        if (prev.connected !== newState.connected || prev.primarySource !== newState.primarySource) {
+          return newState;
+        }
+        return prev;
+      });
+    }, 500);
 
     return () => {
       clearInterval(syncInterval);
