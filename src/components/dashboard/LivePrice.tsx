@@ -77,39 +77,46 @@ const useAnimatedPrice = (targetValue: number, duration: number = 200) => {
   return displayValue;
 };
 
-// Enhanced flash effect hook with more sensitive detection
+// HIGHLY VISIBLE flash effect - triggers on every price tick
 const useFlashEffect = (value: number) => {
   const [flashClass, setFlashClass] = useState<string | null>(null);
-  const prevValueRef = useRef<number | undefined>(undefined);
+  const prevValueRef = useRef<number>(0);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isMountedRef = useRef(false);
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
-    if (!isMountedRef.current) {
-      isMountedRef.current = true;
+    // Skip first render
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
       prevValueRef.current = value;
       return;
     }
 
-    if (!value || value <= 0 || value === prevValueRef.current) return;
+    // Skip invalid values
+    if (!value || value <= 0) return;
+    
+    // Skip if same value
+    if (value === prevValueRef.current) return;
 
-    // More sensitive threshold - flash on any real price change (0.0001% minimum)
-    const priceDiff = Math.abs(value - (prevValueRef.current || 0)) / (prevValueRef.current || 1);
-    if (priceDiff < 0.000001) return;
-
+    // Clear any existing timeout
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
+      setFlashClass(null);
     }
 
-    if (value > prevValueRef.current!) {
-      setFlashClass("price-flash-up");
-    } else if (value < prevValueRef.current!) {
-      setFlashClass("price-flash-down");
-    }
+    // Apply flash immediately with a tiny delay for re-trigger
+    setTimeout(() => {
+      if (value > prevValueRef.current) {
+        setFlashClass("price-flash-up");
+      } else {
+        setFlashClass("price-flash-down");
+      }
+    }, 10);
 
+    // Keep flash visible for 700ms
     timeoutRef.current = setTimeout(() => {
       setFlashClass(null);
-    }, 600);
+    }, 700);
 
     prevValueRef.current = value;
 
