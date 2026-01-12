@@ -384,7 +384,11 @@ const GPUPriceChart = ({
   };
   
   return (
-    <div className={cn("rounded-2xl border border-border bg-card overflow-hidden", className)}>
+    <div className={cn(
+      "rounded-2xl border border-border bg-card overflow-hidden transition-shadow duration-500",
+      isLive && tickRate > 0 && "animate-live-glow",
+      className
+    )}>
       {/* Header */}
       <div className="p-4 sm:p-6 pb-0">
         <div className="flex items-center justify-between flex-wrap gap-2">
