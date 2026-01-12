@@ -5,8 +5,8 @@
 // Features: Live streaming, timeframe selection, glow effects, flash animations
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useRef, useEffect, useState, useCallback, memo } from "react";
-import { Zap, Cpu, Activity, Radio, TrendingUp, TrendingDown, Clock, Bell } from "lucide-react";
+import { useRef, useEffect, useState, useCallback, memo, useMemo } from "react";
+import { Zap, Cpu, Activity, Radio, TrendingUp, TrendingDown, Clock, Bell, ChevronDown, Search } from "lucide-react";
 import { useDecentralizedChartData, type ChartTimeframe, TIMEFRAME_CONFIG } from "@/hooks/useDecentralizedChartData";
 import { createGPUChartManager, type GPUChartInstance } from "@/lib/gpu/gpu-chart-manager";
 import type { ChartDataPoint, RenderBackend } from "@/lib/gpu/webgpu-chart-renderer";
@@ -20,6 +20,14 @@ import {
 } from "./charts/OracleStatusIndicators";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
+import { useCryptoPrices, type CryptoPrice } from "@/hooks/useCryptoPrices";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface GPUPriceChartProps {
   crypto: string;
@@ -27,6 +35,8 @@ interface GPUPriceChartProps {
   height?: number;
   showControls?: boolean;
   className?: string;
+  onSelectCrypto?: (symbol: string) => void;
+  prices?: CryptoPrice[];
 }
 
 const TIMEFRAMES: ChartTimeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
@@ -91,12 +101,113 @@ const TimeframeSelector = memo(({ selected, onSelect }: TimeframeSelectorProps) 
 
 TimeframeSelector.displayName = "TimeframeSelector";
 
+// Crypto selector dropdown component
+const CryptoSelector = memo(({ 
+  crypto, 
+  prices, 
+  onSelect 
+}: { 
+  crypto: string; 
+  prices: CryptoPrice[];
+  onSelect: (symbol: string) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  
+  const filteredPrices = useMemo(() => {
+    if (!search) return prices.slice(0, 100);
+    const query = search.toLowerCase();
+    return prices.filter(p => 
+      p.symbol.toLowerCase().includes(query) || 
+      p.name.toLowerCase().includes(query)
+    ).slice(0, 50);
+  }, [prices, search]);
+  
+  const selectedCrypto = prices.find(p => p.symbol.toUpperCase() === crypto.toUpperCase());
+  
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="flex items-center gap-1.5 text-lg font-semibold text-foreground hover:text-primary transition-colors group">
+          <div className="flex items-center gap-2">
+            {selectedCrypto?.image && (
+              <img src={selectedCrypto.image} alt={crypto} className="w-6 h-6 rounded-full" />
+            )}
+            <span>{crypto}/USD</span>
+          </div>
+          <ChevronDown className="h-4 w-4 opacity-50 group-hover:opacity-100 transition-opacity" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-0" align="start">
+        <div className="p-2 border-b border-border">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search top 100..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-9 text-sm"
+            />
+          </div>
+        </div>
+        <ScrollArea className="h-[300px]">
+          <div className="p-1">
+            {filteredPrices.map((p, idx) => (
+              <button
+                key={p.id}
+                onClick={() => {
+                  onSelect(p.symbol.toUpperCase());
+                  setOpen(false);
+                  setSearch("");
+                }}
+                className={cn(
+                  "w-full flex items-center gap-3 px-2 py-2 rounded-md text-sm transition-colors",
+                  p.symbol.toUpperCase() === crypto.toUpperCase()
+                    ? "bg-primary/10 text-primary"
+                    : "hover:bg-muted"
+                )}
+              >
+                <span className="w-6 text-xs text-muted-foreground font-medium">
+                  #{p.market_cap_rank || idx + 1}
+                </span>
+                {p.image && (
+                  <img src={p.image} alt={p.symbol} className="w-5 h-5 rounded-full" />
+                )}
+                <div className="flex-1 text-left">
+                  <div className="font-medium">{p.symbol.toUpperCase()}</div>
+                  <div className="text-xs text-muted-foreground truncate">{p.name}</div>
+                </div>
+                <div className={cn(
+                  "text-xs font-medium",
+                  (p.price_change_percentage_24h ?? 0) >= 0 ? "text-success" : "text-destructive"
+                )}>
+                  {(p.price_change_percentage_24h ?? 0) >= 0 ? "+" : ""}
+                  {(p.price_change_percentage_24h ?? 0).toFixed(1)}%
+                </div>
+              </button>
+            ))}
+            {filteredPrices.length === 0 && (
+              <div className="text-center py-6 text-muted-foreground text-sm">
+                No results found
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
+  );
+});
+
+CryptoSelector.displayName = "CryptoSelector";
+
 const GPUPriceChart = ({
   crypto,
   change24h,
   height = 320,
   showControls = false,
   className,
+  onSelectCrypto,
+  prices: externalPrices,
 }: GPUPriceChartProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -108,6 +219,10 @@ const GPUPriceChart = ({
   const lastPriceRef = useRef<number>(0);
   const tickWindowRef = useRef<number[]>([]);
   const { formatPrice } = useCurrency();
+  
+  // Use external prices if provided, otherwise fetch internally
+  const { prices: internalPrices } = useCryptoPrices();
+  const prices = externalPrices || internalPrices;
   
   // Get active alerts for this crypto
   const { alerts } = usePriceAlerts();
@@ -277,7 +392,15 @@ const GPUPriceChart = ({
       <div className="p-4 sm:p-6 pb-0">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-lg font-semibold text-foreground">{crypto}/USD</h3>
+            {onSelectCrypto && prices.length > 0 ? (
+              <CryptoSelector 
+                crypto={crypto} 
+                prices={prices} 
+                onSelect={onSelectCrypto} 
+              />
+            ) : (
+              <h3 className="text-lg font-semibold text-foreground">{crypto}/USD</h3>
+            )}
             <OracleSourceBadge source={activeSource} />
             {backend && <BackendBadge backend={backend} />}
             <LiveStreamBadge isStreaming={isLive && tickRate > 0} tickRate={tickRate} />
