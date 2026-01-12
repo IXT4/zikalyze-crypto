@@ -1,13 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📊 useChartTrendData — Decentralized OHLC Data for AI Trend Analysis
+// 📊 useChartTrendData — 100% Decentralized OHLC Data for AI Trend Analysis
 // ═══════════════════════════════════════════════════════════════════════════════
-// Uses 100% decentralized oracle ticks (Pyth, DIA, Redstone, API3) as primary
-// Falls back to CryptoCompare for historical bootstrap only
+// Uses 100% decentralized oracle ticks (Pyth, DIA, Redstone, API3)
+// No centralized API fallbacks — fully trustless data pipeline
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDecentralizedOHLC, OHLCCandle } from './useDecentralizedOHLC';
-import { safeFetch } from '@/lib/fetchWithRetry';
 
 export interface CandleData {
   timestamp: number;
@@ -202,104 +201,57 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
   const [data, setData] = useState<ChartTrendData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const mountedRef = useRef(true);
-  const bootstrapAttemptedRef = useRef(false);
   
-  // 🌐 PRIMARY: Decentralized OHLC from oracle ticks
+  // 🌐 100% DECENTRALIZED: OHLC from oracle ticks only
   const ohlc = useDecentralizedOHLC(symbol);
   
   // Get 1h candles for trend analysis
   const decentralizedCandles = ohlc.getCandles('1h');
-  const hasDecentralizedData = decentralizedCandles.length >= 5;
-  
-  // 📊 FALLBACK: Bootstrap from CryptoCompare if no decentralized data
-  const fetchBootstrapData = useCallback(async (): Promise<CandleData[] | null> => {
-    if (bootstrapAttemptedRef.current) return null;
-    bootstrapAttemptedRef.current = true;
-    
-    try {
-      const response = await safeFetch(
-        `https://min-api.cryptocompare.com/data/v2/histohour?fsym=${symbol.toUpperCase()}&tsym=USD&limit=24`,
-        { timeoutMs: 12000, maxRetries: 2 }
-      );
-      
-      if (!response?.ok) return null;
-      
-      const result = await response.json();
-      if (result.Response !== 'Success' || !result.Data?.Data || result.Data.Data.length < 5) {
-        return null;
-      }
-      
-      return result.Data.Data.map((point: any) => ({
-        timestamp: point.time * 1000,
-        open: point.open,
-        high: point.high,
-        low: point.low,
-        close: point.close,
-        volume: point.volumeto,
-      }));
-    } catch {
-      return null;
-    }
-  }, [symbol]);
+  const hasDecentralizedData = decentralizedCandles.length >= 3;
   
   // Process candles and update data
   useEffect(() => {
     if (!mountedRef.current) return;
     
-    const processCandles = async () => {
-      let candles: CandleData[] = [];
-      let source = 'Building...';
-      
-      // Use decentralized data if available
-      if (hasDecentralizedData) {
-        candles = decentralizedCandles.map(convertCandle);
-        source = `Oracle (${ohlc.primarySource})`;
-      } else if (!bootstrapAttemptedRef.current) {
-        // Bootstrap from CryptoCompare once
-        const bootstrapCandles = await fetchBootstrapData();
-        if (bootstrapCandles && bootstrapCandles.length >= 5) {
-          candles = bootstrapCandles;
-          source = 'CryptoCompare (bootstrap)';
-          console.log(`[ChartTrend] ${symbol} bootstrapped from CryptoCompare: ${candles.length} candles`);
-        }
-      }
-      
-      if (candles.length < 5) {
-        setIsLoading(false);
-        return;
-      }
-      
-      const closes = candles.map(c => c.close);
-      const swings = detectSwingPoints(candles);
-      
-      setData({
-        candles,
-        trend24h: analyzeTrend(candles),
-        trendStrength: calculateTrendStrength(candles),
-        higherHighs: swings.higherHighs,
-        higherLows: swings.higherLows,
-        lowerHighs: swings.lowerHighs,
-        lowerLows: swings.lowerLows,
-        ema9: calculateEMA(closes, 9),
-        ema21: calculateEMA(closes, 21),
-        rsi: calculateRSI(closes, 14),
-        volumeTrend: analyzeVolumeTrend(candles),
-        priceVelocity: calculatePriceVelocity(candles),
-        lastUpdated: Date.now(),
-        isLive: ohlc.isLive,
-        source,
-      });
-      
-      setIsLoading(false);
-    };
+    // Use decentralized data only
+    if (!hasDecentralizedData) {
+      // Still building data from oracle ticks
+      setData(null);
+      setIsLoading(true);
+      return;
+    }
     
-    processCandles();
-  }, [decentralizedCandles, hasDecentralizedData, ohlc.isLive, ohlc.primarySource, symbol, fetchBootstrapData]);
+    const candles = decentralizedCandles.map(convertCandle);
+    const source = `Oracle (${ohlc.primarySource})`;
+    
+    const closes = candles.map(c => c.close);
+    const swings = detectSwingPoints(candles);
+    
+    setData({
+      candles,
+      trend24h: analyzeTrend(candles),
+      trendStrength: calculateTrendStrength(candles),
+      higherHighs: swings.higherHighs,
+      higherLows: swings.higherLows,
+      lowerHighs: swings.lowerHighs,
+      lowerLows: swings.lowerLows,
+      ema9: calculateEMA(closes, 9),
+      ema21: calculateEMA(closes, 21),
+      rsi: calculateRSI(closes, 14),
+      volumeTrend: analyzeVolumeTrend(candles),
+      priceVelocity: calculatePriceVelocity(candles),
+      lastUpdated: Date.now(),
+      isLive: ohlc.isLive,
+      source,
+    });
+    
+    setIsLoading(false);
+  }, [decentralizedCandles, hasDecentralizedData, ohlc.isLive, ohlc.primarySource]);
   
-  // Reset bootstrap flag when symbol changes
+  // Reset when symbol changes
   useEffect(() => {
-    bootstrapAttemptedRef.current = false;
     setIsLoading(true);
+    setData(null);
   }, [symbol]);
   
   // Cleanup
