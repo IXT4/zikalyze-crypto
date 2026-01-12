@@ -656,7 +656,8 @@ export const useCryptoPrices = () => {
         
         if (existing && wsData.price > 0) {
           const priceDiff = Math.abs(existing.current_price - wsData.price) / (existing.current_price || 1);
-          const isSignificant = priceDiff > 0.00005; // 0.005% threshold for WebSocket
+          // Ultra-sensitive threshold so prices visibly move in real time (keeps UI responsive)
+          const isSignificant = priceDiff > 0.000001; // 0.0001% threshold
           
           if (isSignificant) {
             addToHistory(lowerSymbol, wsData.price);
