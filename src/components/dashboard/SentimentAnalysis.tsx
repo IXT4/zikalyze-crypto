@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,26 +8,31 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { 
   TrendingUp, TrendingDown, MessageCircle, Users, 
   Newspaper, RefreshCw, Twitter, AlertCircle, Flame, ExternalLink, Search,
-  Calendar, Radio, Zap, Clock, Link2, Wifi
+  Calendar, Radio, Zap, Clock, Link2, Wifi, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGlobalPriceWebSocket } from "@/hooks/useGlobalPriceWebSocket";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 // ════════════════════════════════════════════════════════════════════════════════
 // 🌐 LIVE REAL-TIME SENTIMENT ANALYSIS
-// Uses WebSocket live price data for accurate sentiment derivation
+// Uses WebSocket live price data + live news for accurate sentiment derivation
 // ════════════════════════════════════════════════════════════════════════════════
+
+interface NewsItem {
+  source: string;
+  headline: string;
+  sentiment: 'bullish' | 'bearish' | 'neutral';
+  time: string;
+  url: string;
+  publishedAt?: string;
+}
 
 interface SentimentData {
   crypto: string;
   timestamp: string;
-  news: Array<{
-    source: string;
-    headline: string;
-    sentiment: 'bullish' | 'bearish' | 'neutral';
-    time: string;
-    url: string;
-  }>;
+  news: NewsItem[];
   social: {
     twitter: { mentions: number; sentiment: number; trending: boolean; followers?: number };
     reddit: { mentions: number; sentiment: number; activeThreads: number; subscribers?: number };
@@ -172,6 +177,10 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [countdown, setCountdown] = useState(60);
+  const [liveNews, setLiveNews] = useState<NewsItem[]>([]);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [newsSource, setNewsSource] = useState<string>('');
+  const lastNewsFetchRef = useRef<number>(0);
   
   // Connect to global WebSocket for live price updates
   const ws = useGlobalPriceWebSocket([crypto]);
@@ -180,12 +189,55 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
   // Use WebSocket price if available, otherwise fallback to prop
   const liveChange = wsPrice ? change : change;
 
+  // Fetch live news from edge function
+  const fetchLiveNews = useCallback(async () => {
+    // Throttle: only fetch every 60 seconds
+    const now = Date.now();
+    if (now - lastNewsFetchRef.current < 60000 && liveNews.length > 0) {
+      return;
+    }
+    
+    setNewsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('crypto-news', {
+        body: { symbol: crypto }
+      });
+      
+      if (error) {
+        console.error('News fetch error:', error);
+        return;
+      }
+      
+      if (data?.news && Array.isArray(data.news)) {
+        setLiveNews(data.news);
+        setNewsSource(data.source || 'Live API');
+        lastNewsFetchRef.current = now;
+      }
+    } catch (err) {
+      console.error('Failed to fetch news:', err);
+    } finally {
+      setNewsLoading(false);
+    }
+  }, [crypto, liveNews.length]);
+
+  // Fetch news on mount and when crypto changes
+  useEffect(() => {
+    fetchLiveNews();
+  }, [crypto]);
+
   // Derive sentiment client-side using live data
   const data = useMemo(() => {
     const sentiment = deriveSentiment(liveChange, previousChange, ws.connected);
     sentiment.crypto = crypto;
+    // Inject live news into sentiment data
+    sentiment.news = liveNews;
+    sentiment.meta = {
+      newsSource: newsSource || (ws.connected ? 'WebSocket Live Stream' : 'Decentralized'),
+      newsLastUpdated: new Date().toISOString(),
+      isLive: ws.connected || liveNews.length > 0
+    };
     return sentiment;
-  }, [crypto, liveChange, previousChange, ws.connected]);
+  }, [crypto, liveChange, previousChange, ws.connected, liveNews, newsSource]);
 
   // Initial load
   useEffect(() => {
@@ -205,15 +257,21 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
     return () => clearTimeout(timer);
   }, [liveChange]);
 
-  // Countdown timer
+  // Countdown timer & periodic news refresh
   useEffect(() => {
     const countdownInterval = setInterval(() => {
-      setCountdown(prev => (prev > 0 ? prev - 1 : 60));
+      setCountdown(prev => {
+        if (prev <= 1) {
+          fetchLiveNews(); // Refresh news every 60s
+          return 60;
+        }
+        return prev - 1;
+      });
       setLastUpdate(new Date());
     }, 1000);
 
     return () => clearInterval(countdownInterval);
-  }, []);
+  }, [fetchLiveNews]);
 
   const getSentimentColor = (score: number) => {
     if (score >= 70) return 'text-success';
@@ -483,67 +541,103 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
 
           {/* News Tab with Live Source Indicator */}
           <TabsContent value="news" className="mt-4">
-            {data.meta?.newsSource && (
-              <div className="flex items-center justify-between mb-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Radio className={`h-3 w-3 ${data.meta.isLive ? 'text-success' : 'text-muted-foreground'}`} />
-                  Source: {data.meta.newsSource}
+            <div className="flex items-center justify-between mb-3">
+              <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Radio className={`h-3 w-3 ${data.meta?.isLive ? 'text-success animate-pulse' : 'text-muted-foreground'}`} />
+                <span className="font-medium">
+                  {data.news.length > 0 ? 'Live News Feed' : 'No news available'}
                 </span>
-                {data.meta.newsLastUpdated && (
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {new Date(data.meta.newsLastUpdated).toLocaleTimeString()}
-                  </span>
+                {newsSource && (
+                  <Badge variant="outline" className="text-xs">
+                    {newsSource}
+                  </Badge>
                 )}
+              </span>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={fetchLiveNews} 
+                disabled={newsLoading}
+                className="h-7 px-2"
+              >
+                {newsLoading ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3 w-3" />
+                )}
+                <span className="ml-1 text-xs">Refresh</span>
+              </Button>
+            </div>
+            
+            {newsLoading && data.news.length === 0 ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <Skeleton key={i} className="h-20 w-full" />
+                ))}
+              </div>
+            ) : data.news.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Newspaper className="h-12 w-12 mb-3 opacity-50" />
+                <p className="text-sm">No news available for {crypto}</p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={fetchLiveNews}
+                  className="mt-3"
+                >
+                  <RefreshCw className="h-3 w-3 mr-2" />
+                  Try Again
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                {data.news.map((item, i) => (
+                  <a 
+                    key={i} 
+                    href={item.url !== '#' ? item.url : undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`block rounded-lg border border-border p-3 transition-colors ${
+                      item.url !== '#' 
+                        ? 'hover:bg-primary/10 hover:border-primary/50 cursor-pointer' 
+                        : 'hover:bg-secondary/30'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Newspaper className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground font-medium">{item.source}</span>
+                          <span className="text-xs text-muted-foreground">•</span>
+                          <span className="text-xs text-muted-foreground">{item.time}</span>
+                          {item.url !== '#' && (
+                            <ExternalLink className="h-3 w-3 text-primary" />
+                          )}
+                        </div>
+                        <p className={`text-sm font-medium ${item.url !== '#' ? 'hover:text-primary' : ''}`}>
+                          {item.headline}
+                        </p>
+                      </div>
+                      <Badge 
+                        variant="outline" 
+                        className={`shrink-0 text-xs ${
+                          item.sentiment === 'bullish' ? 'border-success text-success bg-success/10' :
+                          item.sentiment === 'bearish' ? 'border-destructive text-destructive bg-destructive/10' :
+                          'border-muted-foreground text-muted-foreground'
+                        }`}
+                      >
+                        {item.sentiment === 'bullish' ? (
+                          <TrendingUp className="h-3 w-3 mr-1" />
+                        ) : item.sentiment === 'bearish' ? (
+                          <TrendingDown className="h-3 w-3 mr-1" />
+                        ) : null}
+                        {item.sentiment}
+                      </Badge>
+                    </div>
+                  </a>
+                ))}
               </div>
             )}
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-              {data.news.map((item, i) => (
-                <a 
-                  key={i} 
-                  href={item.url !== '#' ? item.url : undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`block rounded-lg border border-border p-3 transition-colors ${
-                    item.url !== '#' 
-                      ? 'hover:bg-primary/10 hover:border-primary/50 cursor-pointer' 
-                      : 'hover:bg-secondary/30'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Newspaper className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">{item.source}</span>
-                        <span className="text-xs text-muted-foreground">•</span>
-                        <span className="text-xs text-muted-foreground">{item.time}</span>
-                        {item.url !== '#' && (
-                          <span className="text-xs text-primary">↗</span>
-                        )}
-                      </div>
-                      <p className={`text-sm font-medium ${item.url !== '#' ? 'hover:text-primary' : ''}`}>
-                        {item.headline}
-                      </p>
-                    </div>
-                    <Badge 
-                      variant="outline" 
-                      className={`shrink-0 text-xs ${
-                        item.sentiment === 'bullish' ? 'border-success text-success' :
-                        item.sentiment === 'bearish' ? 'border-destructive text-destructive' :
-                        'border-muted-foreground text-muted-foreground'
-                      }`}
-                    >
-                      {item.sentiment === 'bullish' ? (
-                        <TrendingUp className="h-3 w-3 mr-1" />
-                      ) : item.sentiment === 'bearish' ? (
-                        <TrendingDown className="h-3 w-3 mr-1" />
-                      ) : null}
-                      {item.sentiment}
-                    </Badge>
-                  </div>
-                </a>
-              ))}
-            </div>
           </TabsContent>
 
           {/* Influencers Tab */}
