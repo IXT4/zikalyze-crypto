@@ -183,7 +183,7 @@ export const useDIAPrices = () => {
         setIsConnected(true);
         setLastUpdateTime(Date.now());
         setError(null);
-        console.log(`[DIA] Fetched ${successCount} prices`);
+        console.log(`[DIA] Fetched ${successCount}/${Object.keys(DIA_ASSETS).length} prices`);
       }
     } catch (e: any) {
       console.error("[DIA] Fetch error:", e.message);
