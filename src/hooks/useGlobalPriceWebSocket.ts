@@ -60,6 +60,12 @@ function connect() {
   if (globalSocket?.readyState === WebSocket.OPEN) return;
   if (globalSocket?.readyState === WebSocket.CONNECTING) return;
   
+  // Clear any pending reconnect timeout
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  
   globalState = { ...globalState, connecting: true, error: null };
   
   try {
@@ -77,11 +83,16 @@ function connect() {
       };
       
       // Subscribe to all symbols if we have any
-      if (subscribedSymbols.length > 0) {
-        globalSocket?.send(JSON.stringify({
+      if (subscribedSymbols.length > 0 && globalSocket?.readyState === WebSocket.OPEN) {
+        globalSocket.send(JSON.stringify({
           type: "subscribe",
           symbols: subscribedSymbols,
         }));
+      }
+      
+      // Clear any existing ping interval
+      if (pingInterval) {
+        clearInterval(pingInterval);
       }
       
       // Start ping interval
@@ -158,10 +169,13 @@ function connect() {
         pingInterval = null;
       }
       
+      // Clear the socket reference
+      globalSocket = null;
+      
       // Attempt reconnection if we still have listeners
       if (globalListeners.size > 0 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts++;
-        const delay = RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1);
+        const delay = Math.min(RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1), 15000);
         console.log(`[GlobalWS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
         
         reconnectTimeout = setTimeout(() => {
@@ -170,8 +184,8 @@ function connect() {
       }
     };
     
-    globalSocket.onerror = (error) => {
-      console.error("[GlobalWS] Error:", error);
+    globalSocket.onerror = () => {
+      // Error is already logged by the browser, avoid duplicate logging
       globalState = { 
         ...globalState, 
         error: "WebSocket connection error",

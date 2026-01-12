@@ -235,7 +235,7 @@ serve(async (req) => {
     
     // Stream prices every 500ms using batch requests for efficiency
     streamInterval = setInterval(async () => {
-      if (!isConnected) {
+      if (!isConnected || socket.readyState !== WebSocket.OPEN) {
         if (streamInterval) clearInterval(streamInterval);
         return;
       }
@@ -244,8 +244,8 @@ serve(async (req) => {
         // Batch fetch all subscribed symbols
         const prices = await fetchPythPricesBatch(subscribedSymbols);
         
-        if (prices.size > 0 && isConnected) {
-          // Send batch update for efficiency
+        if (prices.size > 0 && isConnected && socket.readyState === WebSocket.OPEN) {
+          // Send only batch update for efficiency (removed duplicate individual sends)
           const batchUpdate: BatchPriceUpdate = {
             type: "prices",
             updates: Array.from(prices.entries()).map(([symbol, data]) => ({
@@ -257,22 +257,12 @@ serve(async (req) => {
           };
           
           socket.send(JSON.stringify(batchUpdate));
-          
-          // Also send individual updates for backward compatibility
-          prices.forEach((data, symbol) => {
-            const update: PriceUpdate = {
-              type: "price",
-              symbol,
-              price: data.price,
-              change24h: 0,
-              source: data.source,
-              timestamp: Date.now(),
-            };
-            socket.send(JSON.stringify(update));
-          });
         }
       } catch (err) {
-        console.error("[PriceStream] Error:", err);
+        // Only log if still connected
+        if (isConnected) {
+          console.error("[PriceStream] Error:", err);
+        }
       }
     }, 500);
   };
