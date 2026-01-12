@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useCryptoPrices, CryptoPrice } from "@/hooks/useCryptoPrices";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
 import { useCurrency } from "@/hooks/useCurrency";
+import { usePriceHistory } from "@/hooks/usePriceHistory";
 import { Bell, X, BellRing, Search, TrendingUp, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { PriceChangeCompact } from "./PriceChange";
 import { LivePriceCompact } from "./LivePrice";
+import MiniSparkline from "./MiniSparkline";
 
 interface Top100CryptoListProps {
   onSelect: (symbol: string) => void;
@@ -34,6 +36,10 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
   const { alerts, loading: alertsLoading, createAlert, removeAlert, checkAlerts } = usePriceAlerts();
   const { formatPrice, symbol: currencySymbol } = useCurrency();
   const { t } = useTranslation();
+  
+  // Get symbols for sparkline history
+  const allSymbols = useMemo(() => prices.map(p => p.symbol.toUpperCase()), [prices]);
+  const { getHistory } = usePriceHistory(allSymbols);
   const [alertDialogOpen, setAlertDialogOpen] = useState(false);
   const [selectedCryptoForAlert, setSelectedCryptoForAlert] = useState<CryptoPrice | null>(null);
   const [targetPrice, setTargetPrice] = useState("");
@@ -279,6 +285,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                 <th className="pb-3 font-medium">#</th>
                 <th className="pb-3 font-medium">Name</th>
                 <th className="pb-3 font-medium text-right">Price</th>
+                <th className="pb-3 font-medium text-center hidden xs:table-cell">Trend</th>
                 <th className="pb-3 font-medium text-right">24h %</th>
                 <th className="pb-3 font-medium text-right hidden sm:table-cell">Market Cap</th>
                 <th className="pb-3 font-medium text-right hidden md:table-cell">Circulating Supply</th>
@@ -294,6 +301,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                 const isSelected = crypto.symbol.toUpperCase() === selected;
                 const hasAlert = alerts.some(a => a.symbol === crypto.symbol.toUpperCase());
                 const flash = priceFlashes.get(crypto.symbol);
+                const sparklineData = getHistory(crypto.symbol.toUpperCase());
                 
                 // Row flash classes for WebSocket updates
                 const rowFlashClass = flash === "up" 
@@ -346,6 +354,15 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                             : ""
                       }`}>
                         <LivePriceCompact value={crypto.current_price} />
+                      </div>
+                    </td>
+                    <td className="py-3 text-center hidden xs:table-cell">
+                      <div className="flex justify-center">
+                        <MiniSparkline 
+                          data={sparklineData} 
+                          width={50} 
+                          height={20}
+                        />
                       </div>
                     </td>
                     <td className="py-3 text-right">
