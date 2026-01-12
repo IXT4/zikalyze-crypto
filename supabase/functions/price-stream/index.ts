@@ -295,86 +295,104 @@ serve(async (req) => {
   }
 
   const { socket, response } = Deno.upgradeWebSocket(req);
-  
-  let subscribedSymbols: string[] = ["BTC", "ETH", "SOL"];
+
+  // Default subscriptions: ALL top-100 symbols for maximum coverage
+  const allSymbols = [...new Set([...Object.keys(PYTH_PRICE_FEEDS), ...Object.keys(DEFILLAMA_TOKENS)])];
+  let subscribedSymbols: string[] = allSymbols.slice(0, 100);
   let streamInterval: number | null = null;
   let isConnected = true;
-  
+
   const startStreaming = () => {
     if (streamInterval) {
       clearInterval(streamInterval);
     }
-    
-    // Stream prices every 500ms using batch requests for efficiency
+
+    // Stream prices every 500ms using dual-source batch requests
     streamInterval = setInterval(async () => {
       if (!isConnected || socket.readyState !== WebSocket.OPEN) {
         if (streamInterval) clearInterval(streamInterval);
         return;
       }
-      
+
       try {
-        // Batch fetch all subscribed symbols
-        const prices = await fetchPythPricesBatch(subscribedSymbols);
-        
-        if (prices.size > 0 && isConnected && socket.readyState === WebSocket.OPEN) {
-          // Send only batch update for efficiency (removed duplicate individual sends)
+        // Partition symbols: Pyth-supported vs DeFiLlama-only
+        const pythSymbols = subscribedSymbols.filter((s) => PYTH_PRICE_FEEDS[s]);
+        const llamaSymbols = subscribedSymbols.filter((s) => DEFILLAMA_TOKENS[s]);
+
+        // Fetch in parallel
+        const [pythPrices, llamaPrices] = await Promise.all([
+          fetchPythPricesBatch(pythSymbols),
+          fetchDefiLlamaPricesBatch(llamaSymbols),
+        ]);
+
+        // Merge: Pyth takes priority, DeFiLlama fills gaps
+        const merged = new Map<string, { price: number; source: string }>();
+        llamaPrices.forEach((data, symbol) => merged.set(symbol, data));
+        pythPrices.forEach((data, symbol) => merged.set(symbol, data)); // Pyth overwrites
+
+        if (merged.size > 0 && isConnected && socket.readyState === WebSocket.OPEN) {
           const batchUpdate: BatchPriceUpdate = {
             type: "prices",
-            updates: Array.from(prices.entries()).map(([symbol, data]) => ({
+            updates: Array.from(merged.entries()).map(([symbol, data]) => ({
               symbol,
               price: data.price,
               source: data.source,
             })),
             timestamp: Date.now(),
           };
-          
+
           socket.send(JSON.stringify(batchUpdate));
         }
       } catch (err) {
-        // Only log if still connected
         if (isConnected) {
           console.error("[PriceStream] Error:", err);
         }
       }
     }, 500);
   };
-  
+
   socket.onopen = () => {
     console.log("[PriceStream] Client connected");
-    
-    // Send initial connection confirmation
-    socket.send(JSON.stringify({
-      type: "connected",
-      message: "Price stream connected",
-      availableSymbols: Object.keys(PYTH_PRICE_FEEDS),
-      totalSymbols: Object.keys(PYTH_PRICE_FEEDS).length,
-      timestamp: Date.now(),
-    }));
-    
-    // Start streaming default symbols
+
+    // Send initial connection confirmation (all 100 symbols)
+    socket.send(
+      JSON.stringify({
+        type: "connected",
+        message: "Price stream connected",
+        availableSymbols: allSymbols,
+        totalSymbols: allSymbols.length,
+        timestamp: Date.now(),
+      })
+    );
+
+    // Start streaming ALL symbols immediately (no waiting for subscribe)
     startStreaming();
   };
 
   socket.onmessage = (event) => {
     try {
       const message = JSON.parse(event.data);
-      
+
       if (message.type === "subscribe" && Array.isArray(message.symbols)) {
-        // Update subscribed symbols (up to 100)
-        subscribedSymbols = message.symbols
+        // Client can optionally narrow subscription, but we still support full range
+        const requested = message.symbols
           .map((s: string) => s.toUpperCase())
-          .filter((s: string) => PYTH_PRICE_FEEDS[s])
+          .filter((s: string) => PYTH_PRICE_FEEDS[s] || DEFILLAMA_TOKENS[s])
           .slice(0, 100);
-        
+
+        subscribedSymbols = requested.length > 0 ? requested : allSymbols.slice(0, 100);
+
         console.log(`[PriceStream] Subscribed to: ${subscribedSymbols.length} symbols`);
-        
-        socket.send(JSON.stringify({
-          type: "subscribed",
-          symbols: subscribedSymbols,
-          count: subscribedSymbols.length,
-          timestamp: Date.now(),
-        }));
-        
+
+        socket.send(
+          JSON.stringify({
+            type: "subscribed",
+            symbols: subscribedSymbols,
+            count: subscribedSymbols.length,
+            timestamp: Date.now(),
+          })
+        );
+
         // Restart streaming with new symbols
         startStreaming();
       } else if (message.type === "ping") {
