@@ -61,7 +61,14 @@ export function usePriceWebSocket(symbols: string[] = ["BTC", "ETH", "SOL"]) {
   
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
     if (!mountedRef.current) return;
+    
+    // Clear any pending reconnect
+    if (reconnectTimeout.current) {
+      clearTimeout(reconnectTimeout.current);
+      reconnectTimeout.current = null;
+    }
     
     setState(prev => ({ ...prev, connecting: true, error: null }));
     
@@ -81,10 +88,17 @@ export function usePriceWebSocket(symbols: string[] = ["BTC", "ETH", "SOL"]) {
         }));
         
         // Subscribe to symbols
-        ws.send(JSON.stringify({
-          type: "subscribe",
-          symbols: subscribedSymbolsRef.current,
-        }));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: "subscribe",
+            symbols: subscribedSymbolsRef.current,
+          }));
+        }
+        
+        // Clear existing ping interval
+        if (pingInterval.current) {
+          clearInterval(pingInterval.current);
+        }
         
         // Start ping interval
         pingInterval.current = setInterval(() => {
@@ -138,12 +152,16 @@ export function usePriceWebSocket(symbols: string[] = ["BTC", "ETH", "SOL"]) {
         
         if (pingInterval.current) {
           clearInterval(pingInterval.current);
+          pingInterval.current = null;
         }
+        
+        // Clear socket reference
+        wsRef.current = null;
         
         // Attempt reconnection
         if (mountedRef.current && reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttempts.current++;
-          const delay = RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts.current - 1);
+          const delay = Math.min(RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts.current - 1), 15000);
           console.log(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
           
           reconnectTimeout.current = setTimeout(() => {
@@ -152,8 +170,8 @@ export function usePriceWebSocket(symbols: string[] = ["BTC", "ETH", "SOL"]) {
         }
       };
       
-      ws.onerror = (error) => {
-        console.error("[WS] Error:", error);
+      ws.onerror = () => {
+        // Error is already logged by browser
         setState(prev => ({ 
           ...prev, 
           error: "WebSocket connection error",
