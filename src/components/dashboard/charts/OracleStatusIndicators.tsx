@@ -82,7 +82,10 @@ export const OracleConnectionDots = ({ status }: { status: OracleStatusProps }) 
 
 export const LiveBadge = () => (
   <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium bg-success/20 text-success">
-    <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+    <span 
+      className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_6px_1px_hsl(var(--success)/0.7)]" 
+      style={{ animation: "pulse 1.5s ease-in-out infinite" }}
+    />
     Live
   </span>
 );
