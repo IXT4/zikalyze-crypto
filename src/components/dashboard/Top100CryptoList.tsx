@@ -4,6 +4,7 @@ import { useCryptoPrices, CryptoPrice } from "@/hooks/useCryptoPrices";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePriceHistory } from "@/hooks/usePriceHistory";
+import { useGlobalPriceWebSocket } from "@/hooks/useGlobalPriceWebSocket";
 import { Bell, X, BellRing, Search, TrendingUp, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,9 +38,12 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
   const { formatPrice, symbol: currencySymbol } = useCurrency();
   const { t } = useTranslation();
   
-  // Get symbols for sparkline history
+  // Get all symbols for WebSocket and sparkline history
   const allSymbols = useMemo(() => prices.map(p => p.symbol.toUpperCase()), [prices]);
   const { getHistory } = usePriceHistory(allSymbols);
+  
+  // Direct WebSocket access for real-time price updates
+  const websocket = useGlobalPriceWebSocket(allSymbols);
   const [alertDialogOpen, setAlertDialogOpen] = useState(false);
   const [selectedCryptoForAlert, setSelectedCryptoForAlert] = useState<CryptoPrice | null>(null);
   const [targetPrice, setTargetPrice] = useState("");
@@ -65,7 +69,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
   const [lastWsUpdate, setLastWsUpdate] = useState<number>(0);
   const wsUpdateCountRef = useRef(0);
 
-  // Detect price changes and trigger flash animations
+  // Detect price changes from props AND WebSocket - trigger flash animations
   useEffect(() => {
     if (prices.length === 0) return;
 
@@ -73,12 +77,16 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
     let hasAnyChange = false;
     
     prices.forEach((crypto) => {
+      // Check for WebSocket price updates as well
+      const wsPrice = websocket.getPrice(crypto.symbol.toUpperCase());
+      const currentPrice = wsPrice?.price || crypto.current_price;
+      
       const prevPrice = prevPricesRef.current.get(crypto.symbol);
-      if (prevPrice !== undefined && prevPrice !== crypto.current_price) {
+      if (prevPrice !== undefined && prevPrice !== currentPrice) {
         // Only flash on meaningful changes (0.005% threshold for WebSocket sensitivity)
-        const changePercent = Math.abs((crypto.current_price - prevPrice) / prevPrice) * 100;
+        const changePercent = Math.abs((currentPrice - prevPrice) / prevPrice) * 100;
         if (changePercent >= 0.005) {
-          if (crypto.current_price > prevPrice) {
+          if (currentPrice > prevPrice) {
             newFlashes.set(crypto.symbol, "up");
           } else {
             newFlashes.set(crypto.symbol, "down");
@@ -86,7 +94,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
           hasAnyChange = true;
         }
       }
-      prevPricesRef.current.set(crypto.symbol, crypto.current_price);
+      prevPricesRef.current.set(crypto.symbol, currentPrice);
     });
 
     if (hasAnyChange) {
@@ -110,7 +118,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
         });
       }, 700);
     }
-  }, [prices]);
+  }, [prices, websocket.prices]);
 
   // Check alerts whenever prices update - use a ref to track last check time
   const lastAlertCheckRef = useRef<number>(0);
