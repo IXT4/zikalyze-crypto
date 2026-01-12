@@ -1,8 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // 📡 useGlobalPriceWebSocket — Fully Decentralized Client-Side Price Streaming
 // ═══════════════════════════════════════════════════════════════════════════════
-// Connects directly to Pyth Network's Hermes WebSocket (decentralized oracle)
-// Falls back to DeFiLlama REST API (decentralized aggregator)
+// Primary: Binance WebSocket (fastest, real-time trades)
+// Fallback 1: Pyth Network Hermes (decentralized oracle)
+// Fallback 2: DeFiLlama REST API (decentralized aggregator)
 // No centralized edge functions - runs entirely in the browser
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -22,9 +23,13 @@ interface WebSocketState {
   lastUpdate: number;
   ticksPerSecond: number;
   subscribedCount: number;
+  primarySource: "Binance" | "Pyth" | "DeFiLlama" | "none";
 }
 
-// Pyth Hermes WebSocket endpoint (decentralized oracle network)
+// Binance WebSocket endpoints
+const BINANCE_WSS_BASE = "wss://stream.binance.com:9443/ws";
+
+// Pyth Hermes endpoints (fallback)
 const PYTH_HERMES_WSS = "wss://hermes.pyth.network/ws";
 const PYTH_HERMES_REST = "https://hermes.pyth.network/api/latest_price_feeds";
 const DEFILLAMA_API = "https://coins.llama.fi/prices/current";
@@ -34,7 +39,118 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const PING_INTERVAL = 25000;
 const FALLBACK_POLL_INTERVAL = 5000;
 
-// Verified Pyth Network price feed IDs (decentralized oracle)
+// Binance trading pairs (symbol -> Binance stream name)
+const BINANCE_STREAMS: Record<string, string> = {
+  BTC: "btcusdt",
+  ETH: "ethusdt",
+  BNB: "bnbusdt",
+  SOL: "solusdt",
+  XRP: "xrpusdt",
+  ADA: "adausdt",
+  DOGE: "dogeusdt",
+  TRX: "trxusdt",
+  AVAX: "avaxusdt",
+  TON: "tonusdt",
+  LINK: "linkusdt",
+  DOT: "dotusdt",
+  MATIC: "maticusdt",
+  LTC: "ltcusdt",
+  BCH: "bchusdt",
+  SHIB: "shibusdt",
+  DAI: "daiusdt",
+  ATOM: "atomusdt",
+  UNI: "uniusdt",
+  XLM: "xlmusdt",
+  ETC: "etcusdt",
+  ICP: "icpusdt",
+  NEAR: "nearusdt",
+  FIL: "filusdt",
+  APT: "aptusdt",
+  HBAR: "hbarusdt",
+  ARB: "arbusdt",
+  VET: "vetusdt",
+  OP: "opusdt",
+  MKR: "mkrusdt",
+  AAVE: "aaveusdt",
+  GRT: "grtusdt",
+  RNDR: "rndrusdt",
+  INJ: "injusdt",
+  ALGO: "algousdt",
+  STX: "stxusdt",
+  FTM: "ftmusdt",
+  SUI: "suiusdt",
+  THETA: "thetausdt",
+  RUNE: "runeusdt",
+  LDO: "ldousdt",
+  SAND: "sandusdt",
+  MANA: "manausdt",
+  AXS: "axsusdt",
+  FET: "fetusdt",
+  EGLD: "egldusdt",
+  FLOW: "flowusdt",
+  EOS: "eosusdt",
+  CHZ: "chzusdt",
+  CAKE: "cakeusdt",
+  XTZ: "xtzusdt",
+  KAVA: "kavausdt",
+  NEO: "neousdt",
+  IOTA: "iotausdt",
+  GALA: "galausdt",
+  SNX: "snxusdt",
+  ZEC: "zecusdt",
+  CFX: "cfxusdt",
+  MINA: "minausdt",
+  WOO: "woousdt",
+  ROSE: "roseusdt",
+  ZIL: "zilusdt",
+  DYDX: "dydxusdt",
+  COMP: "compusdt",
+  ENJ: "enjusdt",
+  FXS: "fxsusdt",
+  GMX: "gmxusdt",
+  RPL: "rplusdt",
+  CRV: "crvusdt",
+  DASH: "dashusdt",
+  ONE: "oneusdt",
+  BAT: "batusdt",
+  CELO: "celousdt",
+  ZRX: "zrxusdt",
+  OCEAN: "oceanusdt",
+  AUDIO: "audiousdt",
+  ANKR: "ankrusdt",
+  ICX: "icxusdt",
+  IOTX: "iotxusdt",
+  STORJ: "storjusdt",
+  SKL: "sklusdt",
+  ONT: "ontusdt",
+  GLMR: "glmrusdt",
+  KDA: "kdausdt",
+  RVN: "rvnusdt",
+  SC: "scusdt",
+  WAVES: "wavesusdt",
+  AR: "arusdt",
+  AGIX: "agixusdt",
+  WLD: "wldusdt",
+  PEPE: "pepeusdt",
+  FLOKI: "flokiusdt",
+  BONK: "bonkusdt",
+  WIF: "wifusdt",
+  ORDI: "ordiusdt",
+  SEI: "seiusdt",
+  TIA: "tiausdt",
+  JUP: "jupusdt",
+  PYTH: "pythusdt",
+  JTO: "jtousdt",
+  STRK: "strkusdt",
+  BLUR: "blurusdt",
+  IMX: "imxusdt",
+  PENDLE: "pendleusdt",
+  ENS: "ensusdt",
+  LUNC: "luncusdt",
+  LUNA: "lunausdt",
+};
+
+// Pyth Network price feed IDs (fallback oracle)
 const PYTH_FEED_IDS: Record<string, string> = {
   BTC: "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
   ETH: "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
@@ -44,38 +160,17 @@ const PYTH_FEED_IDS: Record<string, string> = {
   ADA: "0x2a01deaec9e51a579277b34b122399984d0bbf57e2458a7e42fecd2829867a0d",
   DOGE: "0xdcef50dd0a4cd2dcc17e45df1676dcb336a11a61c69df7a0299b0150c672d25c",
   AVAX: "0x93da3352f9f1d105fdfe4971cfa80e9dd777bfc5d0f683ebb6e1294b92137bb7",
-  TRX: "0x67aed5a24fdad045475e7195c98a98aea119c763f272d4523f5bac93a4f33c2c",
   LINK: "0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221",
   DOT: "0xca3eed9b267293f6595901c734c7525ce8ef49adafe8284f97e8d4e0ce2a8f2a",
   MATIC: "0x5de33440f6c399aa75d5c11e39eaca4c39a0e7c0cfe6afa9b96cb46e5f41108c",
   LTC: "0x6e3f3fa8253588df9326580180233eb791e03b443a3ba7a1d892e73874e19a54",
-  SHIB: "0xf0d57deca57b3da2fe63a493f4c25925fdfd8edf834b20f93e1f84dbd1504d4a",
-  BCH: "0x3dd2b63686a450ec7290df3a1e0b583c0481f651351edfa7636f39aed55cf8a3",
-  ATOM: "0xb00b60f88b03a6a6259588d4429f8fcaba3bb11cad1b281129fc3d226e3b668a",
   UNI: "0x78d185a741d07edb3412b09008b7c5cfb9bbbd7d568bf00ba737b456ba171501",
-  XLM: "0xb7a8eba68a997cd0210c2e1e4ee811ad2d174b3611c22d9c0085d973d5c8d068",
-  ETC: "0x7f981f906d7cfe93f618804f1de89e0199ead306edc022d3230b3e8305f391b0",
+  ATOM: "0xb00b60f88b03a6a6259588d4429f8fcaba3bb11cad1b281129fc3d226e3b668a",
   NEAR: "0xc415de8d2eba7db216527dff4b60e8f3a5311c740dadb233e13e12547e226750",
-  ICP: "0xc9907d786c5821547777f525a94e3cb798f27d4cf0e9a7a83c3c2f4c50573e79",
-  FIL: "0x150ac9b959aee0051e4091f0ef5216d941f590e1c5e7f91cf7635b5c11628c0e",
   APT: "0x03ae4db29ed4ae33d323568895aa00337e658e348b37509f5372ae51f0af00d5",
   ARB: "0x3fa4252848f9f0a1480be62745a4629d9eb1322aebab8a791e344b3b9c1adcf5",
   OP: "0x385f64d993f7b77d8182ed5003d97c60aa3361f3cecfe711544d2d59165e9bdf",
-  AAVE: "0x2b9ab1e972a281585084148ba1389800799bd4be63b957507db1349314e47445",
   SUI: "0x23d7315113f5b1d3ba7a83604c44b94d79f4fd69af77f804fc7f920a6dc65744",
-  SNX: "0x39d020f60982ed892abbcd4a06a276a9f9b7bfbce003204c110b6e488f502da3",
-  CFX: "0x8879170230c9603342f3837cf9a8e76c61791198fb1271bb2552c9af7b33c933",
-  DYDX: "0x6489800bb8974169adfe35f71e6e3e25f0f35db3e6d8b2f50b16f65e65f10cb5",
-  COMP: "0x4a8e42861cabc5ecb50996f92e7cfa2bce3fd0a2423b0c44c9b423fb2bd25478",
-  GMX: "0xb962539d0fcb272a494d65ea56f94851c2bcf8823935da05bd628916e2e9edbf",
-  RPL: "0x24f94ac0fd8638e3fc41aab2e4df933e63f763351b640bf336a6ec70651c4503",
-  CRV: "0xa19d04ac696c7a6616d291c7e5d1377cc8be437c327b75adb5dc1bad745fcae8",
-  BAT: "0x8e860fb74e60e5736b455d82f60b3728049c348e94961add5f961b02fdee2535",
-  ANKR: "0x89a58e1cab821118133d6831f5018fba5b354afb78b2d18f575b3cbf69a4f652",
-  LUNC: "0xcc2362035ad57e560d2a4645d81b1c27c2eb70f0d681a45c49d09e0c5ff9d53d",
-  LUNA: "0xe6ccd3f878cf338e6732bf59f60943e8ca2c28402fc4d9c258503b2edbe74a31",
-  WLD: "0xd6835ad1f773f4bff18384eea799bfe29c2dcac2d0f1c5e9b9af7fa52a12f2e0",
-  DAI: "0xb0948a5e5313200c632b51bb5ca32f6de0d36e9950a942d19751e833f70dabfd",
   INJ: "0x7a5bc1d2b56ad029048cd63964b3ad2776eadf812edc1a43a31406cb54bff592",
   SEI: "0x53614f1cb0c031d4af66c04cb9c756234adad0e1cee85303795091499a4084eb",
   TIA: "0x09f7c1d7dfbb7df2b8fe3d3d87ee94a2259d212da4f30c1f0540d066dfa44723",
@@ -83,7 +178,7 @@ const PYTH_FEED_IDS: Record<string, string> = {
   PYTH: "0x0bbf28e9a841a1cc788f6a361b17ca072d0ea3098a1e5df1c3922d06719579ff",
 };
 
-// DeFiLlama token mappings (decentralized aggregator)
+// DeFiLlama token mappings (fallback aggregator)
 const DEFILLAMA_TOKENS: Record<string, string> = {
   BTC: "coingecko:bitcoin",
   ETH: "coingecko:ethereum",
@@ -202,14 +297,20 @@ const DEFILLAMA_TOKENS: Record<string, string> = {
   ENS: "coingecko:ethereum-name-service",
 };
 
-// Build reverse lookup for Pyth feed IDs
+// Build reverse lookups
+const binanceStreamToSymbol = new Map<string, string>();
+Object.entries(BINANCE_STREAMS).forEach(([symbol, stream]) => {
+  binanceStreamToSymbol.set(stream, symbol);
+});
+
 const feedIdToSymbol = new Map<string, string>();
 Object.entries(PYTH_FEED_IDS).forEach(([symbol, feedId]) => {
   feedIdToSymbol.set(feedId.replace("0x", ""), symbol);
 });
 
 // Singleton state for shared connection
-let globalSocket: WebSocket | null = null;
+let binanceSocket: WebSocket | null = null;
+let pythSocket: WebSocket | null = null;
 let globalListeners = new Set<(prices: Map<string, WebSocketPriceData>) => void>();
 let globalPrices = new Map<string, WebSocketPriceData>();
 let globalState: WebSocketState = {
@@ -219,6 +320,7 @@ let globalState: WebSocketState = {
   lastUpdate: 0,
   ticksPerSecond: 0,
   subscribedCount: 0,
+  primarySource: "none",
 };
 let reconnectAttempts = 0;
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -237,7 +339,7 @@ function updateTickRate() {
   globalState = { ...globalState, ticksPerSecond: tickWindow.length };
 }
 
-// Fetch from Pyth REST API as initial load / fallback
+// Fetch from Pyth REST API as fallback
 async function fetchPythREST(symbols: string[]): Promise<void> {
   const feedIds = symbols
     .map(s => PYTH_FEED_IDS[s])
@@ -266,15 +368,19 @@ async function fetchPythREST(symbols: string[]): Promise<void> {
       const price = Number(priceData.price) * Math.pow(10, priceData.expo);
 
       if (price > 0) {
-        tickWindow.push(Date.now());
-        updateTickRate();
-        
-        globalPrices.set(symbol, {
-          symbol,
-          price,
-          source: "Pyth",
-          timestamp: Date.now(),
-        });
+        // Only update if no Binance price or Binance is stale
+        const existing = globalPrices.get(symbol);
+        if (!existing || existing.source !== "Binance" || Date.now() - existing.timestamp > 5000) {
+          tickWindow.push(Date.now());
+          updateTickRate();
+          
+          globalPrices.set(symbol, {
+            symbol,
+            price,
+            source: "Pyth",
+            timestamp: Date.now(),
+          });
+        }
       }
     });
 
@@ -285,7 +391,7 @@ async function fetchPythREST(symbols: string[]): Promise<void> {
     };
     notifyListeners();
   } catch (err) {
-    console.error("[DecentralizedWS] Pyth REST error:", err);
+    console.error("[PriceWS] Pyth REST error:", err);
   }
 }
 
@@ -309,7 +415,6 @@ async function fetchDeFiLlama(symbols: string[]): Promise<void> {
     const coins = data?.coins;
     if (!coins) return;
 
-    // Build reverse map
     const keyToSymbol = new Map<string, string>();
     Object.entries(DEFILLAMA_TOKENS).forEach(([symbol, key]) => {
       keyToSymbol.set(key, symbol);
@@ -321,7 +426,7 @@ async function fetchDeFiLlama(symbols: string[]): Promise<void> {
       
       if (!symbol || !Number.isFinite(price) || price <= 0) return;
       
-      // Only update if we don't have a Pyth price or it's stale (>30s)
+      // Only update if we don't have a fresher source
       const existing = globalPrices.get(symbol);
       if (!existing || Date.now() - existing.timestamp > 30000) {
         tickWindow.push(Date.now());
@@ -343,29 +448,35 @@ async function fetchDeFiLlama(symbols: string[]): Promise<void> {
     };
     notifyListeners();
   } catch (err) {
-    console.error("[DecentralizedWS] DeFiLlama error:", err);
+    console.error("[PriceWS] DeFiLlama error:", err);
   }
 }
 
-// Connect to Pyth Hermes WebSocket
-function connect() {
-  if (globalSocket?.readyState === WebSocket.OPEN) return;
-  if (globalSocket?.readyState === WebSocket.CONNECTING) return;
+// Connect to Binance Combined Streams WebSocket (primary)
+function connectBinance(symbols: string[]) {
+  if (binanceSocket?.readyState === WebSocket.OPEN) return;
+  if (binanceSocket?.readyState === WebSocket.CONNECTING) return;
 
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout);
-    reconnectTimeout = null;
+  const streams = symbols
+    .map(s => BINANCE_STREAMS[s])
+    .filter(Boolean)
+    .map(s => `${s}@trade`);
+
+  if (streams.length === 0) {
+    console.log("[PriceWS] No Binance streams available, using Pyth fallback");
+    connectPyth();
+    return;
   }
 
-  globalState = { ...globalState, connecting: true, error: null };
-  globalListeners.forEach(listener => listener(new Map(globalPrices)));
+  // Binance combined stream URL
+  const wsUrl = `${BINANCE_WSS_BASE}/${streams.slice(0, 100).join("/")}`;
 
   try {
-    console.log("[DecentralizedWS] Connecting to Pyth Hermes...");
-    globalSocket = new WebSocket(PYTH_HERMES_WSS);
+    console.log(`[PriceWS] Connecting to Binance (${streams.length} streams)...`);
+    binanceSocket = new WebSocket(wsUrl);
 
-    globalSocket.onopen = () => {
-      console.log("[DecentralizedWS] Connected to Pyth Hermes (decentralized)");
+    binanceSocket.onopen = () => {
+      console.log("[PriceWS] ✅ Connected to Binance WebSocket (primary)");
       reconnectAttempts = 0;
 
       globalState = {
@@ -373,25 +484,155 @@ function connect() {
         connected: true,
         connecting: false,
         error: null,
+        primarySource: "Binance",
       };
 
-      // Subscribe to price feeds
-      if (subscribedSymbols.length > 0) {
-        subscribeToFeeds(subscribedSymbols);
-      }
-
-      // Clear existing intervals
+      // Setup ping interval
       if (pingInterval) clearInterval(pingInterval);
-      if (fallbackInterval) clearInterval(fallbackInterval);
-
-      // Ping to keep connection alive
       pingInterval = setInterval(() => {
-        if (globalSocket?.readyState === WebSocket.OPEN) {
-          globalSocket.send(JSON.stringify({ type: "ping" }));
+        if (binanceSocket?.readyState === WebSocket.OPEN) {
+          // Binance uses pong frames automatically, but we can send a ping
+          binanceSocket.send(JSON.stringify({ method: "ping" }));
         }
       }, PING_INTERVAL);
 
+      // Fallback polling for symbols not on Binance
+      if (fallbackInterval) clearInterval(fallbackInterval);
+      fallbackInterval = setInterval(() => {
+        const nonBinanceSymbols = subscribedSymbols.filter(s => !BINANCE_STREAMS[s]);
+        if (nonBinanceSymbols.length > 0) {
+          fetchPythREST(nonBinanceSymbols);
+          fetchDeFiLlama(nonBinanceSymbols);
+        }
+      }, FALLBACK_POLL_INTERVAL);
+
+      notifyListeners();
+    };
+
+    binanceSocket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        // Handle trade events
+        if (data.e === "trade" && data.s && data.p) {
+          // Extract symbol from stream (e.g., "BTCUSDT" -> "BTC")
+          const pair = data.s.toUpperCase();
+          const symbol = pair.replace("USDT", "");
+          const price = parseFloat(data.p);
+
+          if (price > 0 && BINANCE_STREAMS[symbol]) {
+            tickWindow.push(Date.now());
+            updateTickRate();
+
+            globalPrices.set(symbol, {
+              symbol,
+              price,
+              source: "Binance",
+              timestamp: Date.now(),
+            });
+
+            globalState = {
+              ...globalState,
+              lastUpdate: Date.now(),
+              subscribedCount: globalPrices.size,
+            };
+            notifyListeners();
+          }
+        }
+      } catch (err) {
+        // Ignore parse errors
+      }
+    };
+
+    binanceSocket.onclose = (event) => {
+      console.log("[PriceWS] Binance disconnected:", event.code, event.reason);
+
+      globalState = {
+        ...globalState,
+        connected: false,
+        connecting: false,
+        primarySource: "none",
+      };
+
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+      }
+
+      binanceSocket = null;
+
+      // Attempt reconnection or fallback to Pyth
+      if (globalListeners.size > 0) {
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          reconnectAttempts++;
+          const delay = Math.min(RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1), 15000);
+          console.log(`[PriceWS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
+
+          // Use fallbacks while reconnecting
+          fetchPythREST(subscribedSymbols);
+          fetchDeFiLlama(subscribedSymbols);
+
+          reconnectTimeout = setTimeout(() => connectBinance(subscribedSymbols), delay);
+        } else {
+          // Fall back to Pyth after max attempts
+          console.log("[PriceWS] Falling back to Pyth WebSocket");
+          connectPyth();
+        }
+      }
+
+      notifyListeners();
+    };
+
+    binanceSocket.onerror = () => {
+      globalState = {
+        ...globalState,
+        error: "Binance WebSocket error",
+        connecting: false,
+      };
+      // Will trigger onclose which handles fallback
+    };
+  } catch (err) {
+    console.error("[PriceWS] Failed to create Binance WebSocket:", err);
+    // Fall back to Pyth
+    connectPyth();
+  }
+}
+
+// Connect to Pyth Hermes WebSocket (fallback)
+function connectPyth() {
+  if (pythSocket?.readyState === WebSocket.OPEN) return;
+  if (pythSocket?.readyState === WebSocket.CONNECTING) return;
+
+  try {
+    console.log("[PriceWS] Connecting to Pyth Hermes (fallback)...");
+    pythSocket = new WebSocket(PYTH_HERMES_WSS);
+
+    pythSocket.onopen = () => {
+      console.log("[PriceWS] ✅ Connected to Pyth Hermes (fallback)");
+
+      globalState = {
+        ...globalState,
+        connected: true,
+        connecting: false,
+        error: null,
+        primarySource: "Pyth",
+      };
+
+      // Subscribe to Pyth feeds
+      const feedIds = subscribedSymbols
+        .map(s => PYTH_FEED_IDS[s])
+        .filter(Boolean);
+
+      if (feedIds.length > 0) {
+        pythSocket?.send(JSON.stringify({
+          type: "subscribe",
+          ids: feedIds,
+        }));
+        console.log(`[PriceWS] Subscribed to ${feedIds.length} Pyth feeds`);
+      }
+
       // Fallback polling for symbols not in Pyth
+      if (fallbackInterval) clearInterval(fallbackInterval);
       fallbackInterval = setInterval(() => {
         const nonPythSymbols = subscribedSymbols.filter(s => !PYTH_FEED_IDS[s]);
         if (nonPythSymbols.length > 0) {
@@ -402,11 +643,10 @@ function connect() {
       notifyListeners();
     };
 
-    globalSocket.onmessage = (event) => {
+    pythSocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
 
-        // Handle price feed updates
         if (data.type === "price_update" && data.price_feed) {
           const feed = data.price_feed;
           const symbol = feedIdToSymbol.get(feed.id);
@@ -435,80 +675,33 @@ function connect() {
           }
         }
       } catch (err) {
-        // Ignore parse errors for pong messages
+        // Ignore parse errors
       }
     };
 
-    globalSocket.onclose = (event) => {
-      console.log("[DecentralizedWS] Disconnected:", event.code, event.reason);
-
-      globalState = {
-        ...globalState,
-        connected: false,
-        connecting: false,
-      };
-
-      if (pingInterval) {
-        clearInterval(pingInterval);
-        pingInterval = null;
+    pythSocket.onclose = () => {
+      console.log("[PriceWS] Pyth disconnected");
+      pythSocket = null;
+      
+      // Try to reconnect to Binance
+      if (globalListeners.size > 0) {
+        reconnectAttempts = 0;
+        setTimeout(() => connectBinance(subscribedSymbols), RECONNECT_DELAY);
       }
-
-      globalSocket = null;
-
-      // Attempt reconnection
-      if (globalListeners.size > 0 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttempts++;
-        const delay = Math.min(RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1), 15000);
-        console.log(`[DecentralizedWS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
-
-        // Use REST fallback while reconnecting
-        fetchPythREST(subscribedSymbols);
-        fetchDeFiLlama(subscribedSymbols.filter(s => !PYTH_FEED_IDS[s]));
-
-        reconnectTimeout = setTimeout(() => connect(), delay);
-      }
-
-      notifyListeners();
     };
 
-    globalSocket.onerror = () => {
+    pythSocket.onerror = () => {
       globalState = {
         ...globalState,
-        error: "WebSocket connection error",
-        connecting: false,
+        error: "Pyth WebSocket error",
       };
     };
   } catch (err) {
-    console.error("[DecentralizedWS] Failed to create WebSocket:", err);
-    globalState = {
-      ...globalState,
-      error: "Failed to connect",
-      connecting: false,
-    };
-    
-    // Use REST fallback
+    console.error("[PriceWS] Failed to create Pyth WebSocket:", err);
+    // Use REST fallbacks only
     fetchPythREST(subscribedSymbols);
     fetchDeFiLlama(subscribedSymbols);
   }
-}
-
-function subscribeToFeeds(symbols: string[]) {
-  if (globalSocket?.readyState !== WebSocket.OPEN) return;
-
-  const feedIds = symbols
-    .map(s => PYTH_FEED_IDS[s])
-    .filter(Boolean);
-
-  if (feedIds.length === 0) return;
-
-  // Pyth Hermes subscription format
-  const subscribeMsg = {
-    type: "subscribe",
-    ids: feedIds,
-  };
-
-  globalSocket.send(JSON.stringify(subscribeMsg));
-  console.log(`[DecentralizedWS] Subscribed to ${feedIds.length} Pyth feeds`);
 }
 
 function disconnect() {
@@ -524,9 +717,13 @@ function disconnect() {
     clearInterval(fallbackInterval);
     fallbackInterval = null;
   }
-  if (globalSocket) {
-    globalSocket.close();
-    globalSocket = null;
+  if (binanceSocket) {
+    binanceSocket.close();
+    binanceSocket = null;
+  }
+  if (pythSocket) {
+    pythSocket.close();
+    pythSocket = null;
   }
   globalState = {
     connected: false,
@@ -535,6 +732,7 @@ function disconnect() {
     lastUpdate: 0,
     ticksPerSecond: 0,
     subscribedCount: 0,
+    primarySource: "none",
   };
 }
 
@@ -543,13 +741,17 @@ function subscribe(symbols: string[]) {
   const uniqueSymbols = [...new Set([...subscribedSymbols, ...normalized])].slice(0, 100);
   subscribedSymbols = uniqueSymbols;
 
-  if (globalSocket?.readyState === WebSocket.OPEN) {
-    subscribeToFeeds(subscribedSymbols);
-  }
-
   // Immediately fetch via REST for fast initial load
   fetchPythREST(subscribedSymbols);
-  fetchDeFiLlama(subscribedSymbols.filter(s => !PYTH_FEED_IDS[s]));
+  fetchDeFiLlama(subscribedSymbols);
+}
+
+function connect() {
+  globalState = { ...globalState, connecting: true, error: null };
+  notifyListeners();
+  
+  // Try Binance first, will fall back to Pyth if needed
+  connectBinance(subscribedSymbols);
 }
 
 // Update tick rate every 250ms
@@ -577,10 +779,13 @@ export function useGlobalPriceWebSocket(symbols: string[] = []) {
     }
 
     // Connect if not already connected
-    if (!globalSocket || globalSocket.readyState === WebSocket.CLOSED || globalSocket.readyState === WebSocket.CLOSING) {
+    const binanceOpen = binanceSocket?.readyState === WebSocket.OPEN;
+    const pythOpen = pythSocket?.readyState === WebSocket.OPEN;
+    const binanceConnecting = binanceSocket?.readyState === WebSocket.CONNECTING;
+    const pythConnecting = pythSocket?.readyState === WebSocket.CONNECTING;
+
+    if (!binanceOpen && !pythOpen && !binanceConnecting && !pythConnecting) {
       connect();
-    } else if (globalSocket.readyState === WebSocket.OPEN && symbols.length > 0) {
-      subscribe(symbols);
     }
 
     // Initial state sync
