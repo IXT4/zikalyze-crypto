@@ -220,24 +220,33 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
         <div className="p-3 rounded-xl bg-secondary/50 transition-all duration-300" key={`mempool-${pulseKey}`}>
           <div className="flex items-center gap-1.5 mb-1">
             <Database className="h-4 w-4 text-warning" />
-            <span className="text-xs text-muted-foreground">Mempool</span>
+            <span className="text-xs text-muted-foreground">
+              {crypto.toUpperCase() === 'BTC' ? 'Mempool' : 'Pending Txs'}
+            </span>
             {isConnected && <span className="h-1.5 w-1.5 bg-success rounded-full animate-pulse" />}
           </div>
           <div className="font-bold text-foreground">
-            {metrics.mempoolData.unconfirmedTxs.toLocaleString()}
+            {metrics.mempoolData.unconfirmedTxs > 0 
+              ? metrics.mempoolData.unconfirmedTxs.toLocaleString()
+              : '—'}
           </div>
           <div className="text-xs text-muted-foreground space-y-0.5">
-            {metrics.mempoolData.avgFeeRate > 0 && (
+            {metrics.mempoolData.avgFeeRate > 0 ? (
               <div className="flex items-center gap-1">
-                <span>{metrics.mempoolData.avgFeeRate} sat/vB</span>
+                <span>
+                  {crypto.toUpperCase() === 'BTC' 
+                    ? `${metrics.mempoolData.avgFeeRate} sat/vB` 
+                    : `${metrics.mempoolData.avgFeeRate} gwei`}
+                </span>
                 {metrics.mempoolData.fastestFee && (
                   <span className="text-[10px] text-warning">
                     (⚡{metrics.mempoolData.fastestFee})
                   </span>
                 )}
               </div>
+            ) : (
+              <span>{metrics.mempoolData.unconfirmedTxs > 0 ? 'unconfirmed' : 'live'}</span>
             )}
-            {!metrics.mempoolData.avgFeeRate && <span>unconfirmed txs</span>}
           </div>
         </div>
 

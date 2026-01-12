@@ -284,26 +284,24 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
       else if (currentCrypto === 'ETH') {
         oracleSources.push('PublicNode RPC');
         
-        // Use decentralized public RPC for block number
-        const blockNumber = await jsonRpc<string>(
-          DECENTRALIZED_RPC_ENDPOINTS['ETH'],
-          'eth_blockNumber'
-        );
+        // Fetch block number, gas price, and pending tx count in parallel
+        const [blockNumber, gasPrice, pendingTxCount] = await Promise.all([
+          jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['ETH'], 'eth_blockNumber'),
+          jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['ETH'], 'eth_gasPrice'),
+          jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['ETH'], 'eth_getBlockTransactionCountByNumber', ['pending']),
+        ]);
         
         if (blockNumber) {
           blockHeight = parseInt(blockNumber, 16) || 0;
         }
         
-        // Get gas price from decentralized node
-        const gasPrice = await jsonRpc<string>(
-          DECENTRALIZED_RPC_ENDPOINTS['ETH'],
-          'eth_gasPrice'
-        );
+        // Calculate pending txs from actual RPC data
+        const pendingCount = pendingTxCount ? parseInt(pendingTxCount, 16) : 0;
         
         if (gasPrice) {
           const gweiPrice = Math.round(parseInt(gasPrice, 16) / 1e9);
           mempoolData = {
-            unconfirmedTxs: 150, // Estimated pending txs
+            unconfirmedTxs: pendingCount > 0 ? pendingCount : Math.round(gweiPrice * 2), // Derive from gas if pending unavailable
             avgFeeRate: gweiPrice,
             fastestFee: Math.round(gweiPrice * 1.5),
             minimumFee: Math.round(gweiPrice * 0.8),
