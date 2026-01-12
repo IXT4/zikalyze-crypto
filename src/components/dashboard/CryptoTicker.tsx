@@ -19,9 +19,10 @@ const cryptoMeta = [
 
 interface OracleStatus {
   isLive: boolean;
-  primarySource: "Pyth" | "DIA" | "Redstone" | "none";
+  primarySource: "Pyth" | "DIA" | "API3" | "Redstone" | "none";
   pythConnected: boolean;
   diaConnected?: boolean;
+  api3Connected?: boolean;
   redstoneConnected?: boolean;
   // Legacy compatibility
   chainlinkConnected: boolean;
