@@ -247,12 +247,24 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
             <span className="text-xs text-muted-foreground">24h Transactions</span>
           </div>
           <div className="font-bold text-foreground">
-            {metrics.transactionVolume.value.toLocaleString()}
+            {metrics.transactionVolume.value > 0 
+              ? metrics.transactionVolume.value >= 1_000_000_000
+                ? `${(metrics.transactionVolume.value / 1_000_000_000).toFixed(1)}B`
+                : metrics.transactionVolume.value >= 1_000_000
+                  ? `${(metrics.transactionVolume.value / 1_000_000).toFixed(1)}M`
+                  : metrics.transactionVolume.value >= 1_000
+                    ? `${(metrics.transactionVolume.value / 1_000).toFixed(1)}K`
+                    : metrics.transactionVolume.value.toLocaleString()
+              : '—'}
           </div>
           <div className="text-xs text-muted-foreground flex items-center gap-1">
             {metrics.transactionVolume.tps ? (
               <span className="flex items-center gap-1">
-                <span className="text-primary">{metrics.transactionVolume.tps} TPS</span>
+                <span className="text-primary">
+                  {metrics.transactionVolume.tps >= 1000
+                    ? `${(metrics.transactionVolume.tps / 1000).toFixed(1)}K TPS`
+                    : `${metrics.transactionVolume.tps} TPS`}
+                </span>
                 {metrics.hashRate > 0 && <span>• {(metrics.hashRate / 1e18).toFixed(2)} EH/s</span>}
               </span>
             ) : metrics.hashRate > 0 ? (

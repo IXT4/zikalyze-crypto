@@ -411,7 +411,12 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         }
         
         avgBlockTime = 12 / 60; // 12 seconds
-        transactionVolume.tps = 15;
+        transactionVolume = { 
+          value: 15 * 60 * 60 * 24, // ~1.3M txs/day at 15 TPS
+          change24h: currentChange, 
+          tps: 15,
+          avg24h: 15 * 3600, // hourly average
+        };
         source = 'eth-rpc-decentralized';
       }
       // KAS - Official Kaspa API (decentralized network)
@@ -431,7 +436,13 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
           blockHeight = blockInfo.blueScore;
         }
         avgBlockTime = 1 / 60; // 1 second blocks
-        transactionVolume.tps = 100;
+        const kasTps = 100;
+        transactionVolume = { 
+          value: kasTps * 60 * 60 * 24, // ~8.6M txs/day
+          change24h: currentChange, 
+          tps: kasTps,
+          avg24h: kasTps * 3600,
+        };
         source = 'kaspa-decentralized';
       }
       // SOL - Solana Foundation RPC
@@ -448,10 +459,16 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         }
         
         avgBlockTime = 0.4 / 60; // 400ms slots
-        transactionVolume.tps = 3000;
+        const solTps = 3000;
+        transactionVolume = { 
+          value: solTps * 60 * 60 * 24, // ~259M txs/day
+          change24h: currentChange, 
+          tps: solTps,
+          avg24h: solTps * 3600,
+        };
         // Solana processes txs instantly, estimate pending based on TPS
         mempoolData = {
-          unconfirmedTxs: Math.round(3000 * 0.4), // ~1.2k pending at any moment
+          unconfirmedTxs: Math.round(solTps * 0.4), // ~1.2k pending at any moment
           avgFeeRate: 5000, // 5000 lamports/signature
           fastestFee: 10000,
           minimumFee: 5000,
@@ -479,7 +496,13 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
           minimumFee: Math.round(gweiPrice * 0.8),
         };
         
-        transactionVolume.tps = 4500;
+        const avaxTps = 4500;
+        transactionVolume = { 
+          value: avaxTps * 60 * 60 * 24, // ~388M txs/day theoretical
+          change24h: currentChange, 
+          tps: avaxTps,
+          avg24h: avaxTps * 3600,
+        };
         source = 'avax-decentralized';
       }
       // MATIC/POL - Polygon public RPC
@@ -503,7 +526,13 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
           minimumFee: Math.round(gweiPrice * 0.8),
         };
         
-        transactionVolume.tps = 2000;
+        const maticTps = 2000;
+        transactionVolume = { 
+          value: maticTps * 60 * 60 * 24, // ~172M txs/day theoretical
+          change24h: currentChange, 
+          tps: maticTps,
+          avg24h: maticTps * 3600,
+        };
         source = 'polygon-decentralized';
       }
       // ARB - Arbitrum Foundation RPC
@@ -527,7 +556,13 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
           minimumFee: Math.round(gweiPrice * 0.8 * 1000) / 1000,
         };
         
-        transactionVolume.tps = 40000;
+        const arbTps = 40000;
+        transactionVolume = { 
+          value: arbTps * 60 * 60 * 24, // ~3.4B txs/day theoretical
+          change24h: currentChange, 
+          tps: arbTps,
+          avg24h: arbTps * 3600,
+        };
         source = 'arbitrum-decentralized';
       }
       // OP - Optimism Foundation RPC
@@ -543,7 +578,13 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
           blockHeight = parseInt(blockNumber, 16) || 0;
         }
         
-        transactionVolume.tps = 2000;
+        const opTps = 2000;
+        transactionVolume = { 
+          value: opTps * 60 * 60 * 24,
+          change24h: currentChange, 
+          tps: opTps,
+          avg24h: opTps * 3600,
+        };
         source = 'optimism-decentralized';
       }
       // BNB - BNB Chain public RPC
@@ -559,13 +600,25 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
           blockHeight = parseInt(blockNumber, 16) || 0;
         }
         
-        transactionVolume.tps = 160;
+        const bnbTps = 160;
+        transactionVolume = { 
+          value: bnbTps * 60 * 60 * 24,
+          change24h: currentChange, 
+          tps: bnbTps,
+          avg24h: bnbTps * 3600,
+        };
         source = 'bnb-decentralized';
       }
       // NEAR - NEAR Foundation RPC
       else if (currentCrypto === 'NEAR') {
         oracleSources.push('NEAR RPC');
-        transactionVolume.tps = 100000;
+        const nearTps = 100000;
+        transactionVolume = { 
+          value: nearTps * 60 * 60 * 24,
+          change24h: currentChange, 
+          tps: nearTps,
+          avg24h: nearTps * 3600,
+        };
         source = 'near-decentralized';
       }
       // FTM - Fantom public RPC
@@ -581,19 +634,37 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
           blockHeight = parseInt(blockNumber, 16) || 0;
         }
         
-        transactionVolume.tps = 4500;
+        const ftmTps = 4500;
+        transactionVolume = { 
+          value: ftmTps * 60 * 60 * 24,
+          change24h: currentChange, 
+          tps: ftmTps,
+          avg24h: ftmTps * 3600,
+        };
         source = 'fantom-decentralized';
       }
       // ATOM - Cosmos decentralized validator RPC
       else if (currentCrypto === 'ATOM') {
         oracleSources.push('Cosmos RPC');
-        transactionVolume.tps = 10000;
+        const atomTps = 10000;
+        transactionVolume = { 
+          value: atomTps * 60 * 60 * 24,
+          change24h: currentChange, 
+          tps: atomTps,
+          avg24h: atomTps * 3600,
+        };
         source = 'cosmos-decentralized';
       }
-      // Other chains - derive from oracle price data
+      // Other chains - derive from oracle price data and known TPS
       else {
         oracleSources.push('Oracle Derived');
-        transactionVolume.tps = CHAIN_TPS[currentCrypto] || CHAIN_TPS['DEFAULT'];
+        const defaultTps = CHAIN_TPS[currentCrypto] || CHAIN_TPS['DEFAULT'];
+        transactionVolume = { 
+          value: defaultTps * 60 * 60 * 24,
+          change24h: currentChange, 
+          tps: defaultTps,
+          avg24h: defaultTps * 3600,
+        };
         source = 'oracle-derived';
       }
 
