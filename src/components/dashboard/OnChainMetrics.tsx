@@ -12,7 +12,9 @@ import {
   Wifi,
   WifiOff,
   Landmark,
-  Users
+  Users,
+  Globe,
+  Link2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -138,6 +140,13 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
           <span className="text-xs text-muted-foreground px-1.5 py-0.5 bg-secondary rounded">
             {crypto.toUpperCase()}
           </span>
+          {/* Decentralized indicator */}
+          {metrics.isDecentralized && (
+            <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-primary/20 text-primary">
+              <Link2 className="h-3 w-3" />
+              DECENTRALIZED
+            </div>
+          )}
           <div className={cn(
             "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium",
             isConnected ? "bg-success/20 text-success" : isPolling ? "bg-warning/20 text-warning" : isConnecting ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
@@ -147,6 +156,13 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Oracle sources tooltip */}
+          {metrics.oracleSources && metrics.oracleSources.length > 0 && (
+            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <Globe className="h-3 w-3" />
+              {metrics.oracleSources.join(' • ')}
+            </span>
+          )}
           <span className="text-xs text-muted-foreground">
             {loading ? 'Syncing...' : timeSinceUpdate < 60 ? `${timeSinceUpdate}s ago` : `${Math.floor(timeSinceUpdate / 60)}m ago`}
           </span>
