@@ -15,12 +15,10 @@ export interface DIAPriceData {
   volume24h?: number;
 }
 
-// DIA API endpoints - multiple for resilience
-const DIA_ENDPOINTS = [
-  "https://api.diadata.org",
-];
+// DIA API endpoint
+const DIA_ENDPOINT = "https://api.diadata.org";
 
-// Asset mappings for DIA (blockchain/symbol format)
+// Priority assets for DIA (most important cryptos)
 const DIA_ASSETS: Record<string, string> = {
   "BTC/USD": "Bitcoin/0x0000000000000000000000000000000000000000",
   "ETH/USD": "Ethereum/0x0000000000000000000000000000000000000000",
@@ -88,33 +86,31 @@ export const useDIAPrices = () => {
   }, []);
 
   const fetchPrice = async (symbol: string, diaAsset: string): Promise<DIAPriceData | null> => {
-    for (const endpoint of DIA_ENDPOINTS) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-        const response = await fetch(
-          `${endpoint}/v1/assetQuotation/${diaAsset}`,
-          { signal: controller.signal }
-        );
-        clearTimeout(timeoutId);
+      const response = await fetch(
+        `${DIA_ENDPOINT}/v1/assetQuotation/${diaAsset}`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeoutId);
 
-        if (!response.ok) continue;
+      if (!response.ok) return null;
 
-        const data = await response.json();
-        
-        if (data.Price && data.Price > 0) {
-          return {
-            symbol: symbol.replace("/USD", ""),
-            price: data.Price,
-            timestamp: new Date(data.Time).getTime(),
-            source: "DIA",
-            volume24h: data.VolumeYesterdayUSD,
-          };
-        }
-      } catch {
-        continue;
+      const data = await response.json();
+      
+      if (data.Price && data.Price > 0) {
+        return {
+          symbol: symbol.replace("/USD", ""),
+          price: data.Price,
+          timestamp: new Date(data.Time).getTime(),
+          source: "DIA",
+          volume24h: data.VolumeYesterdayUSD,
+        };
       }
+    } catch {
+      // Silently fail - other oracles will provide data
     }
     return null;
   };

@@ -181,7 +181,10 @@ export const usePythPrices = (_symbols: string[] = []) => {
     }
 
     const url = buildSSEUrl(endpointIndexRef.current);
-    console.log("[Pyth SSE] Connecting to:", HERMES_ENDPOINTS[endpointIndexRef.current % HERMES_ENDPOINTS.length]);
+    // Only log on first connection or endpoint change
+    if (reconnectAttemptsRef.current === 0) {
+      console.log("[Pyth SSE] Connecting to:", HERMES_ENDPOINTS[endpointIndexRef.current % HERMES_ENDPOINTS.length]);
+    }
 
     try {
       const eventSource = new EventSource(url);
@@ -199,8 +202,8 @@ export const usePythPrices = (_symbols: string[] = []) => {
 
       eventSource.onmessage = handleSSEMessage;
 
-      eventSource.onerror = (e) => {
-        console.log("[Pyth SSE] Connection error, will reconnect...");
+      eventSource.onerror = () => {
+        // Silently handle - avoid console spam
         eventSource.close();
         eventSourceRef.current = null;
         
@@ -210,24 +213,25 @@ export const usePythPrices = (_symbols: string[] = []) => {
             setIsConnected(false);
           }
           
-          // Exponential backoff with max 30 seconds
+          // Exponential backoff with max 60 seconds
           reconnectAttemptsRef.current++;
-          const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptsRef.current), 30000);
+          const delay = Math.min(2000 * Math.pow(1.5, reconnectAttemptsRef.current), 60000);
           
           // Try next endpoint after 3 failed attempts
           if (reconnectAttemptsRef.current % 3 === 0) {
             endpointIndexRef.current++;
+            console.log("[Pyth SSE] Switching to next endpoint...");
           }
           
           reconnectTimeoutRef.current = setTimeout(connectSSE, delay);
         }
       };
     } catch (e: any) {
-      console.error("[Pyth SSE] Failed to create connection:", e);
+      // Silently handle errors
       if (isMountedRef.current) {
         setError(e.message);
         // Retry after delay
-        reconnectTimeoutRef.current = setTimeout(connectSSE, 5000);
+        reconnectTimeoutRef.current = setTimeout(connectSSE, 10000);
       }
     }
   }, [buildSSEUrl, handleSSEMessage]);
