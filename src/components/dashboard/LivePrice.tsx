@@ -227,7 +227,7 @@ export const LivePrice = ({ value, className }: LivePriceProps) => {
 };
 
 // Compact version for tables - uses rolling digits with direct value tracking
-export const LivePriceCompact = memo(({
+export const LivePriceCompact = ({
   value,
   className,
 }: {
@@ -253,12 +253,10 @@ export const LivePriceCompact = memo(({
       <RollingPriceDisplay formattedPrice={formattedPrice} value={currentValue} />
     </span>
   );
-});
-
-LivePriceCompact.displayName = "LivePriceCompact";
+};
 
 // Large ticker display - uses smooth counting
-export const LivePriceLarge = memo(({
+export const LivePriceLarge = ({
   value,
   className,
 }: {
@@ -272,8 +270,6 @@ export const LivePriceLarge = memo(({
       <AnimatedValue value={value} formatFn={formatPrice} duration={300} />
     </span>
   );
-});
-
-LivePriceLarge.displayName = "LivePriceLarge";
+};
 
 export default LivePrice;
