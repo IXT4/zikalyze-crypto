@@ -38,7 +38,7 @@ interface AIAnalyzerProps {
   marketCap?: number;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crypto-analyze`;
+// Analysis runs 100% client-side via runClientSideAnalysis - no edge function needed
 const CHARS_PER_FRAME = 12; // Much faster rendering
 const FRAME_INTERVAL = 8; // 120fps smooth
 const STREAMING_INTERVAL = 5000; // Re-process every 5 seconds when streaming (reduced from 2s)

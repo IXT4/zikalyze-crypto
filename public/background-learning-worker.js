@@ -1,21 +1,49 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🧠 Zikalyze AI Background Learning Worker
+// 🧠 ZIKALYZE BACKGROUND LEARNING WORKER v3.0 — 100% DECENTRALIZED
 // ═══════════════════════════════════════════════════════════════════════════════
-// Runs continuously to learn from market data even when app is closed
+// Runs in background, continuously learning from DECENTRALIZED oracle data
+// Uses IndexedDB for persistent storage and Pyth/DIA/Redstone for prices
+// NO CENTRALIZED APIs (CoinGecko, CoinCap, etc.) - Pure decentralized oracles
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const DB_NAME = 'ZikalyzeAIBrain';
-const DB_VERSION = 1;
-const STORE_NAME = 'learning_data';
-const LEARNING_INTERVAL = 10000; // 10 seconds
-const TOP_CRYPTOS = ['bitcoin', 'ethereum', 'solana', 'cardano', 'polkadot', 'chainlink', 'avalanche-2', 'polygon'];
+const DB_NAME = 'ZikalyzeAILearning';
+const DB_VERSION = 2;
+const STORE_NAME = 'learningData';
+const LEARNING_INTERVAL = 30000; // 30 seconds
+
+// Decentralized oracle endpoints
+const ORACLE_ENDPOINTS = {
+  // Pyth Network Hermes (primary - real-time SSE)
+  PYTH: 'https://hermes.pyth.network/v2/updates/price/latest',
+  // DIA Oracle (secondary)
+  DIA: 'https://api.diadata.org/v1/quotation/',
+  // Redstone (tertiary)
+  REDSTONE: 'https://api.redstone.finance/prices?symbols=',
+};
+
+// Pyth feed IDs for common cryptocurrencies
+const PYTH_FEED_IDS = {
+  'BTC': '0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43',
+  'ETH': '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace',
+  'SOL': '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d',
+  'BNB': '0x2f95862b045670cd22bee3114c39763a4a08beeb663b145d283c31d7d1101c4f',
+  'XRP': '0xec5d399846a9209f3fe5881d70aae9268c94339ff9817e8d18ff19fa05eea1c8',
+  'ADA': '0x2a01deaec9e51a579277b34b122399984d0bbf57e2458a7e42fecd2829867a0d',
+  'DOGE': '0xdcef50dd0a4cd2dcc17e45df1676dcb336a11a61c69df7a0299b0150c672d25c',
+  'AVAX': '0x93da3352f9f1d105fdfe4971cfa80e9dd777bfc5d0f683ebb6e1294b92137bb7',
+  'DOT': '0xca3eed9b267293f6595901c734c7525ce8ef49adafe8284f97f6eb485a96a7b8',
+  'LINK': '0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221',
+};
+
+// Top cryptos to track (symbols only)
+const TOP_CRYPTOS = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'LINK'];
 
 let db = null;
 let isLearning = false;
-let learningIntervalId = null;
+let learningInterval = null;
 
 // Initialize IndexedDB
-function initDB() {
+async function initDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     
@@ -27,11 +55,8 @@ function initDB() {
     
     request.onupgradeneeded = (event) => {
       const database = event.target.result;
-      
       if (!database.objectStoreNames.contains(STORE_NAME)) {
-        const store = database.createObjectStore(STORE_NAME, { keyPath: 'symbol' });
-        store.createIndex('lastUpdated', 'lastUpdated', { unique: false });
-        store.createIndex('samplesCollected', 'samplesCollected', { unique: false });
+        database.createObjectStore(STORE_NAME, { keyPath: 'symbol' });
       }
     };
   });
@@ -47,7 +72,7 @@ async function getLearningData(symbol) {
     const request = store.get(symbol);
     
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result || createDefaultLearning(symbol));
+    request.onsuccess = () => resolve(request.result);
   });
 }
 
@@ -61,7 +86,7 @@ async function saveLearningData(data) {
     const request = store.put(data);
     
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => resolve();
   });
 }
 
@@ -75,82 +100,116 @@ async function getAllLearningData() {
     const request = store.getAll();
     
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result || []);
+    request.onsuccess = () => resolve(request.result);
   });
 }
 
-// Create default learning data
-function createDefaultLearning(symbol) {
-  return {
-    symbol,
-    samplesCollected: 0,
-    volatility: 0,
-    avgVelocity: 0,
-    trendAccuracy: 50,
-    lastBias: 'NEUTRAL',
-    biasChanges: 0,
-    priceHistory: [],
-    supportLevels: [],
-    resistanceLevels: [],
-    avgPrice24h: 0,
-    priceRange24h: 0,
-    learningSessions: 0,
-    lastUpdated: Date.now(),
-    offlineSamples: 0
-  };
+// ════════════════════════════════════════════════════════════════════════════════
+// 🔮 DECENTRALIZED PRICE FETCHING — Pyth → DIA → Redstone fallback
+// ════════════════════════════════════════════════════════════════════════════════
+
+async function fetchFromPyth() {
+  const prices = {};
+  const feedIds = Object.values(PYTH_FEED_IDS);
+  
+  try {
+    const url = `${ORACLE_ENDPOINTS.PYTH}?ids[]=${feedIds.join('&ids[]=')}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    
+    if (!response.ok) throw new Error('Pyth fetch failed');
+    
+    const data = await response.json();
+    
+    if (data.parsed) {
+      for (const item of data.parsed) {
+        const symbol = Object.entries(PYTH_FEED_IDS).find(([_, id]) => id === item.id)?.[0];
+        if (symbol && item.price) {
+          const price = parseFloat(item.price.price) * Math.pow(10, item.price.expo);
+          prices[symbol] = { price, source: 'Pyth' };
+        }
+      }
+    }
+    
+    console.log('[Background Learning] Pyth prices fetched:', Object.keys(prices).length);
+  } catch (e) {
+    console.log('[Background Learning] Pyth fetch failed:', e.message);
+  }
+  
+  return prices;
 }
 
-// Fetch live price data
-async function fetchPriceData() {
+async function fetchFromDIA() {
+  const prices = {};
+  
+  for (const symbol of TOP_CRYPTOS) {
+    try {
+      const response = await fetch(`${ORACLE_ENDPOINTS.DIA}${symbol}`, { 
+        signal: AbortSignal.timeout(3000) 
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.Price) {
+          prices[symbol] = { price: data.Price, source: 'DIA' };
+        }
+      }
+    } catch (e) {
+      // Continue with next symbol
+    }
+  }
+  
+  console.log('[Background Learning] DIA prices fetched:', Object.keys(prices).length);
+  return prices;
+}
+
+async function fetchFromRedstone() {
   const prices = {};
   
   try {
-    // Try CoinGecko first
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${TOP_CRYPTOS.join(',')}&vs_currencies=usd&include_24hr_change=true`
-    );
+    const symbols = TOP_CRYPTOS.join(',');
+    const response = await fetch(`${ORACLE_ENDPOINTS.REDSTONE}${symbols}&provider=redstone-primary-prod`, {
+      signal: AbortSignal.timeout(5000)
+    });
     
     if (response.ok) {
       const data = await response.json();
-      for (const [id, priceData] of Object.entries(data)) {
-        prices[id] = {
-          price: priceData.usd,
-          change24h: priceData.usd_24h_change || 0
-        };
-      }
-    }
-  } catch (e) {
-    console.log('[Background Learning] CoinGecko fetch failed, trying CoinCap...');
-    
-    // Fallback to CoinCap
-    try {
-      const coincapIds = {
-        'bitcoin': 'bitcoin',
-        'ethereum': 'ethereum',
-        'solana': 'solana',
-        'cardano': 'cardano',
-        'polkadot': 'polkadot',
-        'chainlink': 'chainlink',
-        'avalanche-2': 'avalanche',
-        'polygon': 'polygon'
-      };
-      
-      for (const [cgId, ccId] of Object.entries(coincapIds)) {
-        try {
-          const res = await fetch(`https://api.coincap.io/v2/assets/${ccId}`);
-          if (res.ok) {
-            const { data } = await res.json();
-            prices[cgId] = {
-              price: parseFloat(data.priceUsd),
-              change24h: parseFloat(data.changePercent24Hr) || 0
-            };
-          }
-        } catch (err) {
-          // Continue with next
+      for (const [symbol, info] of Object.entries(data)) {
+        if (info && info.value) {
+          prices[symbol] = { price: info.value, source: 'Redstone' };
         }
       }
-    } catch (e2) {
-      console.log('[Background Learning] All price fetches failed');
+    }
+    
+    console.log('[Background Learning] Redstone prices fetched:', Object.keys(prices).length);
+  } catch (e) {
+    console.log('[Background Learning] Redstone fetch failed:', e.message);
+  }
+  
+  return prices;
+}
+
+// Fetch prices with oracle fallback (Pyth → DIA → Redstone)
+async function fetchDecentralizedPrices() {
+  // Try Pyth first (primary decentralized oracle)
+  let prices = await fetchFromPyth();
+  
+  // Fill missing with DIA
+  if (Object.keys(prices).length < TOP_CRYPTOS.length) {
+    const diaPrices = await fetchFromDIA();
+    for (const [symbol, data] of Object.entries(diaPrices)) {
+      if (!prices[symbol]) {
+        prices[symbol] = data;
+      }
+    }
+  }
+  
+  // Fill remaining with Redstone
+  if (Object.keys(prices).length < TOP_CRYPTOS.length) {
+    const redstonePrices = await fetchFromRedstone();
+    for (const [symbol, data] of Object.entries(redstonePrices)) {
+      if (!prices[symbol]) {
+        prices[symbol] = data;
+      }
     }
   }
   
@@ -163,172 +222,137 @@ function calculateMetrics(priceHistory) {
     return { volatility: 0, velocity: 0, trend: 'NEUTRAL' };
   }
   
-  const prices = priceHistory.map(p => p.price);
-  const times = priceHistory.map(p => p.timestamp);
-  
-  // Volatility: standard deviation of price changes
+  // Calculate volatility (standard deviation of price changes)
   const changes = [];
-  for (let i = 1; i < prices.length; i++) {
-    changes.push((prices[i] - prices[i - 1]) / prices[i - 1] * 100);
+  for (let i = 1; i < priceHistory.length; i++) {
+    const change = (priceHistory[i].price - priceHistory[i-1].price) / priceHistory[i-1].price;
+    changes.push(change);
   }
   
   const mean = changes.reduce((a, b) => a + b, 0) / changes.length;
-  const variance = changes.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / changes.length;
+  const variance = changes.reduce((sum, c) => sum + Math.pow(c - mean, 2), 0) / changes.length;
   const volatility = Math.sqrt(variance);
   
-  // Velocity: price change per second
-  const totalTime = (times[times.length - 1] - times[0]) / 1000;
-  const totalChange = (prices[prices.length - 1] - prices[0]) / prices[0] * 100;
-  const velocity = totalTime > 0 ? totalChange / totalTime : 0;
+  // Calculate velocity (rate of change)
+  const velocity = (priceHistory[priceHistory.length - 1].price - priceHistory[0].price) / 
+                   (priceHistory[priceHistory.length - 1].timestamp - priceHistory[0].timestamp);
   
-  // Trend detection
-  const recentPrices = prices.slice(-5);
-  const oldPrices = prices.slice(0, 5);
-  const recentAvg = recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length;
-  const oldAvg = oldPrices.reduce((a, b) => a + b, 0) / oldPrices.length;
-  
+  // Determine trend
   let trend = 'NEUTRAL';
-  const trendStrength = ((recentAvg - oldAvg) / oldAvg) * 100;
-  if (trendStrength > 0.5) trend = 'LONG';
-  else if (trendStrength < -0.5) trend = 'SHORT';
+  const recentChange = (priceHistory[priceHistory.length - 1].price - priceHistory[0].price) / priceHistory[0].price * 100;
+  if (recentChange > 2) trend = 'BULLISH';
+  else if (recentChange < -2) trend = 'BEARISH';
   
-  return { volatility, velocity, trend, trendStrength };
+  return { volatility, velocity, trend };
 }
 
-// Detect support/resistance levels
+// Detect support and resistance levels
 function detectLevels(priceHistory) {
-  if (priceHistory.length < 10) return { support: [], resistance: [] };
-  
-  const prices = priceHistory.map(p => p.price);
-  const support = [];
-  const resistance = [];
-  
-  // Find local minima and maxima
-  for (let i = 2; i < prices.length - 2; i++) {
-    const isLocalMin = prices[i] <= prices[i - 1] && prices[i] <= prices[i - 2] &&
-                       prices[i] <= prices[i + 1] && prices[i] <= prices[i + 2];
-    const isLocalMax = prices[i] >= prices[i - 1] && prices[i] >= prices[i - 2] &&
-                       prices[i] >= prices[i + 1] && prices[i] >= prices[i + 2];
-    
-    if (isLocalMin) support.push(prices[i]);
-    if (isLocalMax) resistance.push(prices[i]);
+  if (priceHistory.length < 5) {
+    return { support: [], resistance: [] };
   }
   
-  // Cluster similar levels
-  const clusterLevels = (levels) => {
-    if (levels.length === 0) return [];
-    levels.sort((a, b) => a - b);
-    const clusters = [];
-    let cluster = [levels[0]];
-    
-    for (let i = 1; i < levels.length; i++) {
-      if ((levels[i] - cluster[cluster.length - 1]) / cluster[0] < 0.02) {
-        cluster.push(levels[i]);
-      } else {
-        clusters.push(cluster.reduce((a, b) => a + b, 0) / cluster.length);
-        cluster = [levels[i]];
-      }
-    }
-    clusters.push(cluster.reduce((a, b) => a + b, 0) / cluster.length);
-    
-    return clusters.slice(-5); // Keep last 5 levels
-  };
+  const prices = priceHistory.map(p => p.price);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min;
   
-  return {
-    support: clusterLevels(support),
-    resistance: clusterLevels(resistance)
-  };
+  // Simple level detection based on price clustering
+  const levels = { support: [], resistance: [] };
+  
+  // Support at recent lows
+  const recentMin = Math.min(...prices.slice(-5));
+  levels.support.push(recentMin);
+  levels.support.push(min);
+  
+  // Resistance at recent highs  
+  const recentMax = Math.max(...prices.slice(-5));
+  levels.resistance.push(recentMax);
+  levels.resistance.push(max);
+  
+  return levels;
 }
 
 // Main learning cycle
 async function runLearningCycle() {
-  console.log('[Background Learning] Running learning cycle...');
+  if (!db) await initDB();
   
   try {
-    const prices = await fetchPriceData();
-    const timestamp = Date.now();
+    // Fetch prices from decentralized oracles
+    const prices = await fetchDecentralizedPrices();
     
-    for (const [symbol, priceData] of Object.entries(prices)) {
-      const learning = await getLearningData(symbol);
-      
-      // Add to price history (keep last 360 samples = 1 hour at 10s intervals)
-      learning.priceHistory.push({
-        price: priceData.price,
-        change24h: priceData.change24h,
-        timestamp
-      });
-      
-      if (learning.priceHistory.length > 360) {
-        learning.priceHistory = learning.priceHistory.slice(-360);
-      }
-      
-      // Calculate metrics
-      const metrics = calculateMetrics(learning.priceHistory);
-      const levels = detectLevels(learning.priceHistory);
-      
-      // Update learning data with exponential moving average
-      const alpha = 0.1; // Smoothing factor
-      learning.volatility = learning.volatility * (1 - alpha) + metrics.volatility * alpha;
-      learning.avgVelocity = learning.avgVelocity * (1 - alpha) + Math.abs(metrics.velocity) * alpha;
-      
-      // Track bias changes
-      if (learning.lastBias !== metrics.trend && metrics.trend !== 'NEUTRAL') {
-        learning.biasChanges++;
-      }
-      learning.lastBias = metrics.trend;
-      
-      // Update support/resistance levels
-      for (const level of levels.support) {
-        if (!learning.supportLevels.some(l => Math.abs(l - level) / level < 0.01)) {
-          learning.supportLevels.push(level);
-          if (learning.supportLevels.length > 10) {
-            learning.supportLevels = learning.supportLevels.slice(-10);
-          }
-        }
-      }
-      
-      for (const level of levels.resistance) {
-        if (!learning.resistanceLevels.some(l => Math.abs(l - level) / level < 0.01)) {
-          learning.resistanceLevels.push(level);
-          if (learning.resistanceLevels.length > 10) {
-            learning.resistanceLevels = learning.resistanceLevels.slice(-10);
-          }
-        }
-      }
-      
-      // Calculate 24h metrics from history
-      const hour24Ago = timestamp - 24 * 60 * 60 * 1000;
-      const recent24h = learning.priceHistory.filter(p => p.timestamp > hour24Ago);
-      if (recent24h.length > 0) {
-        const prices24h = recent24h.map(p => p.price);
-        learning.avgPrice24h = prices24h.reduce((a, b) => a + b, 0) / prices24h.length;
-        learning.priceRange24h = Math.max(...prices24h) - Math.min(...prices24h);
-      }
-      
-      // Increment counters
-      learning.samplesCollected++;
-      learning.offlineSamples++;
-      learning.lastUpdated = timestamp;
-      
-      // Save learning data
-      await saveLearningData(learning);
+    if (Object.keys(prices).length === 0) {
+      console.log('[Background Learning] No prices fetched, skipping cycle');
+      return;
     }
     
-    console.log(`[Background Learning] Cycle complete. Learned from ${Object.keys(prices).length} cryptos.`);
+    const now = Date.now();
     
-    // Broadcast update to any open tabs
-    self.clients.matchAll().then(clients => {
-      clients.forEach(client => {
-        client.postMessage({
-          type: 'LEARNING_UPDATE',
-          timestamp,
-          cryptosLearned: Object.keys(prices).length
+    // Process each symbol
+    for (const [symbol, priceData] of Object.entries(prices)) {
+      try {
+        let existing = await getLearningData(symbol);
+        
+        if (!existing) {
+          existing = {
+            symbol,
+            priceHistory: [],
+            metrics: { volatility: 0, velocity: 0, trend: 'NEUTRAL' },
+            levels: { support: [], resistance: [] },
+            predictions: { total: 0, correct: 0 },
+            lastUpdate: now,
+            source: 'decentralized-oracles'
+          };
+        }
+        
+        // Add new price point
+        existing.priceHistory.push({
+          price: priceData.price,
+          timestamp: now,
+          source: priceData.source
         });
-      });
+        
+        // Keep only last 100 data points
+        if (existing.priceHistory.length > 100) {
+          existing.priceHistory = existing.priceHistory.slice(-100);
+        }
+        
+        // Calculate new metrics
+        existing.metrics = calculateMetrics(existing.priceHistory);
+        
+        // Detect levels
+        existing.levels = detectLevels(existing.priceHistory);
+        
+        // Update metadata
+        existing.lastUpdate = now;
+        existing.source = 'decentralized-oracles';
+        
+        // Save updated data
+        await saveLearningData(existing);
+        
+      } catch (symbolError) {
+        console.error(`[Background Learning] Error processing ${symbol}:`, symbolError);
+      }
+    }
+    
+    // Broadcast update to main thread
+    self.postMessage({
+      type: 'learning_update',
+      data: {
+        symbolsProcessed: Object.keys(prices).length,
+        timestamp: now,
+        source: 'decentralized-oracles'
+      }
     });
     
-  } catch (e) {
-    console.error('[Background Learning] Cycle error:', e);
+    console.log(`[Background Learning] Cycle complete: ${Object.keys(prices).length} symbols from decentralized oracles`);
+    
+  } catch (error) {
+    console.error('[Background Learning] Cycle error:', error);
+    self.postMessage({
+      type: 'learning_error',
+      error: error.message
+    });
   }
 }
 
@@ -337,13 +361,15 @@ function startLearning() {
   if (isLearning) return;
   
   isLearning = true;
-  console.log('[Background Learning] Starting continuous learning...');
+  console.log('[Background Learning] Starting decentralized learning...');
   
   // Run immediately
   runLearningCycle();
   
-  // Then run every interval
-  learningIntervalId = setInterval(runLearningCycle, LEARNING_INTERVAL);
+  // Then run on interval
+  learningInterval = setInterval(runLearningCycle, LEARNING_INTERVAL);
+  
+  self.postMessage({ type: 'learning_started' });
 }
 
 // Stop learning
@@ -351,56 +377,72 @@ function stopLearning() {
   if (!isLearning) return;
   
   isLearning = false;
-  if (learningIntervalId) {
-    clearInterval(learningIntervalId);
-    learningIntervalId = null;
+  if (learningInterval) {
+    clearInterval(learningInterval);
+    learningInterval = null;
   }
-  console.log('[Background Learning] Stopped learning.');
+  
+  console.log('[Background Learning] Stopped');
+  self.postMessage({ type: 'learning_stopped' });
 }
 
 // Handle messages from main thread
 self.onmessage = async (event) => {
-  const { type, symbol } = event.data;
+  const { type, data } = event.data;
   
   switch (type) {
-    case 'START_LEARNING':
+    case 'start':
       startLearning();
       break;
       
-    case 'STOP_LEARNING':
+    case 'stop':
       stopLearning();
       break;
       
-    case 'GET_LEARNING_DATA':
-      const data = symbol 
-        ? await getLearningData(symbol)
-        : await getAllLearningData();
-      self.postMessage({ type: 'LEARNING_DATA', data });
+    case 'get_data':
+      try {
+        const symbol = data?.symbol;
+        if (symbol) {
+          const learningData = await getLearningData(symbol);
+          self.postMessage({ type: 'data_response', data: learningData });
+        } else {
+          const allData = await getAllLearningData();
+          self.postMessage({ type: 'data_response', data: allData });
+        }
+      } catch (error) {
+        self.postMessage({ type: 'data_error', error: error.message });
+      }
       break;
       
-    case 'SYNC_LEARNING':
-      // Sync with localStorage data from main app
-      if (event.data.patterns) {
-        const existing = await getLearningData(symbol);
-        // Merge, preferring higher sample counts
-        if (event.data.patterns.samplesCollected > existing.samplesCollected) {
-          await saveLearningData({ ...existing, ...event.data.patterns, symbol });
+    case 'sync':
+      // Manual sync with provided data
+      if (data?.symbol && data?.learningData) {
+        try {
+          await saveLearningData({ symbol: data.symbol, ...data.learningData });
+          self.postMessage({ type: 'sync_complete', symbol: data.symbol });
+        } catch (error) {
+          self.postMessage({ type: 'sync_error', error: error.message });
         }
       }
       break;
       
-    case 'GET_STATUS':
-      self.postMessage({ 
-        type: 'STATUS', 
-        isLearning, 
-        cryptosTracked: TOP_CRYPTOS.length 
+    case 'status':
+      self.postMessage({
+        type: 'status_response',
+        data: {
+          isLearning,
+          lastCycle: Date.now(),
+          source: 'decentralized-oracles (Pyth/DIA/Redstone)'
+        }
       });
       break;
+      
+    default:
+      console.log('[Background Learning] Unknown message type:', type);
   }
 };
 
-// Auto-start learning when worker loads
+// Initialize DB on worker start
 initDB().then(() => {
-  startLearning();
-  console.log('[Background Learning] Worker initialized and learning started.');
-});
+  console.log('[Background Learning] Worker initialized with decentralized oracle support');
+}).catch(console.error);
