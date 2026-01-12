@@ -5,7 +5,7 @@
 import { cn } from "@/lib/utils";
 import { Zap, Radio, Layers } from "lucide-react";
 
-type OracleSource = "Pyth" | "DIA" | "Redstone" | "none" | null;
+export type OracleSource = "Pyth" | "DIA" | "Redstone" | "WebSocket" | "none" | null;
 
 interface OracleStatusProps {
   pythConnected: boolean;
@@ -29,6 +29,11 @@ const SOURCE_CONFIG: Record<string, { icon: React.ReactNode; color: string; bg: 
     icon: <Layers className="h-3 w-3" />, 
     color: "text-chart-orange", 
     bg: "bg-chart-orange/20" 
+  },
+  WebSocket: { 
+    icon: <Radio className="h-3 w-3" />, 
+    color: "text-red-400", 
+    bg: "bg-red-400/20" 
   },
 };
 

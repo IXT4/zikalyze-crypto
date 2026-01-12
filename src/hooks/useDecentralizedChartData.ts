@@ -1,12 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🔮 useDecentralizedChartData — 100% Decentralized Oracle-Only Chart Streaming
+// 🔮 useDecentralizedChartData — Real-Time WebSocket + Oracle Chart Streaming
 // ═══════════════════════════════════════════════════════════════════════════════
-// Builds charts exclusively from Pyth, DIA, and Redstone oracle ticks
+// Combines WebSocket streaming with Oracle fallback for maximum reliability
 // Supports multiple timeframe aggregations (1m, 5m, 15m, 1h, 4h, 1d)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useOraclePrices, OraclePriceData } from "./useOraclePrices";
+import { usePriceWebSocket } from "./usePriceWebSocket";
 
 export type ChartTimeframe = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
 
@@ -15,7 +16,7 @@ export interface ChartDataPoint {
   price: number;
   volume: number;
   positive: boolean;
-  source: "Pyth" | "DIA" | "Redstone";
+  source: "Pyth" | "DIA" | "Redstone" | "WebSocket";
   timestamp: number;
   open?: number;
   high?: number;
@@ -26,7 +27,7 @@ export interface ChartDataPoint {
 interface RawTick {
   price: number;
   timestamp: number;
-  source: "Pyth" | "DIA" | "Redstone";
+  source: "Pyth" | "DIA" | "Redstone" | "WebSocket";
 }
 
 // Timeframe configuration
@@ -183,7 +184,7 @@ export const useDecentralizedChartData = (
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [priceChange, setPriceChange] = useState<number>(0);
   const [isBuilding, setIsBuilding] = useState(true);
-  const [currentSource, setCurrentSource] = useState<"Pyth" | "DIA" | "Redstone" | null>(null);
+  const [currentSource, setCurrentSource] = useState<"Pyth" | "DIA" | "Redstone" | "WebSocket" | null>(null);
   
   const lastPriceRef = useRef<number | null>(null);
   const lastUpdateRef = useRef<number>(0);
@@ -191,7 +192,10 @@ export const useDecentralizedChartData = (
   const lastSaveRef = useRef<number>(0);
   const lastAggregationRef = useRef<number>(0);
   
-  // Connect to unified oracle prices
+  // Connect to WebSocket for real-time streaming
+  const ws = usePriceWebSocket([symbol]);
+  
+  // Connect to unified oracle prices as fallback
   const oracle = useOraclePrices([]);
   
   // Load cached ticks on mount/symbol change
@@ -236,6 +240,63 @@ export const useDecentralizedChartData = (
       }
     }
   }, [timeframe]);
+  
+  // Process WebSocket price updates (primary source)
+  useEffect(() => {
+    if (!mountedRef.current) return;
+    
+    const wsPrice = ws.getPrice(symbol);
+    if (!wsPrice || wsPrice.price <= 0) return;
+    
+    const now = Date.now();
+    const newPrice = wsPrice.price;
+    
+    // Lower throttle for WebSocket (faster updates)
+    const throttleMs = Math.max(100, config.throttleMs / 2);
+    if (now - lastUpdateRef.current < throttleMs) return;
+    
+    // Only add if price changed meaningfully
+    if (lastPriceRef.current !== null) {
+      const priceDiff = Math.abs(newPrice - lastPriceRef.current) / lastPriceRef.current;
+      if (priceDiff < 0.00005) return; // 0.005% threshold for WebSocket
+    }
+    
+    lastUpdateRef.current = now;
+    lastPriceRef.current = newPrice;
+    
+    // Add new tick from WebSocket
+    const newTick: RawTick = {
+      price: newPrice,
+      timestamp: wsPrice.timestamp,
+      source: "WebSocket",
+    };
+    
+    rawTicksRef.current = [...rawTicksRef.current, newTick];
+    setCurrentSource("WebSocket");
+    
+    // Re-aggregate
+    const aggregationInterval = Math.min(config.throttleMs, 500);
+    if (now - lastAggregationRef.current > aggregationInterval) {
+      lastAggregationRef.current = now;
+      
+      const aggregated = aggregateToTimeframe(rawTicksRef.current, timeframe);
+      setChartData(aggregated);
+      setIsBuilding(aggregated.length < 3);
+      
+      if (aggregated.length > 1) {
+        const firstPrice = aggregated[0].price;
+        const lastPrice = aggregated[aggregated.length - 1].price;
+        const change = ((lastPrice - firstPrice) / firstPrice) * 100;
+        setPriceChange(change);
+      }
+    }
+    
+    // Save to cache periodically
+    if (now - lastSaveRef.current > 30000) {
+      saveCachedTicks(symbol, rawTicksRef.current);
+      lastSaveRef.current = now;
+    }
+  }, [ws.prices, symbol, ws.getPrice, timeframe, config.throttleMs]);
   
   // Process oracle price updates into raw ticks
   useEffect(() => {
