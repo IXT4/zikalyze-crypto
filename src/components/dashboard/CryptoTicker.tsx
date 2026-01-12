@@ -82,43 +82,6 @@ const CryptoTicker = ({
   
   return (
     <div className="space-y-2">
-      {/* Oracle Status Bar */}
-      <div className="flex items-center gap-3 text-xs">
-        <div className="flex items-center gap-1.5">
-          <span 
-            className={cn(
-              "h-2.5 w-2.5 rounded-full",
-              isLive 
-                ? "bg-success animate-[pulse_1.5s_ease-in-out_infinite] shadow-[0_0_8px_2px_hsl(var(--success)/0.6)]" 
-                : "bg-muted-foreground/50 animate-[pulse_2s_ease-in-out_infinite]"
-            )} 
-          />
-          <span className={cn(
-            "font-medium",
-            isLive ? "text-success" : "text-muted-foreground"
-          )}>
-            {isLive ? "Live" : "Connecting..."}
-          </span>
-        </div>
-        
-        {/* Oracle Source */}
-        {oracleStatus?.isLive && (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/50 border border-border">
-            {getOracleIcon()}
-            <span className="text-foreground font-medium">{getOracleLabel()}</span>
-            <span className="text-muted-foreground">Oracle</span>
-          </div>
-        )}
-        
-        {/* Exchange Sources */}
-        {connectedExchanges.filter(e => e !== "Pyth" && e !== "Chainlink").length > 0 && (
-          <div className="flex items-center gap-1 text-muted-foreground">
-            <span>+</span>
-            <span>{connectedExchanges.filter(e => e !== "Pyth" && e !== "Chainlink").join(", ")}</span>
-          </div>
-        )}
-      </div>
-      
       {/* Crypto Buttons */}
       <div className="flex flex-wrap gap-3">
         {cryptoMeta.map((crypto) => {
