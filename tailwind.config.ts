@@ -55,6 +55,8 @@ export default {
         warning: "hsl(var(--warning))",
         "chart-cyan": "hsl(var(--chart-cyan))",
         "chart-purple": "hsl(var(--chart-purple))",
+        "chart-orange": "hsl(var(--chart-orange))",
+        "chart-blue": "hsl(var(--chart-blue))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

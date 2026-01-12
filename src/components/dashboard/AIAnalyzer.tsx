@@ -693,7 +693,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                     "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium transition-all",
                     liveData.priceIsLive 
                       ? "bg-success/20 text-success" 
-                      : "bg-warning/20 text-warning"
+                      : "bg-primary/20 text-primary"
                   )}>
                     {liveData.priceIsLive ? (
                       <>
@@ -702,7 +702,8 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                       </>
                     ) : (
                       <>
-                        <span className="h-2 w-2 rounded-full bg-warning animate-pulse" />
+                        <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                        <span>CONNECTING</span>
                       </>
                     )}
                   </div>
