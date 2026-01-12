@@ -45,6 +45,7 @@ let reconnectTimeout: NodeJS.Timeout | null = null;
 let pingInterval: NodeJS.Timeout | null = null;
 let tickWindow: number[] = [];
 let subscribedSymbols: string[] = [];
+let connectionInitiated = false; // Track if connection was ever started
 
 function notifyListeners() {
   globalListeners.forEach(listener => listener(new Map(globalPrices)));
@@ -60,6 +61,9 @@ function connect() {
   if (globalSocket?.readyState === WebSocket.OPEN) return;
   if (globalSocket?.readyState === WebSocket.CONNECTING) return;
   
+  // Mark that connection was initiated
+  connectionInitiated = true;
+  
   // Clear any pending reconnect timeout
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
@@ -67,6 +71,9 @@ function connect() {
   }
   
   globalState = { ...globalState, connecting: true, error: null };
+  
+  // Notify all listeners of connecting state
+  globalListeners.forEach(listener => listener(new Map(globalPrices)));
   
   try {
     globalSocket = new WebSocket(WEBSOCKET_URL);
@@ -268,16 +275,27 @@ export function useGlobalPriceWebSocket(symbols: string[] = []) {
       subscribe(symbols);
     }
     
-    // Connect if not already connected
-    if (!globalSocket || globalSocket.readyState === WebSocket.CLOSED) {
+    // ALWAYS attempt to connect on mount - critical for fresh page loads
+    // This ensures WebSocket starts even on direct URL navigation
+    if (!globalSocket || globalSocket.readyState === WebSocket.CLOSED || globalSocket.readyState === WebSocket.CLOSING) {
       connect();
+    } else if (globalSocket.readyState === WebSocket.OPEN && symbols.length > 0) {
+      // Already connected, just subscribe to symbols
+      subscribe(symbols);
     }
     
     // Initial state sync
     setPrices(new Map(globalPrices));
     setState({ ...globalState });
     
+    // Periodic state sync to catch any missed updates (fixes stale UI on direct navigation)
+    const syncInterval = setInterval(() => {
+      setPrices(new Map(globalPrices));
+      setState({ ...globalState });
+    }, 1000);
+    
     return () => {
+      clearInterval(syncInterval);
       globalListeners.delete(listener);
       
       // Disconnect if no more listeners

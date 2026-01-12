@@ -638,7 +638,8 @@ export const useCryptoPrices = () => {
 
   // Apply WebSocket prices as PRIMARY source (fastest updates)
   useEffect(() => {
-    if (!websocket.connected || websocket.prices.size === 0) return;
+    // Process even if not fully connected - prices may have data
+    if (websocket.prices.size === 0) return;
     
     if (wsUpdateTimeoutRef.current) {
       clearTimeout(wsUpdateTimeoutRef.current);
@@ -654,10 +655,14 @@ export const useCryptoPrices = () => {
         const lowerSymbol = symbol.toLowerCase();
         const existing = pricesRef.current.get(lowerSymbol);
         
-        if (existing && wsData.price > 0) {
-          const priceDiff = Math.abs(existing.current_price - wsData.price) / (existing.current_price || 1);
-          // Ultra-sensitive threshold so prices visibly move in real time (keeps UI responsive)
-          const isSignificant = priceDiff > 0.000001; // 0.0001% threshold
+        if (existing) {
+          // FIX: Allow update if existing price is 0 OR if price changed significantly
+          const isFirstPrice = existing.current_price === 0 || existing.current_price === undefined;
+          const priceDiff = existing.current_price > 0 
+            ? Math.abs(existing.current_price - wsData.price) / existing.current_price 
+            : 1;
+          // Ultra-sensitive threshold so prices visibly move in real time
+          const isSignificant = isFirstPrice || priceDiff > 0.000001; // 0.0001% threshold
           
           if (isSignificant) {
             addToHistory(lowerSymbol, wsData.price);
@@ -680,6 +685,31 @@ export const useCryptoPrices = () => {
               source: "WebSocket",
             };
             pricesRef.current.set(lowerSymbol, updated);
+            hasUpdates = true;
+          }
+        } else {
+          // FIX: Create new price entry if not existing (for symbols not in initial list)
+          const metadata = getAllTokenMetadata().find(m => m.symbol.toLowerCase() === lowerSymbol);
+          if (metadata) {
+            const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || 0;
+            const newPrice: CryptoPrice = {
+              id: metadata.id,
+              symbol: lowerSymbol,
+              name: metadata.name,
+              image: getTokenImageUrl(metadata.symbol),
+              current_price: wsData.price,
+              price_change_percentage_24h: 0,
+              high_24h: wsData.price,
+              low_24h: wsData.price,
+              total_volume: 0,
+              market_cap: wsData.price * supply,
+              market_cap_rank: pricesRef.current.size + 1,
+              circulating_supply: supply,
+              lastUpdate: now,
+              source: "WebSocket",
+            };
+            pricesRef.current.set(lowerSymbol, newPrice);
+            addToHistory(lowerSymbol, wsData.price);
             hasUpdates = true;
           }
         }
