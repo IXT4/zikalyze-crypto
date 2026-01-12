@@ -13,69 +13,66 @@ interface LivePriceProps {
   className?: string;
 }
 
-// Individual rolling digit component
+// Individual rolling digit component with proper animation tracking
 const RollingDigit = memo(({ 
   digit, 
+  index,
   direction 
 }: { 
   digit: string; 
+  index: number;
   direction: "up" | "down" | null;
 }) => {
-  const [currentDigit, setCurrentDigit] = useState(digit);
+  const [displayDigit, setDisplayDigit] = useState(digit);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [animDirection, setAnimDirection] = useState<"up" | "down" | null>(null);
+  const [animDir, setAnimDir] = useState<"up" | "down" | null>(null);
   const prevDigitRef = useRef(digit);
+  const animationKey = useRef(0);
 
   useEffect(() => {
-    if (digit !== prevDigitRef.current) {
-      setAnimDirection(direction);
+    if (digit !== prevDigitRef.current && /\d/.test(digit) && /\d/.test(prevDigitRef.current)) {
+      const oldNum = parseInt(prevDigitRef.current);
+      const newNum = parseInt(digit);
+      const dir = newNum > oldNum ? "up" : "down";
+      
+      animationKey.current += 1;
+      setAnimDir(dir);
       setIsAnimating(true);
+      setDisplayDigit(digit);
+      prevDigitRef.current = digit;
       
-      // Update digit after animation starts
-      const updateTimer = setTimeout(() => {
-        setCurrentDigit(digit);
-        prevDigitRef.current = digit;
-      }, 50);
-      
-      // Clear animation state
-      const clearTimer = setTimeout(() => {
+      const timer = setTimeout(() => {
         setIsAnimating(false);
-        setAnimDirection(null);
-      }, 300);
+        setAnimDir(null);
+      }, 250);
       
-      return () => {
-        clearTimeout(updateTimer);
-        clearTimeout(clearTimer);
-      };
+      return () => clearTimeout(timer);
+    } else if (digit !== prevDigitRef.current) {
+      setDisplayDigit(digit);
+      prevDigitRef.current = digit;
     }
-  }, [digit, direction]);
+  }, [digit]);
 
   // Non-numeric characters don't animate
-  if (!/\d/.test(digit)) {
-    return <span className="inline-block">{digit}</span>;
+  if (!/\d/.test(displayDigit)) {
+    return <span className="inline-block tabular-nums">{displayDigit}</span>;
   }
 
   return (
     <span 
+      key={`${index}-${animationKey.current}`}
       className={cn(
-        "inline-block relative overflow-hidden",
-        isAnimating && animDirection === "up" && "animate-roll-up",
-        isAnimating && animDirection === "down" && "animate-roll-down"
+        "inline-block relative tabular-nums",
+        isAnimating && animDir === "up" && "animate-roll-up text-success",
+        isAnimating && animDir === "down" && "animate-roll-down text-destructive",
+        !isAnimating && "text-foreground"
       )}
       style={{ 
-        minWidth: "0.6em",
+        minWidth: "0.55em",
         transition: "color 0.3s ease-out",
       }}
     >
-      <span 
-        className={cn(
-          "inline-block tabular-nums",
-          isAnimating && animDirection === "up" && "text-success",
-          isAnimating && animDirection === "down" && "text-destructive"
-        )}
-      >
-        {currentDigit}
-      </span>
+      {displayDigit}
     </span>
   );
 });
@@ -92,42 +89,38 @@ const RollingPriceDisplay = memo(({
   value: number;
   className?: string;
 }) => {
-  const [displayPrice, setDisplayPrice] = useState(formattedPrice);
+  const [displayChars, setDisplayChars] = useState(formattedPrice.split(''));
   const [direction, setDirection] = useState<"up" | "down" | null>(null);
   const prevValueRef = useRef<number>(value);
-  const isInitializedRef = useRef(false);
+  const prevFormattedRef = useRef(formattedPrice);
 
   useEffect(() => {
-    if (!isInitializedRef.current) {
-      isInitializedRef.current = true;
-      prevValueRef.current = value;
-      setDisplayPrice(formattedPrice);
-      return;
-    }
-
+    const newChars = formattedPrice.split('');
+    
     if (value !== prevValueRef.current) {
       const newDirection = value > prevValueRef.current ? "up" : "down";
       setDirection(newDirection);
-      setDisplayPrice(formattedPrice);
+      setDisplayChars(newChars);
       prevValueRef.current = value;
+      prevFormattedRef.current = formattedPrice;
       
-      // Clear direction after animation
       const timeout = setTimeout(() => {
         setDirection(null);
-      }, 400);
+      }, 300);
       
       return () => clearTimeout(timeout);
+    } else if (formattedPrice !== prevFormattedRef.current) {
+      setDisplayChars(newChars);
+      prevFormattedRef.current = formattedPrice;
     }
   }, [formattedPrice, value]);
 
-  // Split price into characters for individual animation
-  const characters = displayPrice.split('');
-
   return (
-    <span className={cn("tabular-nums inline-flex", className)}>
-      {characters.map((char, index) => (
+    <span className={cn("tabular-nums inline-flex items-baseline", className)}>
+      {displayChars.map((char, index) => (
         <RollingDigit 
-          key={`${index}-${char}`} 
+          key={index} 
+          index={index}
           digit={char} 
           direction={direction}
         />
