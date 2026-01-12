@@ -5,7 +5,7 @@
 import { cn } from "@/lib/utils";
 import { Zap, Radio } from "lucide-react";
 
-export type OracleSource = "Pyth" | "DIA" | "Redstone" | "WebSocket" | "none" | null;
+export type OracleSource = "Pyth" | "WebSocket" | "CoinGecko" | "DeFiLlama" | "none" | null;
 
 interface OracleStatusProps {
   pythConnected: boolean;

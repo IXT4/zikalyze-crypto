@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { usePythPrices, PYTH_FEED_IDS } from "./usePythPrices";
+import { useGlobalPriceWebSocket } from "./useGlobalPriceWebSocket";
 
 export interface OHLCCandle {
   time: string;
@@ -10,7 +10,7 @@ export interface OHLCCandle {
   close: number;
   volume: number;
   tickCount: number;
-  source: "Pyth";
+  source: "WebSocket";
 }
 
 export interface PythOHLCState {
@@ -44,14 +44,28 @@ const INTERVAL_LABELS: Record<CandleInterval, string> = {
   "1d": "Daily",
 };
 
-// Cache TTL for each interval (how long to keep persisted candles)
+// Cache TTL for each interval
 const CACHE_TTL: Record<CandleInterval, number> = {
-  "1m": 30 * 60 * 1000,        // 30 minutes for 1m candles
-  "5m": 2 * 60 * 60 * 1000,    // 2 hours for 5m candles
-  "15m": 6 * 60 * 60 * 1000,   // 6 hours for 15m candles
-  "1h": 24 * 60 * 60 * 1000,   // 24 hours for 1h candles
-  "4h": 7 * 24 * 60 * 60 * 1000,  // 7 days for 4h candles
-  "1d": 30 * 24 * 60 * 60 * 1000, // 30 days for daily candles
+  "1m": 30 * 60 * 1000,
+  "5m": 2 * 60 * 60 * 1000,
+  "15m": 6 * 60 * 60 * 1000,
+  "1h": 24 * 60 * 60 * 1000,
+  "4h": 7 * 24 * 60 * 60 * 1000,
+  "1d": 30 * 24 * 60 * 60 * 1000,
+};
+
+// Supported symbols (all symbols from WebSocket)
+export const PYTH_FEED_IDS: Record<string, string> = {
+  "BTC/USD": "btc",
+  "ETH/USD": "eth",
+  "SOL/USD": "sol",
+  "BNB/USD": "bnb",
+  "XRP/USD": "xrp",
+  "ADA/USD": "ada",
+  "DOGE/USD": "doge",
+  "AVAX/USD": "avax",
+  "LINK/USD": "link",
+  "DOT/USD": "dot",
 };
 
 const STORAGE_KEY_PREFIX = "zikalyze_ohlc_";
@@ -63,12 +77,10 @@ interface PersistedCandleData {
   lastSaved: number;
 }
 
-// Get storage key for symbol + interval
 const getStorageKey = (symbol: string, interval: CandleInterval): string => {
   return `${STORAGE_KEY_PREFIX}${symbol.toUpperCase()}_${interval}`;
 };
 
-// Load persisted candles from localStorage
 const loadPersistedCandles = (
   symbol: string,
   interval: CandleInterval
@@ -82,23 +94,19 @@ const loadPersistedCandles = (
     const now = Date.now();
     const ttl = CACHE_TTL[interval];
 
-    // Check if data is still valid
     if (now - data.lastSaved > ttl) {
       localStorage.removeItem(key);
       return null;
     }
 
-    // Filter out candles that are too old
     const intervalMs = CANDLE_INTERVALS[interval];
     const cutoffTime = now - ttl;
     const validCandles = data.candles.filter(c => c.timestamp > cutoffTime);
 
-    // Check if current candle is still in progress
     let currentCandle = data.currentCandle;
     if (currentCandle) {
       const candleEnd = currentCandle.timestamp + intervalMs;
       if (now > candleEnd) {
-        // Current candle has completed, move it to candles array
         validCandles.push(currentCandle);
         currentCandle = null;
       }
@@ -110,13 +118,11 @@ const loadPersistedCandles = (
       ticksReceived: data.ticksReceived,
       lastSaved: data.lastSaved,
     };
-  } catch (e) {
-    console.warn(`[OHLC] Failed to load persisted candles:`, e);
+  } catch {
     return null;
   }
 };
 
-// Save candles to localStorage
 const saveCandles = (
   symbol: string,
   interval: CandleInterval,
@@ -133,23 +139,18 @@ const saveCandles = (
       lastSaved: Date.now(),
     };
     localStorage.setItem(key, JSON.stringify(data));
-  } catch (e) {
-    console.warn(`[OHLC] Failed to save candles:`, e);
+  } catch {
+    // Ignore storage errors
   }
 };
 
 const formatCandleTime = (timestamp: number, interval: CandleInterval): string => {
   const date = new Date(timestamp);
   
-  // For daily candles, show date
   if (interval === "1d") {
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
   
-  // For 4h candles, show date + time
   if (interval === "4h") {
     return date.toLocaleDateString("en-US", {
       month: "short",
@@ -159,15 +160,10 @@ const formatCandleTime = (timestamp: number, interval: CandleInterval): string =
     }).replace(",", "");
   }
   
-  // For 1h candles, show hour
   if (interval === "1h") {
-    return date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      hour12: true,
-    });
+    return date.toLocaleTimeString("en-US", { hour: "2-digit", hour12: true });
   }
   
-  // For minute candles, show time
   return date.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
@@ -185,15 +181,12 @@ export const usePythOHLC = (
   maxCandles: number = 30
 ) => {
   const normalizedSymbol = symbol.toUpperCase().replace(/USD$/, "");
-  const pythFeedKey = `${normalizedSymbol}/USD`;
-  const hasPythFeed = !!PYTH_FEED_IDS[pythFeedKey];
+  const hasPythFeed = true; // WebSocket supports all symbols
   
-  const { prices, isConnected, getPrice } = usePythPrices(
-    hasPythFeed ? [normalizedSymbol] : []
-  );
+  // Use global WebSocket for price data
+  const { prices, connected: isConnected, getPrice } = useGlobalPriceWebSocket([normalizedSymbol]);
 
   const [state, setState] = useState<PythOHLCState>(() => {
-    // Initialize from persisted data if available
     const persisted = loadPersistedCandles(normalizedSymbol, interval);
     if (persisted) {
       return {
@@ -218,22 +211,17 @@ export const usePythOHLC = (
   const candlesRef = useRef<OHLCCandle[]>(state.candles);
   const currentCandleRef = useRef<OHLCCandle | null>(state.currentCandle);
   const ticksReceivedRef = useRef(state.ticksReceived);
-  const lastProcessedTimeRef = useRef<number>(0);
+  const lastProcessedPriceRef = useRef<number>(0);
   const lastSaveTimeRef = useRef<number>(0);
   const intervalMs = CANDLE_INTERVALS[interval];
-
-  // Save interval - save more frequently for longer timeframes
   const saveIntervalMs = interval === "1m" ? 10000 : 5000;
 
-  // Process new Pyth price tick into OHLC candle
   const processTick = useCallback((price: number, timestamp: number) => {
     const candleStart = getCandleStartTime(timestamp, intervalMs);
     
     ticksReceivedRef.current++;
     
-    // Check if this tick belongs to the current candle
     if (currentCandleRef.current && currentCandleRef.current.timestamp === candleStart) {
-      // Update current candle
       currentCandleRef.current = {
         ...currentCandleRef.current,
         high: Math.max(currentCandleRef.current.high, price),
@@ -242,12 +230,10 @@ export const usePythOHLC = (
         tickCount: currentCandleRef.current.tickCount + 1,
       };
     } else {
-      // New candle period - finalize current candle if exists
       if (currentCandleRef.current) {
         candlesRef.current = [...candlesRef.current, currentCandleRef.current].slice(-maxCandles);
       }
       
-      // Create new candle
       currentCandleRef.current = {
         time: formatCandleTime(candleStart, interval),
         timestamp: candleStart,
@@ -255,13 +241,12 @@ export const usePythOHLC = (
         high: price,
         low: price,
         close: price,
-        volume: 0, // Pyth doesn't provide volume
+        volume: 0,
         tickCount: 1,
-        source: "Pyth",
+        source: "WebSocket",
       };
     }
 
-    // Persist to localStorage periodically
     const now = Date.now();
     if (now - lastSaveTimeRef.current > saveIntervalMs) {
       lastSaveTimeRef.current = now;
@@ -274,7 +259,6 @@ export const usePythOHLC = (
       );
     }
 
-    // Update state
     setState(prev => ({
       ...prev,
       candles: candlesRef.current,
@@ -285,16 +269,16 @@ export const usePythOHLC = (
     }));
   }, [intervalMs, interval, maxCandles, normalizedSymbol, saveIntervalMs]);
 
-  // Watch for Pyth price updates
+  // Watch for WebSocket price updates
   useEffect(() => {
-    if (!hasPythFeed || !isConnected) return;
+    if (!isConnected) return;
 
     const priceData = getPrice(normalizedSymbol);
-    if (priceData && priceData.publishTime !== lastProcessedTimeRef.current) {
-      lastProcessedTimeRef.current = priceData.publishTime;
-      processTick(priceData.price, priceData.publishTime);
+    if (priceData && priceData.price !== lastProcessedPriceRef.current) {
+      lastProcessedPriceRef.current = priceData.price;
+      processTick(priceData.price, priceData.timestamp || Date.now());
     }
-  }, [prices, hasPythFeed, isConnected, normalizedSymbol, getPrice, processTick]);
+  }, [prices, isConnected, normalizedSymbol, getPrice, processTick]);
 
   // Load persisted data when symbol or interval changes
   useEffect(() => {
@@ -317,7 +301,7 @@ export const usePythOHLC = (
       candlesRef.current = [];
       currentCandleRef.current = null;
       ticksReceivedRef.current = 0;
-      lastProcessedTimeRef.current = 0;
+      lastProcessedPriceRef.current = 0;
       
       setState({
         candles: [],
@@ -345,7 +329,6 @@ export const usePythOHLC = (
     };
   }, [normalizedSymbol, interval]);
 
-  // Combine completed candles with current forming candle for display
   const allCandles = state.currentCandle 
     ? [...state.candles, state.currentCandle]
     : state.candles;
