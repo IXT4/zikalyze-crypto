@@ -24,9 +24,9 @@ interface WebSocketState {
 }
 
 const WEBSOCKET_URL = `wss://eqtzrftndyninwasclfd.functions.supabase.co/functions/v1/price-stream`;
-const RECONNECT_DELAY = 3000;
-const MAX_RECONNECT_ATTEMPTS = 5;
-const PING_INTERVAL = 30000;
+const RECONNECT_DELAY = 2000;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const PING_INTERVAL = 25000;
 
 // Singleton pattern for shared WebSocket connection
 let globalSocket: WebSocket | null = null;
@@ -288,11 +288,11 @@ export function useGlobalPriceWebSocket(symbols: string[] = []) {
     setPrices(new Map(globalPrices));
     setState({ ...globalState });
     
-    // Periodic state sync to catch any missed updates (fixes stale UI on direct navigation)
+    // Fast state sync every 200ms for CoinMarketCap-like responsiveness
     const syncInterval = setInterval(() => {
       setPrices(new Map(globalPrices));
       setState({ ...globalState });
-    }, 1000);
+    }, 200);
     
     return () => {
       clearInterval(syncInterval);
