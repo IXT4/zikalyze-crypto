@@ -21,20 +21,36 @@ export function useSessionTracking() {
       
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        if (!session) {
+          // No active session - don't retry
+          return;
+        }
 
-        const { error } = await supabase.functions.invoke("manage-sessions", {
+        const { data, error } = await supabase.functions.invoke("manage-sessions", {
           body: { action: "register" },
         });
         
         if (error) {
+          // Check if it's an auth error (401) - don't retry on auth failures
+          const errorMessage = error.message?.toLowerCase() || '';
+          if (errorMessage.includes('401') || errorMessage.includes('unauthorized') || errorMessage.includes('invalid token')) {
+            console.warn("Session tracking: auth expired, skipping");
+            return;
+          }
           throw error;
         }
         
         registered.current = true;
         retryCount.current = 0;
-      } catch (error) {
-        // Retry on network failures
+      } catch (error: any) {
+        // Check for auth-related errors - don't retry these
+        const errorMessage = error?.message?.toLowerCase() || '';
+        if (errorMessage.includes('401') || errorMessage.includes('unauthorized') || errorMessage.includes('invalid')) {
+          console.warn("Session tracking: auth error, not retrying");
+          return;
+        }
+        
+        // Retry only on network failures
         if (retryCount.current < maxRetries) {
           retryCount.current++;
           setTimeout(registerSession, 1000 * retryCount.current);
