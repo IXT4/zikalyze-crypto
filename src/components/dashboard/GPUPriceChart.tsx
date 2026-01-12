@@ -1,13 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// ⚡ GPUPriceChart — React Component for GPU-Accelerated Price Charts
+// ⚡ GPUPriceChart — Real-Time Live Streaming GPU-Accelerated Price Chart
 // ═══════════════════════════════════════════════════════════════════════════════
 // Uses WebGPU/WebGL2/Canvas2D for 60+ FPS smooth rendering
-// Integrates with existing oracle data hooks
-// Features: Glow effects, flash animations, cubic spline interpolation
+// Features: Live streaming, glow effects, flash animations, cubic spline interpolation
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useRef, useEffect, useState, useCallback, memo } from "react";
-import { Zap, Cpu, Activity } from "lucide-react";
+import { Zap, Cpu, Activity, Radio, TrendingUp, TrendingDown } from "lucide-react";
 import { useDecentralizedChartData } from "@/hooks/useDecentralizedChartData";
 import { createGPUChartManager, type GPUChartInstance } from "@/lib/gpu/gpu-chart-manager";
 import type { ChartDataPoint, RenderBackend } from "@/lib/gpu/webgpu-chart-renderer";
@@ -19,6 +18,7 @@ import {
   ChartBuildingState,
   ChartConnectingState,
 } from "./charts/OracleStatusIndicators";
+import { useCurrency } from "@/hooks/useCurrency";
 
 interface GPUPriceChartProps {
   crypto: string;
@@ -29,17 +29,17 @@ interface GPUPriceChartProps {
 }
 
 const BackendBadge = memo(({ backend }: { backend: RenderBackend }) => {
-  const labels: Record<RenderBackend, { label: string; color: string }> = {
-    webgpu: { label: "WebGPU", color: "bg-emerald-500/20 text-emerald-400" },
-    webgl2: { label: "WebGL2", color: "bg-blue-500/20 text-blue-400" },
-    canvas2d: { label: "Canvas", color: "bg-amber-500/20 text-amber-400" },
+  const labels: Record<RenderBackend, { label: string; color: string; icon: string }> = {
+    webgpu: { label: "WebGPU", color: "bg-emerald-500/20 text-emerald-400", icon: "⚡" },
+    webgl2: { label: "WebGL2", color: "bg-blue-500/20 text-blue-400", icon: "🎮" },
+    canvas2d: { label: "Canvas", color: "bg-amber-500/20 text-amber-400", icon: "🖼️" },
   };
   
-  const { label, color } = labels[backend];
+  const { label, color, icon } = labels[backend];
   
   return (
     <span className={cn("flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium", color)}>
-      <Cpu className="h-3 w-3" />
+      <span>{icon}</span>
       {label}
     </span>
   );
@@ -47,11 +47,26 @@ const BackendBadge = memo(({ backend }: { backend: RenderBackend }) => {
 
 BackendBadge.displayName = "BackendBadge";
 
+const LiveStreamBadge = memo(({ isStreaming, tickRate }: { isStreaming: boolean; tickRate: number }) => (
+  <span className={cn(
+    "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium transition-all",
+    isStreaming 
+      ? "bg-red-500/20 text-red-400 animate-pulse" 
+      : "bg-muted text-muted-foreground"
+  )}>
+    <Radio className="h-3 w-3" />
+    <span>LIVE</span>
+    {isStreaming && <span className="opacity-70">{tickRate}/s</span>}
+  </span>
+));
+
+LiveStreamBadge.displayName = "LiveStreamBadge";
+
 const GPUPriceChart = ({
   crypto,
   change24h,
-  height = 256,
-  showControls = true,
+  height = 320,
+  showControls = false,
   className,
 }: GPUPriceChartProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -59,6 +74,11 @@ const GPUPriceChart = ({
   const chartManagerRef = useRef<GPUChartInstance | null>(null);
   const [backend, setBackend] = useState<RenderBackend | null>(null);
   const [dimensions, setDimensions] = useState({ width: 400, height });
+  const [tickRate, setTickRate] = useState(0);
+  const lastPriceRef = useRef<number>(0);
+  const tickCountRef = useRef(0);
+  const tickWindowRef = useRef<number[]>([]);
+  const { formatPrice } = useCurrency();
   
   const {
     chartData,
@@ -72,6 +92,36 @@ const GPUPriceChart = ({
   
   const displayChange = change24h ?? priceChange;
   const isPositive = displayChange >= 0;
+  const currentPrice = chartData.length > 0 ? chartData[chartData.length - 1].price : 0;
+  
+  // Calculate tick rate (updates per second)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      tickWindowRef.current = tickWindowRef.current.filter(t => now - t < 1000);
+      setTickRate(tickWindowRef.current.length);
+    }, 200);
+    
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Track price updates
+  useEffect(() => {
+    if (currentPrice !== lastPriceRef.current && currentPrice > 0) {
+      tickWindowRef.current.push(Date.now());
+      tickCountRef.current++;
+      
+      // Trigger flash on significant price movement
+      if (lastPriceRef.current > 0) {
+        const pctChange = Math.abs((currentPrice - lastPriceRef.current) / lastPriceRef.current * 100);
+        if (pctChange > 0.05 && chartManagerRef.current) {
+          chartManagerRef.current.triggerFlash(currentPrice > lastPriceRef.current ? "up" : "down");
+        }
+      }
+      
+      lastPriceRef.current = currentPrice;
+    }
+  }, [currentPrice]);
   
   // Initialize GPU chart manager
   useEffect(() => {
@@ -122,13 +172,13 @@ const GPUPriceChart = ({
     return () => resizeObserver.disconnect();
   }, [height]);
   
-  // Update chart data
+  // Real-time chart data streaming
   useEffect(() => {
     if (!chartManagerRef.current || chartData.length < 2) return;
     
-    // Convert to ChartDataPoint format
-    const gpuData: ChartDataPoint[] = chartData.map((point) => ({
-      timestamp: new Date().getTime() - (chartData.length - chartData.indexOf(point)) * 1000,
+    const now = Date.now();
+    const gpuData: ChartDataPoint[] = chartData.map((point, idx) => ({
+      timestamp: now - (chartData.length - idx - 1) * 1000,
       price: point.price,
     }));
     
@@ -175,41 +225,52 @@ const GPUPriceChart = ({
   };
   
   return (
-    <div className={cn("rounded-2xl border border-border bg-card p-6", className)}>
+    <div className={cn("rounded-2xl border border-border bg-card overflow-hidden", className)}>
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold text-foreground">GPU Chart</h3>
-          <OracleSourceBadge source={activeSource} />
-          {backend && <BackendBadge backend={backend} />}
-          {isLive && <LiveBadge />}
+      <div className="p-4 sm:p-6 pb-0">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-semibold text-foreground">{crypto}/USD</h3>
+            <OracleSourceBadge source={activeSource} />
+            {backend && <BackendBadge backend={backend} />}
+            <LiveStreamBadge isStreaming={isLive && tickRate > 0} tickRate={tickRate} />
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <OracleConnectionDots status={oracleStatus} />
+            {chartData.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium",
+                    isPositive ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
+                  )}
+                >
+                  {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                  {isPositive ? "+" : ""}
+                  {displayChange.toFixed(2)}%
+                </span>
+              </div>
+            )}
+          </div>
         </div>
         
-        <div className="flex items-center gap-3">
-          <OracleConnectionDots status={oracleStatus} />
-          {chartData.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span
-                className={cn(
-                  "rounded-lg px-2 py-1 text-xs font-medium",
-                  isPositive ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
-                )}
-              >
-                {isPositive ? "+" : ""}
-                {displayChange.toFixed(2)}%
-              </span>
-              <span className="text-[10px] text-muted-foreground">
-                {change24h !== undefined ? "24h" : "session"}
-              </span>
-            </div>
-          )}
+        {/* Current Price Display */}
+        <div className="mt-2 flex items-baseline gap-2">
+          <span className={cn(
+            "text-2xl sm:text-3xl font-bold tabular-nums",
+            isPositive ? "text-success" : "text-destructive"
+          )}>
+            {formatPrice(currentPrice)}
+          </span>
+          <span className="text-xs text-muted-foreground">24h</span>
         </div>
       </div>
       
       {/* Chart Container */}
       <div 
         ref={containerRef} 
-        className="relative"
+        className="relative px-2 pb-4"
         style={{ height }}
       >
         <canvas
@@ -223,29 +284,36 @@ const GPUPriceChart = ({
         {renderContent()}
       </div>
       
-      {/* Controls */}
-      {showControls && (
-        <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Activity className="h-3 w-3" />
-            <span>{chartData.length} data points</span>
+      {/* Footer Stats */}
+      <div className="px-4 pb-4 sm:px-6 flex items-center justify-between text-xs text-muted-foreground border-t border-border/50 pt-3">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <Activity className="h-3.5 w-3.5" />
+            <span>{chartData.length} pts</span>
           </div>
+          <div className="flex items-center gap-1.5">
+            <Zap className="h-3.5 w-3.5 text-amber-400" />
+            <span>{tickRate} ticks/s</span>
+          </div>
+        </div>
+        
+        {showControls && (
           <div className="flex items-center gap-2">
             <button
               onClick={() => triggerManualFlash("up")}
               className="rounded bg-success/20 px-2 py-1 text-success hover:bg-success/30 transition-colors"
             >
-              Test Flash ↑
+              ↑
             </button>
             <button
               onClick={() => triggerManualFlash("down")}
               className="rounded bg-destructive/20 px-2 py-1 text-destructive hover:bg-destructive/30 transition-colors"
             >
-              Test Flash ↓
+              ↓
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

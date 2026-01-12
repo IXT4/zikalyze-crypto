@@ -11,8 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import ErrorBoundary, { ChartErrorFallback, MinimalErrorFallback } from "@/components/ErrorBoundary";
 
 // Lazy load heavy chart components to reduce initial bundle
-// Using 100% decentralized oracle-only charts + GPU-accelerated rendering
-const DecentralizedPriceChart = lazy(() => import("@/components/dashboard/DecentralizedPriceChart"));
+// Using GPU-accelerated rendering + decentralized oracle data
 const DecentralizedVolumeChart = lazy(() => import("@/components/dashboard/DecentralizedVolumeChart"));
 const GPUPriceChart = lazy(() => import("@/components/dashboard/GPUPriceChart"));
 const GPUHeatmap = lazy(() => import("@/components/dashboard/GPUHeatmap"));
@@ -174,15 +173,10 @@ const Dashboard = () => {
           {/* Charts Grid */}
           <div className="grid gap-4 md:gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-4 md:space-y-6">
-              {/* GPU-Accelerated Chart (WebGPU/WebGL2/Canvas2D) */}
+              {/* GPU-Accelerated Live Streaming Chart (WebGPU/WebGL2/Canvas2D) */}
               <ErrorBoundary componentName="GPU Price Chart" fallback={<ChartErrorFallback />}>
                 <Suspense fallback={<ChartSkeleton />}>
-                  <GPUPriceChart crypto={selectedCrypto} change24h={selected.change} height={280} />
-                </Suspense>
-              </ErrorBoundary>
-              <ErrorBoundary componentName="Price Chart" fallback={<ChartErrorFallback />}>
-                <Suspense fallback={<ChartSkeleton />}>
-                  <DecentralizedPriceChart crypto={selectedCrypto} change24h={selected.change} />
+                  <GPUPriceChart crypto={selectedCrypto} change24h={selected.change} height={320} />
                 </Suspense>
               </ErrorBoundary>
               <ErrorBoundary componentName="Activity Chart" fallback={<ChartErrorFallback />}>
