@@ -1,15 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { usePythPrices, PythPriceData, PYTH_FEED_IDS } from "./usePythPrices";
-import { useChainlinkPrices, ChainlinkPriceData, CHAINLINK_FEEDS_ETH } from "./useChainlinkPrices";
+import { usePythPrices, PYTH_FEED_IDS } from "./usePythPrices";
+import { useDIAPrices } from "./useDIAPrices";
 import { toast } from "sonner";
 
-// Oracle Cross-Validation Hook
-// Compares Pyth and Chainlink prices to detect significant deviations
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🔮 Oracle Cross-Validation — 100% Decentralized
+// ═══════════════════════════════════════════════════════════════════════════════
+// Compares Pyth and DIA oracle prices to detect significant deviations
+// Both oracles are decentralized — no centralized exchange data
+// ═══════════════════════════════════════════════════════════════════════════════
 
 export interface OracleDeviation {
   symbol: string;
   pythPrice: number;
-  chainlinkPrice: number;
+  diaPrice: number;
   deviationPercent: number;
   timestamp: number;
   severity: "low" | "medium" | "high" | "critical";
@@ -35,14 +39,15 @@ const DEVIATION_THRESHOLDS = {
 // Alert cooldown per symbol (prevent spam)
 const ALERT_COOLDOWN_MS = 60 * 1000; // 1 minute
 
-// Get symbols that exist in both oracles - limit to top assets to reduce API calls
+// DIA supported symbols (from useDIAPrices)
+const DIA_SYMBOLS = ["BTC", "ETH", "SOL", "XRP", "BNB", "DOGE", "ADA", "AVAX", "DOT", "LINK", "UNI", "ATOM", "LTC", "MATIC", "TRX", "TON"];
+
+// Get symbols that exist in both oracles - limit to top assets
 const COMMON_SYMBOLS: string[] = (() => {
   const pythSymbols = Object.keys(PYTH_FEED_IDS).map(s => s.replace("/USD", ""));
-  const chainlinkSymbols = Object.keys(CHAINLINK_FEEDS_ETH).map(s => s.replace("/USD", ""));
-  
-  // Only monitor top assets that exist in both oracles
-  const prioritySymbols = ["BTC", "ETH", "SOL", "LINK", "AAVE", "UNI", "AVAX", "ATOM", "DOT", "LTC"];
-  return prioritySymbols.filter(s => pythSymbols.includes(s) && chainlinkSymbols.includes(s));
+  // Priority symbols that exist in both Pyth and DIA
+  const prioritySymbols = ["BTC", "ETH", "SOL", "LINK", "AVAX", "ATOM", "DOT", "LTC", "UNI"];
+  return prioritySymbols.filter(s => pythSymbols.includes(s) && DIA_SYMBOLS.includes(s));
 })();
 
 export const useOracleCrossValidation = (
@@ -62,9 +67,9 @@ export const useOracleCrossValidation = (
   const alertsTriggeredRef = useRef(0);
   const isMountedRef = useRef(true);
 
-  // Connect to both oracles for common symbols
+  // Connect to both decentralized oracles
   const pyth = usePythPrices(enabled ? COMMON_SYMBOLS : []);
-  const chainlink = useChainlinkPrices(enabled ? COMMON_SYMBOLS : []);
+  const dia = useDIAPrices();
 
   const getSeverity = useCallback((deviationPercent: number): OracleDeviation["severity"] => {
     const absDeviation = Math.abs(deviationPercent);
@@ -90,7 +95,7 @@ export const useOracleCrossValidation = (
   }, [alertThreshold]);
 
   const triggerAlert = useCallback((deviation: OracleDeviation) => {
-    const { symbol, pythPrice, chainlinkPrice, deviationPercent, severity } = deviation;
+    const { symbol, pythPrice, diaPrice, deviationPercent, severity } = deviation;
     
     // Update cooldown
     alertCooldownRef.current.set(symbol, Date.now());
@@ -99,7 +104,7 @@ export const useOracleCrossValidation = (
     // Toast notification based on severity
     const deviationStr = deviationPercent >= 0 ? `+${deviationPercent.toFixed(2)}%` : `${deviationPercent.toFixed(2)}%`;
     
-    const message = `${symbol}: Pyth $${pythPrice.toLocaleString()} vs Chainlink $${chainlinkPrice.toLocaleString()} (${deviationStr})`;
+    const message = `${symbol}: Pyth $${pythPrice.toLocaleString()} vs DIA $${diaPrice.toLocaleString()} (${deviationStr})`;
 
     switch (severity) {
       case "critical":
@@ -129,24 +134,24 @@ export const useOracleCrossValidation = (
   // Cross-validate prices whenever either oracle updates
   useEffect(() => {
     if (!enabled || !isMountedRef.current) return;
-    if (!pyth.isConnected && !chainlink.isConnected) return;
+    if (!pyth.isConnected && !dia.isConnected) return;
 
     const deviations: OracleDeviation[] = [];
     const now = Date.now();
 
     COMMON_SYMBOLS.forEach(symbol => {
       const pythData = pyth.getPrice(symbol);
-      const chainlinkData = chainlink.getPrice(symbol);
+      const diaData = dia.getPrice(symbol);
 
-      if (pythData && chainlinkData && pythData.price > 0 && chainlinkData.price > 0) {
-        // Calculate percentage deviation: (Pyth - Chainlink) / Chainlink * 100
-        const deviationPercent = ((pythData.price - chainlinkData.price) / chainlinkData.price) * 100;
+      if (pythData && diaData && pythData.price > 0 && diaData.price > 0) {
+        // Calculate percentage deviation: (Pyth - DIA) / DIA * 100
+        const deviationPercent = ((pythData.price - diaData.price) / diaData.price) * 100;
         const severity = getSeverity(deviationPercent);
 
         const deviation: OracleDeviation = {
           symbol,
           pythPrice: pythData.price,
-          chainlinkPrice: chainlinkData.price,
+          diaPrice: diaData.price,
           deviationPercent,
           timestamp: now,
           severity,
@@ -167,13 +172,13 @@ export const useOracleCrossValidation = (
     setState({
       deviations,
       highestDeviation: deviations[0] || null,
-      isMonitoring: pyth.isConnected || chainlink.isConnected,
+      isMonitoring: pyth.isConnected || dia.isConnected,
       lastCheck: now,
       symbolsMonitored: deviations.length,
       alertsTriggered: alertsTriggeredRef.current,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, pyth.isConnected, chainlink.isConnected]);
+  }, [enabled, pyth.isConnected, dia.isConnected]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -194,7 +199,7 @@ export const useOracleCrossValidation = (
   return {
     ...state,
     pythConnected: pyth.isConnected,
-    chainlinkConnected: chainlink.isConnected,
+    diaConnected: dia.isConnected,
     getDeviationsAbove,
     getDeviation,
     thresholds: DEVIATION_THRESHOLDS,

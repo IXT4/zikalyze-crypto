@@ -36,7 +36,7 @@ const OracleCrossValidation = ({ crypto }: OracleCrossValidationProps) => {
     symbolsMonitored,
     alertsTriggered,
     pythConnected,
-    chainlinkConnected,
+    diaConnected,
     getDeviation,
   } = useOracleCrossValidation(true, alertThreshold);
 
@@ -65,10 +65,10 @@ const OracleCrossValidation = ({ crypto }: OracleCrossValidationProps) => {
               Pyth
             </span>
             <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium ${
-              chainlinkConnected ? 'bg-blue-500/20 text-blue-400' : 'bg-muted text-muted-foreground'
+              diaConnected ? 'bg-blue-500/20 text-blue-400' : 'bg-muted text-muted-foreground'
             }`}>
               <Link2 className="h-2.5 w-2.5" />
-              Chainlink
+              DIA
             </span>
           </div>
         </div>
@@ -121,9 +121,9 @@ const OracleCrossValidation = ({ crypto }: OracleCrossValidationProps) => {
             <div className="flex items-center justify-between rounded bg-background/50 px-2 py-1">
               <span className="flex items-center gap-1">
                 <Link2 className="h-2.5 w-2.5 text-blue-400" />
-                Chainlink
+                DIA
               </span>
-              <span className="font-mono">${selectedDeviation.chainlinkPrice.toLocaleString()}</span>
+              <span className="font-mono">${selectedDeviation.diaPrice.toLocaleString()}</span>
             </div>
           </div>
         </div>
@@ -170,7 +170,7 @@ const OracleCrossValidation = ({ crypto }: OracleCrossValidationProps) => {
                 <span className="text-muted-foreground">
                   <span className="text-amber-400">${deviation.pythPrice.toLocaleString()}</span>
                   {" / "}
-                  <span className="text-blue-400">${deviation.chainlinkPrice.toLocaleString()}</span>
+                  <span className="text-blue-400">${deviation.diaPrice.toLocaleString()}</span>
                 </span>
                 <span className={`font-mono font-medium min-w-[50px] text-right ${
                   deviation.deviationPercent >= 0 ? 'text-emerald-400' : 'text-red-400'
