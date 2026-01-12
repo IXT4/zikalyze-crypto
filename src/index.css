@@ -131,6 +131,29 @@ All colors MUST be HSL.
   100% { opacity: 0; }
 }
 
+/* Rolling digit animations for price updates */
+@keyframes slideUp {
+  0% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 /* Percentage change flash animations - More visible */
 @keyframes changeFlashGreen {
   0% { 
