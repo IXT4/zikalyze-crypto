@@ -14,6 +14,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { PriceChangeCompact } from "./PriceChange";
+import { AnimatedPriceCompact } from "./AnimatedPrice";
 
 interface Top100CryptoListProps {
   onSelect: (symbol: string) => void;
@@ -305,17 +306,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                       </div>
                     </td>
                     <td className="py-3 text-right">
-                      <span
-                        className={`font-medium text-sm transition-all duration-150 inline-block px-1.5 py-0.5 rounded ${
-                          flash === "up"
-                            ? "bg-success/20 text-success animate-price-flash-up"
-                            : flash === "down"
-                              ? "bg-destructive/20 text-destructive animate-price-flash-down"
-                              : "text-foreground"
-                        }`}
-                      >
-                        {formatPrice(crypto.current_price)}
-                      </span>
+                      <AnimatedPriceCompact value={crypto.current_price} />
                     </td>
                     <td className="py-3 text-right">
                       <div className="flex items-center justify-end">
