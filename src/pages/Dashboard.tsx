@@ -172,7 +172,13 @@ const Dashboard = () => {
               {/* GPU-Accelerated Live Streaming Chart (WebGPU/WebGL2/Canvas2D) */}
               <ErrorBoundary componentName="GPU Price Chart" fallback={<ChartErrorFallback />}>
                 <Suspense fallback={<ChartSkeleton />}>
-                  <GPUPriceChart crypto={selectedCrypto} change24h={selected.change} height={320} />
+                  <GPUPriceChart 
+                    crypto={selectedCrypto} 
+                    change24h={selected.change} 
+                    height={320}
+                    onSelectCrypto={setSelectedCrypto}
+                    prices={prices}
+                  />
                 </Suspense>
               </ErrorBoundary>
               <ErrorBoundary componentName="Activity Chart" fallback={<ChartErrorFallback />}>
