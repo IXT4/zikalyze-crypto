@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 💹 LivePrice — Smooth Professional Price Display with Subtle Flash
+// 💹 LivePrice — Professional Price Display with Directional Animation
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef } from "react";
@@ -11,9 +11,9 @@ interface LivePriceProps {
   className?: string;
 }
 
-// Subtle flash effect - professional and non-distracting
-const useSubtleFlash = (value: number) => {
-  const [flashDirection, setFlashDirection] = useState<"up" | "down" | null>(null);
+// Directional flash with slide effect
+const useDirectionalFlash = (value: number) => {
+  const [direction, setDirection] = useState<"up" | "down" | null>(null);
   const prevValueRef = useRef<number>(0);
   const isInitializedRef = useRef(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -34,34 +34,34 @@ const useSubtleFlash = (value: number) => {
       clearTimeout(timeoutRef.current);
     }
 
-    // Set flash direction
-    setFlashDirection(value > prevValueRef.current ? "up" : "down");
+    // Set direction
+    setDirection(value > prevValueRef.current ? "up" : "down");
     prevValueRef.current = value;
 
-    // Clear flash after animation (400ms for smooth fade)
+    // Clear after animation (500ms)
     timeoutRef.current = setTimeout(() => {
-      setFlashDirection(null);
-    }, 400);
+      setDirection(null);
+    }, 500);
 
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [value]);
 
-  return flashDirection;
+  return direction;
 };
 
 export const LivePrice = ({ value, className }: LivePriceProps) => {
   const { formatPrice } = useCurrency();
-  const flash = useSubtleFlash(value);
+  const direction = useDirectionalFlash(value);
 
   return (
     <span
       className={cn(
-        "tabular-nums font-semibold transition-colors duration-300 ease-out",
-        flash === "up" && "text-success",
-        flash === "down" && "text-destructive",
-        !flash && "text-foreground",
+        "tabular-nums font-semibold inline-block transition-all duration-300 ease-out",
+        direction === "up" && "text-success -translate-y-0.5",
+        direction === "down" && "text-destructive translate-y-0.5",
+        !direction && "text-foreground translate-y-0",
         className
       )}
     >
@@ -79,15 +79,15 @@ export const LivePriceCompact = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const flash = useSubtleFlash(value);
+  const direction = useDirectionalFlash(value);
 
   return (
     <span
       className={cn(
-        "tabular-nums text-sm font-medium transition-colors duration-300 ease-out",
-        flash === "up" && "text-success",
-        flash === "down" && "text-destructive",
-        !flash && "text-foreground",
+        "tabular-nums text-sm font-medium inline-block transition-all duration-300 ease-out",
+        direction === "up" && "text-success -translate-y-0.5",
+        direction === "down" && "text-destructive translate-y-0.5",
+        !direction && "text-foreground translate-y-0",
         className
       )}
     >
@@ -105,15 +105,15 @@ export const LivePriceLarge = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const flash = useSubtleFlash(value);
+  const direction = useDirectionalFlash(value);
 
   return (
     <span
       className={cn(
-        "tabular-nums text-lg font-bold transition-colors duration-300 ease-out",
-        flash === "up" && "text-success",
-        flash === "down" && "text-destructive",
-        !flash && "text-foreground",
+        "tabular-nums text-lg font-bold inline-block transition-all duration-300 ease-out",
+        direction === "up" && "text-success -translate-y-0.5",
+        direction === "down" && "text-destructive translate-y-0.5",
+        !direction && "text-foreground translate-y-0",
         className
       )}
     >
