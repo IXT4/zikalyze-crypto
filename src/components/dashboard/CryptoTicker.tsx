@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { CryptoPrice } from "@/hooks/useCryptoPrices";
 import { Circle, Zap, Link2 } from "lucide-react";
 import { PriceChange } from "./PriceChange";
-import { RollingPriceLarge } from "./RollingPrice";
+import { LivePriceLarge } from "./LivePrice";
 
 const cryptoMeta = [
   { symbol: "BTC", name: "Bitcoin", color: "text-warning" },
@@ -193,7 +193,7 @@ const CryptoTicker = ({
                   animated={!!flash}
                 />
               </div>
-              <RollingPriceLarge value={price} />
+              <LivePriceLarge value={price} />
             </button>
           );
         })}
