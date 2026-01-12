@@ -97,42 +97,17 @@ All colors MUST be HSL.
 
 .price-flash-up,
 .price-flash-down {
-  position: relative;
   border-radius: 0.25rem;
 }
 
 .price-flash-up {
   animation: flashGreen 0.8s ease-out forwards;
-  transform: scale(1.05);
+  transform: scale(1.02);
 }
 
 .price-flash-down {
   animation: flashRed 0.8s ease-out forwards;
-  transform: scale(1.05);
-}
-
-.price-flash-up::before,
-.price-flash-down::before {
-  position: absolute;
-  top: -1.25rem;
-  left: 50%;
-  transform: translateX(-50%);
-  font-weight: bold;
-  font-size: 0.85rem;
-  animation: fadeOut 0.8s ease-out forwards;
-  pointer-events: none;
-}
-
-.price-flash-up::before {
-  content: "↑";
-  color: #00ff9d;
-  text-shadow: 0 0 8px #00ff9d;
-}
-
-.price-flash-down::before {
-  content: "↓";
-  color: #ff073a;
-  text-shadow: 0 0 8px #ff073a;
+  transform: scale(1.02);
 }
 
 @keyframes fadeOut {
