@@ -58,23 +58,8 @@ const DecentralizedPriceChart = ({ crypto, change24h }: DecentralizedPriceChartP
             <stop offset="100%" stopColor={strokeColor} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <XAxis
-          dataKey="time"
-          axisLine={false}
-          tickLine={false}
-          tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-          interval="preserveStartEnd"
-        />
-        <YAxis
-          domain={[minPrice - padding, maxPrice + padding]}
-          axisLine={false}
-          tickLine={false}
-          tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-          tickFormatter={(value) =>
-            `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-          }
-          width={80}
-        />
+        <XAxis dataKey="time" hide />
+        <YAxis domain={[minPrice - padding, maxPrice + padding]} hide />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
           formatter={(value: number, _name: string, props: any) => [

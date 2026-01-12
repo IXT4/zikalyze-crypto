@@ -54,13 +54,7 @@ const DecentralizedVolumeChart = ({ crypto }: DecentralizedVolumeChartProps) => 
   const renderChart = () => (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={momentumData}>
-        <XAxis
-          dataKey="time"
-          axisLine={false}
-          tickLine={false}
-          tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-          interval="preserveStartEnd"
-        />
+        <XAxis dataKey="time" hide />
         <YAxis hide domain={[0, 100]} />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
@@ -112,12 +106,6 @@ const DecentralizedVolumeChart = ({ crypto }: DecentralizedVolumeChartProps) => 
       {/* Chart */}
       <div className="h-32">{renderContent()}</div>
       
-      {/* Footer */}
-      <div className="mt-2 text-center">
-        <span className="text-[10px] text-muted-foreground/70">
-          Price momentum from decentralized oracles
-        </span>
-      </div>
     </div>
   );
 };
