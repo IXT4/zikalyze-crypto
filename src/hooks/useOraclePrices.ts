@@ -41,7 +41,10 @@ export const useOraclePrices = (_symbols: string[] = []) => {
   const api3 = useAPI3Prices();
   const redstone = useRedstonePrices();
 
-  // Merge prices - Pyth is primary, DIA + API3 + Redstone are fallbacks
+  const lastLogRef = useRef<number>(0);
+
+  // Merge prices - Pyth is primary, DIA + Redstone are fallbacks
+  // API3 is optional tertiary but often unavailable
   useEffect(() => {
     if (!isMountedRef.current) return;
 
@@ -51,8 +54,9 @@ export const useOraclePrices = (_symbols: string[] = []) => {
     lastUpdateRef.current = now;
 
     const merged = new Map<string, OraclePriceData>();
+    const sourceCounts = { Pyth: 0, DIA: 0, API3: 0, Redstone: 0 };
 
-    // Add Redstone prices as base (quaternary fallback)
+    // Add Redstone prices as base (tertiary fallback)
     redstone.prices.forEach((data: RedstonePriceData, key: string) => {
       if (!data || !data.price || data.price <= 0) return;
       const symbol = key.replace("/USD", "").toUpperCase();
@@ -62,9 +66,10 @@ export const useOraclePrices = (_symbols: string[] = []) => {
         lastUpdate: data.timestamp || Date.now(),
         source: "Redstone",
       });
+      sourceCounts.Redstone++;
     });
 
-    // Add API3 prices (tertiary fallback)
+    // Add API3 prices if available (optional)
     api3.prices.forEach((data: API3PriceData, key: string) => {
       if (!data || !data.price || data.price <= 0) return;
       const symbol = key.replace("/USD", "").toUpperCase();
@@ -74,6 +79,7 @@ export const useOraclePrices = (_symbols: string[] = []) => {
         lastUpdate: data.timestamp || Date.now(),
         source: "API3",
       });
+      sourceCounts.API3++;
     });
 
     // Add DIA prices (secondary fallback)
@@ -86,6 +92,7 @@ export const useOraclePrices = (_symbols: string[] = []) => {
         lastUpdate: data.timestamp || Date.now(),
         source: "DIA",
       });
+      sourceCounts.DIA++;
     });
 
     // Override with Pyth prices (primary - real-time SSE)
@@ -99,20 +106,27 @@ export const useOraclePrices = (_symbols: string[] = []) => {
         lastUpdate: data.publishTime || Date.now(),
         source: "Pyth",
       });
+      sourceCounts.Pyth++;
     });
 
     pricesRef.current = merged;
+
+    // Log coverage every 30 seconds
+    if (now - lastLogRef.current > 30000 && merged.size > 0) {
+      lastLogRef.current = now;
+      console.log(`[Oracle] Coverage: ${merged.size} tokens | Pyth: ${sourceCounts.Pyth}, DIA: ${sourceCounts.DIA}, Redstone: ${sourceCounts.Redstone}, API3: ${sourceCounts.API3}`);
+    }
 
     const newPrimarySource = pyth.isConnected 
       ? "Pyth" 
       : dia.isConnected 
         ? "DIA" 
-        : api3.isConnected
-          ? "API3"
-          : redstone.isConnected 
-            ? "Redstone" 
+        : redstone.isConnected 
+          ? "Redstone" 
+          : api3.isConnected
+            ? "API3"
             : "none";
-    const newIsLive = pyth.isConnected || dia.isConnected || api3.isConnected || redstone.isConnected;
+    const newIsLive = pyth.isConnected || dia.isConnected || redstone.isConnected || api3.isConnected;
 
     setPrices(new Map(merged));
     setIsLive(newIsLive);
