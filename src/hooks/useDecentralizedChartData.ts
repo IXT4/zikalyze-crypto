@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useOraclePrices, OraclePriceData } from "./useOraclePrices";
-import { usePriceWebSocket } from "./usePriceWebSocket";
+import { useGlobalPriceWebSocket } from "./useGlobalPriceWebSocket";
 
 export type ChartTimeframe = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
 
@@ -192,8 +192,8 @@ export const useDecentralizedChartData = (
   const lastSaveRef = useRef<number>(0);
   const lastAggregationRef = useRef<number>(0);
   
-  // Connect to WebSocket for real-time streaming
-  const ws = usePriceWebSocket([symbol]);
+  // Use the GLOBAL WebSocket for real-time streaming (singleton - no duplicate connections)
+  const ws = useGlobalPriceWebSocket([symbol]);
   
   // Connect to unified oracle prices as fallback
   const oracle = useOraclePrices([]);
@@ -255,10 +255,10 @@ export const useDecentralizedChartData = (
     const throttleMs = Math.max(100, config.throttleMs / 2);
     if (now - lastUpdateRef.current < throttleMs) return;
     
-    // Only add if price changed meaningfully
+    // Only add if price changed meaningfully (ultra-sensitive for chart)
     if (lastPriceRef.current !== null) {
       const priceDiff = Math.abs(newPrice - lastPriceRef.current) / lastPriceRef.current;
-      if (priceDiff < 0.00005) return; // 0.005% threshold for WebSocket
+      if (priceDiff < 0.00001) return; // 0.001% threshold for chart responsiveness
     }
     
     lastUpdateRef.current = now;
@@ -267,15 +267,15 @@ export const useDecentralizedChartData = (
     // Add new tick from WebSocket
     const newTick: RawTick = {
       price: newPrice,
-      timestamp: wsPrice.timestamp,
+      timestamp: wsPrice.timestamp || now,
       source: "WebSocket",
     };
     
     rawTicksRef.current = [...rawTicksRef.current, newTick];
     setCurrentSource("WebSocket");
     
-    // Re-aggregate
-    const aggregationInterval = Math.min(config.throttleMs, 500);
+    // Re-aggregate immediately for chart responsiveness
+    const aggregationInterval = Math.min(config.throttleMs, 300);
     if (now - lastAggregationRef.current > aggregationInterval) {
       lastAggregationRef.current = now;
       
@@ -359,13 +359,13 @@ export const useDecentralizedChartData = (
     chartData,
     priceChange,
     isBuilding,
-    isLive: oracle.isLive,
+    isLive: ws.connected || oracle.isLive,
     currentSource,
     oracleStatus: {
       pythConnected: oracle.pythConnected,
       diaConnected: oracle.diaConnected,
       redstoneConnected: oracle.redstoneConnected,
-      primarySource: oracle.primarySource,
+      primarySource: ws.connected ? "WebSocket" as const : oracle.primarySource,
     },
     dataPointCount: chartData.length,
     timeframeConfig: config,
