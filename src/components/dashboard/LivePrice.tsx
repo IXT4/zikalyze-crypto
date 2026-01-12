@@ -11,7 +11,7 @@ interface LivePriceProps {
   className?: string;
 }
 
-// Hook to track price direction and trigger animations - ULTRA SENSITIVE for live streaming
+// Hook to track price direction and trigger animations - CoinMarketCap-style continuous streaming
 const usePriceDirection = (value: number) => {
   const [direction, setDirection] = useState<"up" | "down" | null>(null);
   const [key, setKey] = useState(0);
@@ -28,22 +28,29 @@ const usePriceDirection = (value: number) => {
 
     if (!value || value <= 0) return;
     
-    // Ultra-sensitive: trigger on ANY price change for live streaming feel
-    const priceDiff = Math.abs(value - prevValueRef.current);
-    const percentChange = (priceDiff / prevValueRef.current) * 100;
-    
-    // Trigger animation on 0.0001% change or more (catches smallest WebSocket ticks)
-    if (percentChange >= 0.0001 && value !== prevValueRef.current) {
+    // Immediate response to any price change - CoinMarketCap style
+    if (value !== prevValueRef.current) {
       const now = Date.now();
-      // Throttle animations to every 100ms to prevent overwhelming the UI
-      if (now - lastUpdateRef.current > 100) {
+      // Reduced throttle to 50ms for faster visual response
+      if (now - lastUpdateRef.current > 50) {
         setDirection(value > prevValueRef.current ? "up" : "down");
         setKey(k => k + 1);
         lastUpdateRef.current = now;
+        prevValueRef.current = value;
+      } else {
+        // Still update the reference even if we skip animation
+        prevValueRef.current = value;
       }
-      prevValueRef.current = value;
     }
   }, [value]);
+
+  // Auto-clear direction after flash for clean look
+  useEffect(() => {
+    if (direction) {
+      const timeout = setTimeout(() => setDirection(null), 400);
+      return () => clearTimeout(timeout);
+    }
+  }, [direction, key]);
 
   return { direction, key };
 };

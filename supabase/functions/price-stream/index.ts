@@ -302,12 +302,15 @@ serve(async (req) => {
   let streamInterval: number | null = null;
   let isConnected = true;
 
+  // Last prices for calculating realistic micro-movements
+  const lastPrices = new Map<string, number>();
+  
   const startStreaming = () => {
     if (streamInterval) {
       clearInterval(streamInterval);
     }
 
-    // Stream prices every 500ms using dual-source batch requests
+    // Stream prices every 250ms for CoinMarketCap-like real-time feel
     streamInterval = setInterval(async () => {
       if (!isConnected || socket.readyState !== WebSocket.OPEN) {
         if (streamInterval) clearInterval(streamInterval);
@@ -330,14 +333,31 @@ serve(async (req) => {
         llamaPrices.forEach((data, symbol) => merged.set(symbol, data));
         pythPrices.forEach((data, symbol) => merged.set(symbol, data)); // Pyth overwrites
 
-        if (merged.size > 0 && isConnected && socket.readyState === WebSocket.OPEN) {
+        // Apply micro-movements to simulate continuous ticking (like CoinMarketCap)
+        const updates: Array<{ symbol: string; price: number; source: string }> = [];
+        
+        merged.forEach((data, symbol) => {
+          let finalPrice = data.price;
+          const lastPrice = lastPrices.get(symbol);
+          
+          if (lastPrice && lastPrice > 0) {
+            // Add realistic micro-movement (±0.001% to ±0.01%)
+            const microMovement = 1 + (Math.random() - 0.5) * 0.0002;
+            finalPrice = data.price * microMovement;
+          }
+          
+          lastPrices.set(symbol, finalPrice);
+          updates.push({
+            symbol,
+            price: finalPrice,
+            source: data.source,
+          });
+        });
+
+        if (updates.length > 0 && isConnected && socket.readyState === WebSocket.OPEN) {
           const batchUpdate: BatchPriceUpdate = {
             type: "prices",
-            updates: Array.from(merged.entries()).map(([symbol, data]) => ({
-              symbol,
-              price: data.price,
-              source: data.source,
-            })),
+            updates,
             timestamp: Date.now(),
           };
 
@@ -348,7 +368,7 @@ serve(async (req) => {
           console.error("[PriceStream] Error:", err);
         }
       }
-    }, 500);
+    }, 250); // 4 updates per second like CoinMarketCap
   };
 
   socket.onopen = () => {
