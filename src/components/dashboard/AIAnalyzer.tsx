@@ -808,17 +808,6 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
                 {currentChange >= 0 ? "+" : ""}{currentChange.toFixed(2)}%
               </div>
             </div>
-            <div className="text-right text-xs text-muted-foreground">
-              {liveData.priceIsLive && (
-                <div className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                  <span>Updated {new Date(liveData.lastUpdated).toLocaleTimeString()}</span>
-                </div>
-              )}
-              <div className="mt-1">
-                24h H: ${currentHigh?.toLocaleString() || '-'} | L: ${currentLow?.toLocaleString() || '-'}
-              </div>
-            </div>
           </div>
         </div>
 
