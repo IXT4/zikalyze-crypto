@@ -84,13 +84,13 @@ export const useDecentralizedChartData = (crypto: string) => {
     const newPrice = oraclePrice.price;
     const source = oraclePrice.source;
     
-    // Throttle updates to 500ms for smooth chart
-    if (now - lastUpdateRef.current < 500) return;
+    // Throttle updates to 300ms for smoother chart responsiveness
+    if (now - lastUpdateRef.current < 300) return;
     
-    // Only add if price changed (avoid duplicates)
+    // Only add if price changed meaningfully (avoid duplicates)
     if (lastPriceRef.current !== null) {
       const priceDiff = Math.abs(newPrice - lastPriceRef.current) / lastPriceRef.current;
-      if (priceDiff < 0.00005) return; // 0.005% threshold
+      if (priceDiff < 0.0001) return; // 0.01% threshold - more responsive
     }
     
     lastUpdateRef.current = now;
@@ -105,12 +105,12 @@ export const useDecentralizedChartData = (crypto: string) => {
       source,
     };
     
-    // Keep last 60 data points for smooth chart
-    chartDataRef.current = [...chartDataRef.current.slice(-59), newPoint];
+    // Keep last 100 data points for better chart history
+    chartDataRef.current = [...chartDataRef.current.slice(-99), newPoint];
     
     setChartData([...chartDataRef.current]);
     setCurrentSource(source);
-    setIsBuilding(chartDataRef.current.length < 5);
+    setIsBuilding(chartDataRef.current.length < 3);
     
     // Calculate price change from first to last
     if (chartDataRef.current.length > 1) {
@@ -119,8 +119,8 @@ export const useDecentralizedChartData = (crypto: string) => {
       setPriceChange(change);
     }
     
-    // Save to cache every 30 seconds
-    if (now - lastSaveRef.current > 30000) {
+    // Save to cache every 15 seconds for better persistence
+    if (now - lastSaveRef.current > 15000) {
       saveCachedChart(symbol, chartDataRef.current);
       lastSaveRef.current = now;
     }
