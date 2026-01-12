@@ -188,6 +188,34 @@ export default {
             transform: "rotate(360deg)",
           },
         },
+        "roll-up": {
+          "0%": {
+            transform: "translateY(100%)",
+            opacity: "0",
+          },
+          "50%": {
+            transform: "translateY(-10%)",
+            opacity: "1",
+          },
+          "100%": {
+            transform: "translateY(0)",
+            opacity: "1",
+          },
+        },
+        "roll-down": {
+          "0%": {
+            transform: "translateY(-100%)",
+            opacity: "0",
+          },
+          "50%": {
+            transform: "translateY(10%)",
+            opacity: "1",
+          },
+          "100%": {
+            transform: "translateY(0)",
+            opacity: "1",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -201,6 +229,8 @@ export default {
         "digit-out-down": "digit-out-down 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards",
         "digit-in-down": "digit-in-down 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards",
         "spin-slow": "spin-slow 2.5s linear infinite",
+        "roll-up": "roll-up 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "roll-down": "roll-down 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards",
       },
     },
   },
