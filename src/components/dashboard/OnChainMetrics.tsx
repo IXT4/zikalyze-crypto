@@ -140,20 +140,6 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
           <span className="text-xs text-muted-foreground px-1.5 py-0.5 bg-secondary rounded">
             {crypto.toUpperCase()}
           </span>
-          {/* Decentralized indicator */}
-          {metrics.isDecentralized && (
-            <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-primary/20 text-primary">
-              <Link2 className="h-3 w-3" />
-              DECENTRALIZED
-            </div>
-          )}
-          <div className={cn(
-            "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium",
-            isConnected ? "bg-success/20 text-success" : isPolling ? "bg-warning/20 text-warning" : isConnecting ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-          )}>
-            <StatusIcon className="h-3 w-3" />
-            {statusLabel}
-          </div>
         </div>
         <div className="flex items-center gap-2">
           {/* Oracle sources tooltip */}
@@ -380,12 +366,6 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
           </div>
         )}
         {/* Source info hidden - data is live */}
-        {isConnected && (
-          <div className="flex items-center gap-1 text-success justify-end md:col-span-1 col-span-2 md:justify-start text-[10px]">
-            <Radio className="h-2.5 w-2.5" />
-            LIVE
-          </div>
-        )}
       </div>
 
       {/* CSS for shimmer effect */}
