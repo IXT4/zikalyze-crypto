@@ -3,14 +3,14 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { cn } from "@/lib/utils";
-import { Zap, Radio, Layers } from "lucide-react";
+import { Zap, Radio } from "lucide-react";
 
 export type OracleSource = "Pyth" | "DIA" | "Redstone" | "WebSocket" | "none" | null;
 
 interface OracleStatusProps {
   pythConnected: boolean;
-  diaConnected: boolean;
-  redstoneConnected: boolean;
+  diaConnected?: boolean;
+  redstoneConnected?: boolean;
   primarySource: OracleSource;
 }
 
@@ -19,16 +19,6 @@ const SOURCE_CONFIG: Record<string, { icon: React.ReactNode; color: string; bg: 
     icon: <Zap className="h-3 w-3" />, 
     color: "text-chart-cyan", 
     bg: "bg-chart-cyan/20" 
-  },
-  DIA: { 
-    icon: <Radio className="h-3 w-3" />, 
-    color: "text-chart-purple", 
-    bg: "bg-chart-purple/20" 
-  },
-  Redstone: { 
-    icon: <Layers className="h-3 w-3" />, 
-    color: "text-chart-orange", 
-    bg: "bg-chart-orange/20" 
   },
   WebSocket: { 
     icon: <Radio className="h-3 w-3" />, 
@@ -56,10 +46,10 @@ export const OracleSourceBadge = ({ source }: { source: OracleSource }) => {
 };
 
 export const OracleConnectionDots = ({ status }: { status: OracleStatusProps }) => {
+  // Only show Pyth and WebSocket indicators now
   const dots = [
     { connected: status.pythConnected, label: "Pyth", color: "bg-chart-cyan" },
-    { connected: status.diaConnected, label: "DIA", color: "bg-chart-purple" },
-    { connected: status.redstoneConnected, label: "Redstone", color: "bg-chart-orange" },
+    { connected: status.primarySource === "WebSocket", label: "WebSocket", color: "bg-red-400" },
   ];
 
   return (
