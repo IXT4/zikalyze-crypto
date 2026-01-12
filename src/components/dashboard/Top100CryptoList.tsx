@@ -278,27 +278,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
     <>
       <div className="rounded-2xl border border-border bg-card p-6">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <h3 className="text-lg font-bold text-foreground">Top 100 Cryptocurrencies</h3>
-            {/* WebSocket Live Streaming Indicator */}
-            <div className="flex items-center gap-2">
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium flex items-center gap-1.5 ${
-                websocket.connected 
-                  ? "bg-success/20 text-success" 
-                  : "bg-warning/20 text-warning"
-              }`}>
-                <span className={`h-2 w-2 rounded-full ${
-                  websocket.connected ? "bg-success animate-pulse" : "bg-warning"
-                }`} />
-                {websocket.connected ? "LIVE STREAM" : "Connecting..."}
-              </span>
-              {websocket.connected && websocket.ticksPerSecond > 0 && (
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  {websocket.ticksPerSecond}/s
-                </span>
-              )}
-            </div>
-          </div>
+          <h3 className="text-lg font-bold text-foreground">Top 100 Cryptocurrencies</h3>
           <div className="flex items-center gap-2">
             {alerts.length > 0 && (
               <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded-full flex items-center gap-1">
