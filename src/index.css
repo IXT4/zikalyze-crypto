@@ -113,17 +113,26 @@ All colors MUST be HSL.
 
 .price-flash-up::before,
 .price-flash-down::before {
-  content: "FLASH!";
   position: absolute;
   top: -1.25rem;
   left: 50%;
   transform: translateX(-50%);
-  color: yellow;
   font-weight: bold;
-  font-size: 0.65rem;
-  text-shadow: 0 0 8px yellow;
+  font-size: 0.85rem;
   animation: fadeOut 0.8s ease-out forwards;
   pointer-events: none;
+}
+
+.price-flash-up::before {
+  content: "↑";
+  color: #00ff9d;
+  text-shadow: 0 0 8px #00ff9d;
+}
+
+.price-flash-down::before {
+  content: "↓";
+  color: #ff073a;
+  text-shadow: 0 0 8px #ff073a;
 }
 
 @keyframes fadeOut {
