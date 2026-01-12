@@ -1,13 +1,15 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, User } from "lucide-react";
+import { Search, User, Bell } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import CryptoTicker from "@/components/dashboard/CryptoTicker";
 import { useCryptoPrices } from "@/hooks/useCryptoPrices";
+import { useWebSocketAlerts } from "@/hooks/useWebSocketAlerts";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import ErrorBoundary, { ChartErrorFallback, MinimalErrorFallback } from "@/components/ErrorBoundary";
 
 // Lazy load heavy chart components to reduce initial bundle
@@ -51,6 +53,9 @@ const Dashboard = () => {
   const [userName, setUserName] = useState<string | null>(null);
   const { prices, loading, getPriceBySymbol, oracleStatus, isLive, connectedExchanges } = useCryptoPrices();
   const { t } = useTranslation();
+  
+  // WebSocket-based price alert monitoring
+  const wsAlerts = useWebSocketAlerts([selectedCrypto, "BTC", "ETH", "SOL"]);
 
   // Save selected crypto to localStorage whenever it changes
   useEffect(() => {
@@ -101,6 +106,13 @@ const Dashboard = () => {
               />
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
+              {/* WebSocket Alert Status */}
+              {wsAlerts.alertCount > 0 && (
+                <Badge variant="outline" className="hidden sm:flex items-center gap-1.5 bg-amber-500/10 border-amber-500/30 text-amber-400">
+                  <Bell className="h-3 w-3" />
+                  <span>{wsAlerts.alertCount} alerts</span>
+                </Badge>
+              )}
               {userName && (
                 <span className="text-xs font-medium text-foreground hidden sm:block sm:text-sm">
                   {userName}

@@ -6,7 +6,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useRef, useEffect, useState, useCallback, memo } from "react";
-import { Zap, Cpu, Activity, Radio, TrendingUp, TrendingDown, Clock } from "lucide-react";
+import { Zap, Cpu, Activity, Radio, TrendingUp, TrendingDown, Clock, Bell } from "lucide-react";
 import { useDecentralizedChartData, type ChartTimeframe, TIMEFRAME_CONFIG } from "@/hooks/useDecentralizedChartData";
 import { createGPUChartManager, type GPUChartInstance } from "@/lib/gpu/gpu-chart-manager";
 import type { ChartDataPoint, RenderBackend } from "@/lib/gpu/webgpu-chart-renderer";
@@ -19,6 +19,7 @@ import {
   ChartConnectingState,
 } from "./charts/OracleStatusIndicators";
 import { useCurrency } from "@/hooks/useCurrency";
+import { usePriceAlerts } from "@/hooks/usePriceAlerts";
 
 interface GPUPriceChartProps {
   crypto: string;
@@ -108,6 +109,10 @@ const GPUPriceChart = ({
   const tickWindowRef = useRef<number[]>([]);
   const { formatPrice } = useCurrency();
   
+  // Get active alerts for this crypto
+  const { alerts } = usePriceAlerts();
+  const activeAlerts = alerts.filter(a => a.symbol.toUpperCase() === crypto.toUpperCase());
+  
   const {
     chartData,
     priceChange,
@@ -123,6 +128,19 @@ const GPUPriceChart = ({
   const displayChange = change24h ?? priceChange;
   const isPositive = displayChange >= 0;
   const currentPrice = chartData.length > 0 ? chartData[chartData.length - 1].price : 0;
+  
+  // Calculate nearest alert target
+  const nearestAlert = activeAlerts.length > 0 
+    ? activeAlerts.reduce((nearest, alert) => {
+        const currentDist = Math.abs(currentPrice - alert.target_price);
+        const nearestDist = Math.abs(currentPrice - (nearest?.target_price || 0));
+        return currentDist < nearestDist ? alert : nearest;
+      }, activeAlerts[0])
+    : null;
+  
+  const alertProximityPercent = nearestAlert && currentPrice > 0
+    ? Math.abs((nearestAlert.target_price - currentPrice) / currentPrice * 100)
+    : null;
   
   // Calculate tick rate (updates per second)
   useEffect(() => {
@@ -286,16 +304,38 @@ const GPUPriceChart = ({
         
         {/* Current Price Display */}
         <div className="mt-2 flex items-center justify-between">
-          <div className="flex items-baseline gap-2">
-            <span className={cn(
-              "text-2xl sm:text-3xl font-bold tabular-nums",
-              isPositive ? "text-success" : "text-destructive"
-            )}>
-              {formatPrice(currentPrice)}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {change24h !== undefined ? "24h" : timeframeConfig.label}
-            </span>
+          <div className="flex flex-col">
+            <div className="flex items-baseline gap-2">
+              <span className={cn(
+                "text-2xl sm:text-3xl font-bold tabular-nums",
+                isPositive ? "text-success" : "text-destructive"
+              )}>
+                {formatPrice(currentPrice)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {change24h !== undefined ? "24h" : timeframeConfig.label}
+              </span>
+            </div>
+            
+            {/* Active Alert Indicator */}
+            {nearestAlert && (
+              <div className={cn(
+                "flex items-center gap-1.5 mt-1 text-xs",
+                alertProximityPercent && alertProximityPercent < 2 
+                  ? "text-amber-400 animate-pulse" 
+                  : "text-muted-foreground"
+              )}>
+                <Bell className="h-3 w-3" />
+                <span>
+                  Alert: {nearestAlert.condition} ${nearestAlert.target_price.toLocaleString()}
+                  {alertProximityPercent && (
+                    <span className="ml-1 opacity-70">
+                      ({alertProximityPercent.toFixed(1)}% away)
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
           </div>
           
           {/* Timeframe Selector */}
@@ -337,22 +377,32 @@ const GPUPriceChart = ({
           </div>
         </div>
         
-        {showControls && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => triggerManualFlash("up")}
-              className="rounded bg-success/20 px-2 py-1 text-success hover:bg-success/30 transition-colors"
-            >
-              ↑
-            </button>
-            <button
-              onClick={() => triggerManualFlash("down")}
-              className="rounded bg-destructive/20 px-2 py-1 text-destructive hover:bg-destructive/30 transition-colors"
-            >
-              ↓
-            </button>
-          </div>
-        )}
+        {/* Alert Count & Controls */}
+        <div className="flex items-center gap-2">
+          {activeAlerts.length > 0 && (
+            <span className="flex items-center gap-1 text-amber-400">
+              <Bell className="h-3.5 w-3.5" />
+              <span>{activeAlerts.length}</span>
+            </span>
+          )}
+          
+          {showControls && (
+            <>
+              <button
+                onClick={() => triggerManualFlash("up")}
+                className="rounded bg-success/20 px-2 py-1 text-success hover:bg-success/30 transition-colors"
+              >
+                ↑
+              </button>
+              <button
+                onClick={() => triggerManualFlash("down")}
+                className="rounded bg-destructive/20 px-2 py-1 text-destructive hover:bg-destructive/30 transition-colors"
+              >
+                ↓
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
