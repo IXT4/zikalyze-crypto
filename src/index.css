@@ -58,56 +58,63 @@ All colors MUST be HSL.
   }
 }
 
-/* Price Flash Animations - CoinMarketCap/Binance Style */
+/* Price Flash Animations - Highly Visible Real-Time Updates */
 .price-display {
-  transition: transform 0.1s ease-out;
+  transition: transform 0.15s ease-out, color 0.3s ease-out;
 }
 
 @keyframes flashGreen {
   0% { 
-    background: rgba(0, 255, 157, 0.45); 
+    background: rgba(0, 255, 157, 0.6); 
     color: white;
+    transform: scale(1.04);
+    box-shadow: 0 0 12px rgba(0, 255, 157, 0.5);
   }
-  50% { 
-    background: rgba(0, 255, 157, 0.85); 
-    color: #00ff9d;
+  40% { 
+    background: rgba(0, 255, 157, 0.8); 
+    color: white;
+    box-shadow: 0 0 20px rgba(0, 255, 157, 0.6);
   }
   100% { 
     background: transparent; 
     color: #00ff9d;
     transform: scale(1);
+    box-shadow: none;
   }
 }
 
 @keyframes flashRed {
   0% { 
-    background: rgba(255, 7, 58, 0.45); 
+    background: rgba(255, 7, 58, 0.6); 
     color: white;
+    transform: scale(1.04);
+    box-shadow: 0 0 12px rgba(255, 7, 58, 0.5);
   }
-  50% { 
-    background: rgba(255, 7, 58, 0.85); 
-    color: #ff073a;
+  40% { 
+    background: rgba(255, 7, 58, 0.8); 
+    color: white;
+    box-shadow: 0 0 20px rgba(255, 7, 58, 0.6);
   }
   100% { 
     background: transparent; 
     color: #ff073a;
     transform: scale(1);
+    box-shadow: none;
   }
 }
 
 .price-flash-up,
 .price-flash-down {
   border-radius: 0.25rem;
+  padding: 0 0.25rem;
 }
 
 .price-flash-up {
-  animation: flashGreen 0.8s ease-out forwards;
-  transform: scale(1.02);
+  animation: flashGreen 0.6s ease-out forwards;
 }
 
 .price-flash-down {
-  animation: flashRed 0.8s ease-out forwards;
-  transform: scale(1.02);
+  animation: flashRed 0.6s ease-out forwards;
 }
 
 @keyframes fadeOut {
@@ -116,35 +123,57 @@ All colors MUST be HSL.
   100% { opacity: 0; }
 }
 
-/* Percentage change flash animations */
+/* Percentage change flash animations - More visible */
 @keyframes changeFlashGreen {
   0% { 
-    background: rgba(0, 255, 157, 0.25);
-    transform: scale(1.03);
+    background: rgba(0, 255, 157, 0.5);
+    transform: scale(1.05);
+    box-shadow: 0 0 8px rgba(0, 255, 157, 0.4);
+  }
+  50% {
+    background: rgba(0, 255, 157, 0.3);
   }
   100% { 
     background: transparent;
     transform: scale(1);
+    box-shadow: none;
   }
 }
 
 @keyframes changeFlashRed {
   0% { 
-    background: rgba(255, 7, 58, 0.25);
-    transform: scale(1.03);
+    background: rgba(255, 7, 58, 0.5);
+    transform: scale(1.05);
+    box-shadow: 0 0 8px rgba(255, 7, 58, 0.4);
+  }
+  50% {
+    background: rgba(255, 7, 58, 0.3);
   }
   100% { 
     background: transparent;
     transform: scale(1);
+    box-shadow: none;
   }
 }
 
 .change-flash-up {
-  animation: changeFlashGreen 0.6s ease-out forwards;
+  animation: changeFlashGreen 0.5s ease-out forwards;
+  border-radius: 0.25rem;
 }
 
 .change-flash-down {
-  animation: changeFlashRed 0.6s ease-out forwards;
+  animation: changeFlashRed 0.5s ease-out forwards;
+  border-radius: 0.25rem;
+}
+
+/* Subtle pulse for live data indicator */
+@keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.live-indicator {
+  animation: livePulse 2s ease-in-out infinite;
 }
 
 @layer base {
