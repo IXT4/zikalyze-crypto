@@ -72,7 +72,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
   const [lastWsUpdate, setLastWsUpdate] = useState<number>(0);
   const wsUpdateCountRef = useRef(0);
 
-  // Detect price changes from props AND WebSocket - trigger flash animations
+  // Detect price changes from WebSocket - trigger flash animations ULTRA SENSITIVELY
   useEffect(() => {
     if (prices.length === 0) return;
 
@@ -80,24 +80,22 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
     let hasAnyChange = false;
     
     prices.forEach((crypto) => {
-      // Check for WebSocket price updates as well
+      // PRIORITY: Use WebSocket price for real-time streaming
       const wsPrice = websocket.getPrice(crypto.symbol.toUpperCase());
       const currentPrice = wsPrice?.price || crypto.current_price;
       
       const prevPrice = prevPricesRef.current.get(crypto.symbol);
-      if (prevPrice !== undefined && prevPrice !== currentPrice) {
-        // Only flash on meaningful changes (0.005% threshold for WebSocket sensitivity)
+      if (prevPrice !== undefined && currentPrice > 0 && prevPrice !== currentPrice) {
+        // Ultra-sensitive threshold (0.0001%) for professional live streaming feel
         const changePercent = Math.abs((currentPrice - prevPrice) / prevPrice) * 100;
-        if (changePercent >= 0.005) {
-          if (currentPrice > prevPrice) {
-            newFlashes.set(crypto.symbol, "up");
-          } else {
-            newFlashes.set(crypto.symbol, "down");
-          }
+        if (changePercent >= 0.0001) {
+          newFlashes.set(crypto.symbol, currentPrice > prevPrice ? "up" : "down");
           hasAnyChange = true;
         }
       }
-      prevPricesRef.current.set(crypto.symbol, currentPrice);
+      if (currentPrice > 0) {
+        prevPricesRef.current.set(crypto.symbol, currentPrice);
+      }
     });
 
     if (hasAnyChange) {
@@ -112,7 +110,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
         return merged;
       });
 
-      // Clear flashes after animation completes
+      // Clear flashes after animation completes (matches CSS duration)
       setTimeout(() => {
         setPriceFlashes(prev => {
           const updated = new Map(prev);
@@ -201,12 +199,26 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
     <>
       <div className="rounded-2xl border border-border bg-card p-6">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <h3 className="text-lg font-bold text-foreground">Top 100 Cryptocurrencies</h3>
-            <span className="rounded bg-success/20 px-1.5 py-0.5 text-[10px] font-medium text-success flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-              {t("common.live")}
-            </span>
+            {/* WebSocket Live Streaming Indicator */}
+            <div className="flex items-center gap-2">
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium flex items-center gap-1.5 ${
+                websocket.connected 
+                  ? "bg-success/20 text-success" 
+                  : "bg-warning/20 text-warning"
+              }`}>
+                <span className={`h-2 w-2 rounded-full ${
+                  websocket.connected ? "bg-success animate-pulse" : "bg-warning"
+                }`} />
+                {websocket.connected ? "LIVE STREAM" : "Connecting..."}
+              </span>
+              {websocket.connected && websocket.ticksPerSecond > 0 && (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {websocket.ticksPerSecond}/s
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {alerts.length > 0 && (

@@ -11,12 +11,13 @@ interface LivePriceProps {
   className?: string;
 }
 
-// Hook to track price direction and trigger animations
+// Hook to track price direction and trigger animations - ULTRA SENSITIVE for live streaming
 const usePriceDirection = (value: number) => {
   const [direction, setDirection] = useState<"up" | "down" | null>(null);
   const [key, setKey] = useState(0);
   const prevValueRef = useRef<number>(0);
   const isInitializedRef = useRef(false);
+  const lastUpdateRef = useRef<number>(0);
 
   useEffect(() => {
     if (!isInitializedRef.current) {
@@ -25,11 +26,23 @@ const usePriceDirection = (value: number) => {
       return;
     }
 
-    if (!value || value <= 0 || value === prevValueRef.current) return;
-
-    setDirection(value > prevValueRef.current ? "up" : "down");
-    setKey(k => k + 1);
-    prevValueRef.current = value;
+    if (!value || value <= 0) return;
+    
+    // Ultra-sensitive: trigger on ANY price change for live streaming feel
+    const priceDiff = Math.abs(value - prevValueRef.current);
+    const percentChange = (priceDiff / prevValueRef.current) * 100;
+    
+    // Trigger animation on 0.0001% change or more (catches smallest WebSocket ticks)
+    if (percentChange >= 0.0001 && value !== prevValueRef.current) {
+      const now = Date.now();
+      // Throttle animations to every 100ms to prevent overwhelming the UI
+      if (now - lastUpdateRef.current > 100) {
+        setDirection(value > prevValueRef.current ? "up" : "down");
+        setKey(k => k + 1);
+        lastUpdateRef.current = now;
+      }
+      prevValueRef.current = value;
+    }
   }, [value]);
 
   return { direction, key };
