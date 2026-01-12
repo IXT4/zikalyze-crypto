@@ -26,8 +26,6 @@ interface Top100CryptoListProps {
   loading?: boolean;
 }
 
-// Track price changes for flash animations
-type PriceFlash = "up" | "down" | null;
 
 const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: propLoading }: Top100CryptoListProps) => {
   // Use prices from props if provided, otherwise fetch own (for standalone usage)
@@ -52,10 +50,6 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
   const [targetPrice, setTargetPrice] = useState("");
   const [alertCondition, setAlertCondition] = useState<"above" | "below">("above");
   const [searchQuery, setSearchQuery] = useState("");
-  
-  // Track previous prices for flash animation
-  const prevPricesRef = useRef<Map<string, number>>(new Map());
-  const [priceFlashes, setPriceFlashes] = useState<Map<string, PriceFlash>>(new Map());
 
   // Filter prices based on search query
   const filteredPrices = useMemo(() => {
@@ -72,54 +66,6 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
   const [lastWsUpdate, setLastWsUpdate] = useState<number>(0);
   const wsUpdateCountRef = useRef(0);
 
-  // Detect price changes from WebSocket - trigger flash animations ULTRA SENSITIVELY
-  useEffect(() => {
-    if (prices.length === 0) return;
-
-    const newFlashes = new Map<string, PriceFlash>();
-    let hasAnyChange = false;
-    
-    prices.forEach((crypto) => {
-      // PRIORITY: Use WebSocket price for real-time streaming
-      const wsPrice = websocket.getPrice(crypto.symbol.toUpperCase());
-      const currentPrice = wsPrice?.price || crypto.current_price;
-      
-      const prevPrice = prevPricesRef.current.get(crypto.symbol);
-      if (prevPrice !== undefined && currentPrice > 0 && prevPrice !== currentPrice) {
-        // Ultra-sensitive threshold (0.0001%) for professional live streaming feel
-        const changePercent = Math.abs((currentPrice - prevPrice) / prevPrice) * 100;
-        if (changePercent >= 0.0001) {
-          newFlashes.set(crypto.symbol, currentPrice > prevPrice ? "up" : "down");
-          hasAnyChange = true;
-        }
-      }
-      if (currentPrice > 0) {
-        prevPricesRef.current.set(crypto.symbol, currentPrice);
-      }
-    });
-
-    if (hasAnyChange) {
-      setLastWsUpdate(Date.now());
-      wsUpdateCountRef.current++;
-    }
-
-    if (newFlashes.size > 0) {
-      setPriceFlashes(prev => {
-        const merged = new Map(prev);
-        newFlashes.forEach((value, key) => merged.set(key, value));
-        return merged;
-      });
-
-      // Clear flashes after animation completes (matches CSS duration)
-      setTimeout(() => {
-        setPriceFlashes(prev => {
-          const updated = new Map(prev);
-          newFlashes.forEach((_, key) => updated.delete(key));
-          return updated;
-        });
-      }, 700);
-    }
-  }, [prices, websocket.prices]);
 
   // Check alerts whenever prices update - use a ref to track last check time
   const lastAlertCheckRef = useRef<number>(0);
@@ -319,19 +265,11 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
               </tr>
             </thead>
             <tbody>
-              {filteredPrices.map((crypto, index) => {
+            {filteredPrices.map((crypto, index) => {
                 const isPositive = crypto.price_change_percentage_24h >= 0;
                 const isSelected = crypto.symbol.toUpperCase() === selected;
                 const hasAlert = alerts.some(a => a.symbol === crypto.symbol.toUpperCase());
-                const flash = priceFlashes.get(crypto.symbol);
                 const sparklineData = getHistory(crypto.symbol.toUpperCase());
-                
-                // Row flash classes for WebSocket updates
-                const rowFlashClass = flash === "up" 
-                  ? "animate-row-flash-up" 
-                  : flash === "down" 
-                    ? "animate-row-flash-down" 
-                    : "";
                 
                 return (
                   <tr
@@ -339,29 +277,19 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                     onClick={() => onSelect(crypto.symbol.toUpperCase())}
                     className={`border-b border-border/50 cursor-pointer transition-all duration-200 hover:bg-secondary/50 ${
                       isSelected ? "bg-primary/10" : ""
-                    } ${rowFlashClass}`}
+                    }`}
                   >
                     <td className="py-3 text-sm text-muted-foreground">{index + 1}</td>
                     <td className="py-3">
                       <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <img 
-                            src={crypto.image} 
-                            alt={crypto.name}
-                            className={`w-10 h-10 rounded-full shrink-0 transition-transform duration-200 ${
-                              flash ? "scale-110" : ""
-                            }`}
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                          {/* Live update pulse indicator */}
-                          {flash && (
-                            <span className={`absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ${
-                              flash === "up" ? "bg-success" : "bg-destructive"
-                            } animate-ping`} />
-                          )}
-                        </div>
+                        <img 
+                          src={crypto.image} 
+                          alt={crypto.name}
+                          className="w-10 h-10 rounded-full shrink-0"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
                         <div className="min-w-0">
                           <div className="font-medium text-foreground text-sm truncate">{crypto.name}</div>
                           <div className="text-xs text-muted-foreground font-semibold">{crypto.symbol.toUpperCase()}</div>
@@ -369,16 +297,8 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                       </div>
                     </td>
                     <td className="py-3 text-right">
-                      <div className={`inline-block rounded px-1.5 py-0.5 transition-all duration-200 ${
-                        flash === "up" 
-                          ? "price-flash-up" 
-                          : flash === "down" 
-                            ? "price-flash-down" 
-                            : ""
-                      }`}>
-                        {/* Use WebSocket price if available, fallback to prop price */}
-                        <LivePriceCompact value={websocket.getPrice(crypto.symbol.toUpperCase())?.price || crypto.current_price} />
-                      </div>
+                      {/* Use WebSocket price if available, fallback to prop price */}
+                      <LivePriceCompact value={websocket.getPrice(crypto.symbol.toUpperCase())?.price || crypto.current_price} />
                     </td>
                     <td className="py-3 text-center hidden xs:table-cell">
                       <div className="flex justify-center">
@@ -390,11 +310,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                       </div>
                     </td>
                     <td className="py-3 text-right">
-                      <div className={`flex items-center justify-end ${
-                        flash ? "change-flash-" + flash : ""
-                      }`}>
-                        <PriceChangeCompact value={crypto.price_change_percentage_24h} />
-                      </div>
+                      <PriceChangeCompact value={crypto.price_change_percentage_24h} />
                     </td>
                     <td className="py-3 text-right text-sm text-muted-foreground hidden sm:table-cell">
                       {currencySymbol}{crypto.market_cap ? (crypto.market_cap / 1e9).toFixed(2) + "B" : "---"}
