@@ -122,6 +122,22 @@ export default {
             transform: "scale(1)",
           },
         },
+        "bounce-subtle-up": {
+          "0%, 100%": {
+            transform: "translateY(0)",
+          },
+          "25%": {
+            transform: "translateY(-2px)",
+          },
+        },
+        "bounce-subtle-down": {
+          "0%, 100%": {
+            transform: "translateY(0)",
+          },
+          "25%": {
+            transform: "translateY(2px)",
+          },
+        },
         "spin-slow": {
           from: {
             transform: "rotate(0deg)",
@@ -136,6 +152,8 @@ export default {
         "accordion-up": "accordion-up 0.2s ease-out",
         "price-flash-up": "price-flash-up 0.6s ease-out",
         "price-flash-down": "price-flash-down 0.6s ease-out",
+        "bounce-subtle-up": "bounce-subtle-up 0.4s ease-out",
+        "bounce-subtle-down": "bounce-subtle-down 0.4s ease-out",
         "spin-slow": "spin-slow 2.5s linear infinite",
       },
     },

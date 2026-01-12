@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { CryptoPrice } from "@/hooks/useCryptoPrices";
 import { useCurrency } from "@/hooks/useCurrency";
 import { Circle, Zap, Link2 } from "lucide-react";
+import { PriceChange } from "./PriceChange";
 
 const cryptoMeta = [
   { symbol: "BTC", name: "Bitcoin", color: "text-warning" },
@@ -186,16 +187,12 @@ const CryptoTicker = ({
               
               <div className="flex items-center gap-2">
                 <span className={cn("font-bold", crypto.color)}>{crypto.symbol}</span>
-                <span
-                  className={cn(
-                    "text-xs font-medium rounded px-1 transition-colors",
-                    change >= 0 ? "text-success" : "text-destructive",
-                    flash === "up" && "bg-success/20",
-                    flash === "down" && "bg-destructive/20"
-                  )}
-                >
-                  {change >= 0 ? "↗" : "↘"} {Math.abs(change).toFixed(2)}%
-                </span>
+                <PriceChange 
+                  value={change} 
+                  size="sm" 
+                  showBadge={false}
+                  animated={!!flash}
+                />
               </div>
               <span 
                 className={cn(

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useCryptoPrices, CryptoPrice } from "@/hooks/useCryptoPrices";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
 import { useCurrency } from "@/hooks/useCurrency";
-import { TrendingUp, TrendingDown, Bell, X, BellRing, Search } from "lucide-react";
+import { Bell, X, BellRing, Search, TrendingUp, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { PriceChangeCompact } from "./PriceChange";
 
 interface Top100CryptoListProps {
   onSelect: (symbol: string) => void;
@@ -317,9 +318,8 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                       </span>
                     </td>
                     <td className="py-3 text-right">
-                      <div className={`flex items-center justify-end gap-1 text-sm ${isPositive ? "text-success" : "text-destructive"}`}>
-                        {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                        {Math.abs(crypto.price_change_percentage_24h).toFixed(2)}%
+                      <div className="flex items-center justify-end">
+                        <PriceChangeCompact value={crypto.price_change_percentage_24h} />
                       </div>
                     </td>
                     <td className="py-3 text-right text-sm text-muted-foreground hidden sm:table-cell">
