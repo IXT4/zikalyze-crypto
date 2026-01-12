@@ -146,8 +146,32 @@ export function getAllTokenMetadata(): TokenMetadata[] {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🖼️ Web3Icons CDN - 2700+ token icons with high reliability
+// 🖼️ CoinMarketCap + Web3Icons CDN - Verified token icons
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// CoinMarketCap verified ID mapping (primary - most reliable)
+const CMC_ID_MAP: Record<string, number> = {
+  BTC: 1, ETH: 1027, BNB: 1839, SOL: 5426, XRP: 52,
+  ADA: 2010, DOGE: 74, TRX: 1958, AVAX: 5805, TON: 11419,
+  LINK: 1975, DOT: 6636, MATIC: 3890, LTC: 2, BCH: 1831,
+  SHIB: 5994, DAI: 4943, ATOM: 3794, UNI: 7083, XLM: 512,
+  ETC: 1321, XMR: 328, ICP: 8916, NEAR: 6535, FIL: 2280,
+  APT: 21794, HBAR: 4642, ARB: 11841, VET: 3077, OP: 11840,
+  MKR: 1518, CRO: 3635, KAS: 20396, AAVE: 7278, GRT: 6719,
+  RNDR: 5690, INJ: 7226, ALGO: 4030, STX: 4847, FTM: 3513,
+  SUI: 20947, THETA: 2416, RUNE: 4157, LDO: 8000, SAND: 6210,
+  MANA: 1966, AXS: 6783, FET: 3773, EGLD: 6892, FLOW: 4558,
+  EOS: 1765, CHZ: 4066, CAKE: 7186, XTZ: 2011, KAVA: 4846,
+  NEO: 1376, IOTA: 1720, GALA: 7080, SNX: 2586, ZEC: 1437,
+  KCS: 2087, CFX: 7334, MINA: 8646, WOO: 7501, ROSE: 7653,
+  ZIL: 2469, DYDX: 11156, COMP: 5692, ENJ: 2130, FXS: 6953,
+  GMX: 11857, RPL: 2943, CRV: 6538, DASH: 131, ONE: 3945,
+  BAT: 1697, QTUM: 1684, CELO: 5567, ZRX: 1896, OCEAN: 3911,
+  AUDIO: 7455, ANKR: 3783, ICX: 2099, IOTX: 2777, STORJ: 1772,
+  SKL: 5691, ONT: 2566, JST: 5488, LUNC: 4172, GLMR: 6836,
+  KDA: 5647, RVN: 2577, SC: 1042, WAVES: 1274, XEM: 873,
+  BTT: 16086, LUNA: 20314, AR: 5632, AGIX: 2424, WLD: 13502,
+};
 
 // Primary: @web3icons (2700+ tokens) - Most comprehensive
 const WEB3ICONS_CDN = "https://cdn.jsdelivr.net/npm/@web3icons/core@latest/svgs/tokens/branded";
@@ -155,40 +179,36 @@ const WEB3ICONS_CDN = "https://cdn.jsdelivr.net/npm/@web3icons/core@latest/svgs/
 // Fallback: spothq/cryptocurrency-icons (400+ tokens) - Well maintained
 const SPOTHQ_CDN = "https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/color";
 
-// Symbol mappings for tokens with different names in the icon repos
-const ICON_SYMBOL_MAP: Record<string, { web3: string; spothq: string }> = {
-  MATIC: { web3: "MATIC", spothq: "matic" },
-  LUNC: { web3: "LUNC", spothq: "luna" },
-  EGLD: { web3: "EGLD", spothq: "egld" },
-  SHIB: { web3: "SHIB", spothq: "shib" },
-  AGIX: { web3: "AGIX", spothq: "agix" },
-  WLD: { web3: "WLD", spothq: "wld" },
-  ARB: { web3: "ARB", spothq: "arb" },
-  OP: { web3: "OP", spothq: "op" },
-  APT: { web3: "APT", spothq: "apt" },
-  SUI: { web3: "SUI", spothq: "sui" },
-  TIA: { web3: "TIA", spothq: "tia" },
-  SEI: { web3: "SEI", spothq: "sei" },
-  JUP: { web3: "JUP", spothq: "jup" },
-  BONK: { web3: "BONK", spothq: "bonk" },
-  WIF: { web3: "WIF", spothq: "wif" },
-  PEPE: { web3: "PEPE", spothq: "pepe" },
-  FLOKI: { web3: "FLOKI", spothq: "floki" },
-};
+// Get CoinMarketCap verified image URL (primary)
+export function getCMCImageUrl(symbol: string): string | null {
+  const upperSymbol = symbol.toUpperCase().replace(/USD$/, '');
+  const cmcId = CMC_ID_MAP[upperSymbol];
+  if (!cmcId) return null;
+  return `https://s2.coinmarketcap.com/static/img/coins/64x64/${cmcId}.png`;
+}
 
-// Get web3icons URL (primary - 2700+ tokens)
+// Get token image URL with CMC priority
 export function getTokenImageUrl(symbol: string): string {
   const upperSymbol = symbol.toUpperCase().replace(/USD$/, '');
-  const iconName = ICON_SYMBOL_MAP[upperSymbol]?.web3 || upperSymbol;
-  return `${WEB3ICONS_CDN}/${iconName}.svg`;
+  
+  // Priority 1: CoinMarketCap verified
+  const cmcId = CMC_ID_MAP[upperSymbol];
+  if (cmcId) {
+    return `https://s2.coinmarketcap.com/static/img/coins/64x64/${cmcId}.png`;
+  }
+  
+  // Priority 2: Web3Icons CDN
+  return `${WEB3ICONS_CDN}/${upperSymbol}.svg`;
 }
 
 // Get spothq fallback URL (secondary - 400+ tokens)  
 export function getSpothqFallbackUrl(symbol: string): string {
   const upperSymbol = symbol.toUpperCase().replace(/USD$/, '');
-  const iconName = ICON_SYMBOL_MAP[upperSymbol]?.spothq || upperSymbol.toLowerCase();
-  return `${SPOTHQ_CDN}/${iconName}.svg`;
+  return `${SPOTHQ_CDN}/${upperSymbol.toLowerCase()}.svg`;
 }
+
+// Export CMC ID map for external use
+export { CMC_ID_MAP };
 
 // Final fallback - deterministic avatar for unknown tokens
 export function getFallbackIconUrl(symbol: string): string {
