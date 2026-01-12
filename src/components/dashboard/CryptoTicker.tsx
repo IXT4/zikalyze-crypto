@@ -4,6 +4,7 @@ import { CryptoPrice } from "@/hooks/useCryptoPrices";
 import { Circle, Zap, Link2 } from "lucide-react";
 import { PriceChange } from "./PriceChange";
 import { LivePriceLarge } from "./LivePrice";
+import { LiveClockCompact } from "./LiveClock";
 
 const cryptoMeta = [
   { symbol: "BTC", name: "Bitcoin", color: "text-warning" },
@@ -121,35 +122,40 @@ const CryptoTicker = ({
   return (
     <div className="space-y-2">
       {/* Oracle Status Bar */}
-      <div className="flex items-center gap-3 text-xs">
-        <div className="flex items-center gap-1.5">
-          <Circle 
-            className={cn(
-              "h-2 w-2",
-              isLive ? "fill-success text-success animate-pulse" : "fill-muted text-muted"
-            )} 
-          />
-          <span className="text-muted-foreground">
-            {isLive ? "Live" : "Connecting..."}
-          </span>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Circle 
+              className={cn(
+                "h-2 w-2",
+                isLive ? "fill-success text-success animate-pulse" : "fill-muted text-muted"
+              )} 
+            />
+            <span className="text-muted-foreground">
+              {isLive ? "Live" : "Connecting..."}
+            </span>
+          </div>
+          
+          {/* Oracle Source */}
+          {oracleStatus?.isLive && (
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/50 border border-border">
+              {getOracleIcon()}
+              <span className="text-foreground font-medium">{getOracleLabel()}</span>
+              <span className="text-muted-foreground">Oracle</span>
+            </div>
+          )}
+          
+          {/* Exchange Sources */}
+          {connectedExchanges.filter(e => e !== "Pyth" && e !== "Chainlink").length > 0 && (
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <span>+</span>
+              <span>{connectedExchanges.filter(e => e !== "Pyth" && e !== "Chainlink").join(", ")}</span>
+            </div>
+          )}
         </div>
         
-        {/* Oracle Source */}
-        {oracleStatus?.isLive && (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/50 border border-border">
-            {getOracleIcon()}
-            <span className="text-foreground font-medium">{getOracleLabel()}</span>
-            <span className="text-muted-foreground">Oracle</span>
-          </div>
-        )}
-        
-        {/* Exchange Sources */}
-        {connectedExchanges.filter(e => e !== "Pyth" && e !== "Chainlink").length > 0 && (
-          <div className="flex items-center gap-1 text-muted-foreground">
-            <span>+</span>
-            <span>{connectedExchanges.filter(e => e !== "Pyth" && e !== "Chainlink").join(", ")}</span>
-          </div>
-        )}
+        {/* Live Clock */}
+        <LiveClockCompact />
       </div>
       
       {/* Crypto Buttons */}
