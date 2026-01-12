@@ -13,15 +13,21 @@ interface LivePriceProps {
   className?: string;
 }
 
-// Fast smooth number animation hook optimized for tick-by-tick streaming
-const useAnimatedPrice = (targetValue: number, duration: number = 150) => {
+// Smooth number animation hook with stable transitions
+const useAnimatedPrice = (targetValue: number, duration: number = 200) => {
   const [displayValue, setDisplayValue] = useState(targetValue);
   const animationRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const startValueRef = useRef<number>(targetValue);
   const targetValueRef = useRef<number>(targetValue);
+  const lastTargetRef = useRef<number>(targetValue);
 
   useEffect(() => {
+    // Only animate if value changed significantly (0.001% threshold prevents jitter)
+    const priceDiff = Math.abs(targetValue - lastTargetRef.current) / (lastTargetRef.current || 1);
+    if (priceDiff < 0.00001) return;
+    
+    lastTargetRef.current = targetValue;
     targetValueRef.current = targetValue;
   }, [targetValue]);
 
@@ -31,8 +37,8 @@ const useAnimatedPrice = (targetValue: number, duration: number = 150) => {
     const elapsed = timestamp - startTimeRef.current;
     const progress = Math.min(elapsed / duration, 1);
     
-    // Fast ease-out for snappy updates
-    const easeOut = 1 - Math.pow(1 - progress, 2);
+    // Smooth ease-out cubic for professional feel
+    const easeOut = 1 - Math.pow(1 - progress, 3);
     
     const currentValue = startValueRef.current + 
       (targetValueRef.current - startValueRef.current) * easeOut;
@@ -47,6 +53,9 @@ const useAnimatedPrice = (targetValue: number, duration: number = 150) => {
   useEffect(() => {
     // Skip animation for initial render or invalid values
     if (targetValue <= 0) return;
+    
+    // Only start new animation if target changed
+    if (Math.abs(targetValue - startValueRef.current) < 0.00001 * startValueRef.current) return;
     
     // Start animation from current display value
     startValueRef.current = displayValue;
@@ -110,7 +119,7 @@ const useFlashEffect = (value: number) => {
 
 export const LivePrice = ({ value, className }: LivePriceProps) => {
   const { formatPrice } = useCurrency();
-  const animatedValue = useAnimatedPrice(value, 150);
+  const animatedValue = useAnimatedPrice(value, 200);
   const flashClass = useFlashEffect(value);
 
   return (
@@ -136,7 +145,7 @@ export const LivePriceCompact = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const animatedValue = useAnimatedPrice(value, 120);
+  const animatedValue = useAnimatedPrice(value, 180);
   const flashClass = useFlashEffect(value);
 
   return (
@@ -162,7 +171,7 @@ export const LivePriceLarge = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const animatedValue = useAnimatedPrice(value, 200);
+  const animatedValue = useAnimatedPrice(value, 250);
   const flashClass = useFlashEffect(value);
 
   return (
