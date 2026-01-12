@@ -45,9 +45,9 @@ export const useOraclePrices = (_symbols: string[] = []) => {
   useEffect(() => {
     if (!isMountedRef.current) return;
 
-    // Fast tick-by-tick updates (50ms throttle for smooth real-time streaming)
+    // Balanced throttle for smooth real-time streaming (100ms)
     const now = Date.now();
-    if (now - lastUpdateRef.current < 50) return;
+    if (now - lastUpdateRef.current < 100) return;
     lastUpdateRef.current = now;
 
     const merged = new Map<string, OraclePriceData>();

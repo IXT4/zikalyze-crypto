@@ -107,8 +107,8 @@ export const useCryptoPrices = () => {
   const pricesInitializedRef = useRef(false);
   const oracleUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Fast tick-by-tick streaming (50ms for real-time accuracy)
-  const UPDATE_THROTTLE_MS = 50;
+  // Balanced throttle for smooth real-time updates (100ms)
+  const UPDATE_THROTTLE_MS = 100;
   
   // Apply Oracle prices as primary source (Pyth/DIA/Redstone) - DECENTRALIZED ONLY
   // Preserves 24h change data from CoinGecko while updating live prices
@@ -120,7 +120,7 @@ export const useCryptoPrices = () => {
       clearTimeout(oracleUpdateTimeoutRef.current);
     }
     
-    // Fast debounce for tick-by-tick accuracy (30ms)
+    // Smooth debounce for stable updates (80ms)
     oracleUpdateTimeoutRef.current = setTimeout(() => {
       const now = Date.now();
       let hasUpdates = false;
@@ -169,7 +169,7 @@ export const useCryptoPrices = () => {
       if (hasUpdates) {
         setPrices(Array.from(pricesRef.current.values()));
       }
-    }, 30); // 30ms debounce for fast tick-by-tick streaming
+    }, 80); // 80ms debounce for smooth streaming
     
     return () => {
       if (oracleUpdateTimeoutRef.current) {
