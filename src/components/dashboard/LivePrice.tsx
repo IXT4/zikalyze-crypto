@@ -1,8 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // 💹 LivePrice — Rolling Digit Animation for Real-Time Prices
 // ═══════════════════════════════════════════════════════════════════════════════
+// CoinMarketCap-style rolling digits with smooth number transitions
+// ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, memo } from "react";
 import { cn } from "@/lib/utils";
 import { useCurrency } from "@/hooks/useCurrency";
 
@@ -11,52 +13,77 @@ interface LivePriceProps {
   className?: string;
 }
 
-// Hook to track price direction and trigger animations - CoinMarketCap-style continuous streaming
-const usePriceDirection = (value: number) => {
-  const [direction, setDirection] = useState<"up" | "down" | null>(null);
-  const [key, setKey] = useState(0);
-  const prevValueRef = useRef<number>(0);
-  const isInitializedRef = useRef(false);
-  const lastUpdateRef = useRef<number>(0);
+// Individual rolling digit component
+const RollingDigit = memo(({ 
+  digit, 
+  direction 
+}: { 
+  digit: string; 
+  direction: "up" | "down" | null;
+}) => {
+  const [currentDigit, setCurrentDigit] = useState(digit);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animDirection, setAnimDirection] = useState<"up" | "down" | null>(null);
+  const prevDigitRef = useRef(digit);
 
   useEffect(() => {
-    if (!isInitializedRef.current) {
-      isInitializedRef.current = true;
-      prevValueRef.current = value;
-      return;
+    if (digit !== prevDigitRef.current) {
+      setAnimDirection(direction);
+      setIsAnimating(true);
+      
+      // Update digit after animation starts
+      const updateTimer = setTimeout(() => {
+        setCurrentDigit(digit);
+        prevDigitRef.current = digit;
+      }, 50);
+      
+      // Clear animation state
+      const clearTimer = setTimeout(() => {
+        setIsAnimating(false);
+        setAnimDirection(null);
+      }, 300);
+      
+      return () => {
+        clearTimeout(updateTimer);
+        clearTimeout(clearTimer);
+      };
     }
+  }, [digit, direction]);
 
-    if (!value || value <= 0) return;
-    
-    // Immediate response to any price change - CoinMarketCap style
-    if (value !== prevValueRef.current) {
-      const now = Date.now();
-      // Reduced throttle to 50ms for faster visual response
-      if (now - lastUpdateRef.current > 50) {
-        setDirection(value > prevValueRef.current ? "up" : "down");
-        setKey(k => k + 1);
-        lastUpdateRef.current = now;
-        prevValueRef.current = value;
-      } else {
-        // Still update the reference even if we skip animation
-        prevValueRef.current = value;
-      }
-    }
-  }, [value]);
+  // Non-numeric characters don't animate
+  if (!/\d/.test(digit)) {
+    return <span className="inline-block">{digit}</span>;
+  }
 
-  // Auto-clear direction after flash for clean look
-  useEffect(() => {
-    if (direction) {
-      const timeout = setTimeout(() => setDirection(null), 400);
-      return () => clearTimeout(timeout);
-    }
-  }, [direction, key]);
+  return (
+    <span 
+      className={cn(
+        "inline-block relative overflow-hidden",
+        isAnimating && animDirection === "up" && "animate-roll-up",
+        isAnimating && animDirection === "down" && "animate-roll-down"
+      )}
+      style={{ 
+        minWidth: "0.6em",
+        transition: "color 0.3s ease-out",
+      }}
+    >
+      <span 
+        className={cn(
+          "inline-block tabular-nums",
+          isAnimating && animDirection === "up" && "text-success",
+          isAnimating && animDirection === "down" && "text-destructive"
+        )}
+      >
+        {currentDigit}
+      </span>
+    </span>
+  );
+});
 
-  return { direction, key };
-};
+RollingDigit.displayName = "RollingDigit";
 
-// Subtle color transition price display
-const PriceDisplay = ({ 
+// Rolling price display with digit-by-digit animation
+const RollingPriceDisplay = memo(({ 
   formattedPrice, 
   value,
   className 
@@ -66,7 +93,7 @@ const PriceDisplay = ({
   className?: string;
 }) => {
   const [displayPrice, setDisplayPrice] = useState(formattedPrice);
-  const [colorClass, setColorClass] = useState<string>('');
+  const [direction, setDirection] = useState<"up" | "down" | null>(null);
   const prevValueRef = useRef<number>(value);
   const isInitializedRef = useRef(false);
 
@@ -74,54 +101,135 @@ const PriceDisplay = ({
     if (!isInitializedRef.current) {
       isInitializedRef.current = true;
       prevValueRef.current = value;
+      setDisplayPrice(formattedPrice);
       return;
     }
 
-    if (formattedPrice !== displayPrice) {
-      // Determine direction and set color
-      if (value > prevValueRef.current) {
-        setColorClass('text-success');
-      } else if (value < prevValueRef.current) {
-        setColorClass('text-destructive');
-      }
-      
+    if (value !== prevValueRef.current) {
+      const newDirection = value > prevValueRef.current ? "up" : "down";
+      setDirection(newDirection);
       setDisplayPrice(formattedPrice);
       prevValueRef.current = value;
       
-      // Fade color back to default after transition
+      // Clear direction after animation
       const timeout = setTimeout(() => {
-        setColorClass('');
-      }, 1500);
+        setDirection(null);
+      }, 400);
       
       return () => clearTimeout(timeout);
     }
-  }, [formattedPrice, displayPrice, value]);
+  }, [formattedPrice, value]);
+
+  // Split price into characters for individual animation
+  const characters = displayPrice.split('');
+
+  return (
+    <span className={cn("tabular-nums inline-flex", className)}>
+      {characters.map((char, index) => (
+        <RollingDigit 
+          key={`${index}-${char}`} 
+          digit={char} 
+          direction={direction}
+        />
+      ))}
+    </span>
+  );
+});
+
+RollingPriceDisplay.displayName = "RollingPriceDisplay";
+
+// Smooth counting animation for large price changes
+const AnimatedValue = memo(({ 
+  value, 
+  formatFn,
+  className,
+  duration = 300
+}: { 
+  value: number;
+  formatFn: (v: number) => string;
+  className?: string;
+  duration?: number;
+}) => {
+  const [displayValue, setDisplayValue] = useState(value);
+  const [direction, setDirection] = useState<"up" | "down" | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const prevValueRef = useRef(value);
+
+  useEffect(() => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+
+    const startValue = prevValueRef.current;
+    const endValue = value;
+    const diff = endValue - startValue;
+    
+    if (Math.abs(diff) < 0.0000001) return;
+    
+    setDirection(diff > 0 ? "up" : "down");
+    
+    const startTime = performance.now();
+    
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease-out cubic for smooth deceleration
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      const currentValue = startValue + diff * easeOut;
+      
+      setDisplayValue(currentValue);
+      
+      if (progress < 1) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        setDisplayValue(endValue);
+        prevValueRef.current = endValue;
+        
+        // Clear direction after settling
+        setTimeout(() => setDirection(null), 200);
+      }
+    };
+    
+    animationRef.current = requestAnimationFrame(animate);
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [value, duration]);
+
+  const formattedValue = useMemo(() => formatFn(displayValue), [formatFn, displayValue]);
 
   return (
     <span 
       className={cn(
-        "tabular-nums transition-colors duration-700 ease-out",
-        colorClass || "text-foreground",
+        "tabular-nums transition-colors duration-300",
+        direction === "up" && "text-success",
+        direction === "down" && "text-destructive",
+        !direction && "text-foreground",
         className
       )}
     >
-      {displayPrice}
+      {formattedValue}
     </span>
   );
-};
+});
+
+AnimatedValue.displayName = "AnimatedValue";
 
 export const LivePrice = ({ value, className }: LivePriceProps) => {
   const { formatPrice } = useCurrency();
-  const formattedPrice = useMemo(() => formatPrice(value), [formatPrice, value]);
 
   return (
     <span className={cn("font-semibold", className)}>
-      <PriceDisplay formattedPrice={formattedPrice} value={value} />
+      <AnimatedValue value={value} formatFn={formatPrice} duration={250} />
     </span>
   );
 };
 
-// Compact version for tables
+// Compact version for tables - uses rolling digits
 export const LivePriceCompact = ({
   value,
   className,
@@ -134,12 +242,12 @@ export const LivePriceCompact = ({
 
   return (
     <span className={cn("text-sm font-medium", className)}>
-      <PriceDisplay formattedPrice={formattedPrice} value={value} />
+      <RollingPriceDisplay formattedPrice={formattedPrice} value={value} />
     </span>
   );
 };
 
-// Large ticker display
+// Large ticker display - uses smooth counting
 export const LivePriceLarge = ({
   value,
   className,
@@ -148,11 +256,10 @@ export const LivePriceLarge = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const formattedPrice = useMemo(() => formatPrice(value), [formatPrice, value]);
 
   return (
     <span className={cn("text-lg font-bold", className)}>
-      <PriceDisplay formattedPrice={formattedPrice} value={value} />
+      <AnimatedValue value={value} formatFn={formatPrice} duration={300} />
     </span>
   );
 };
