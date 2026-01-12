@@ -314,9 +314,9 @@ const fetchDefiLlama24hData = async (): Promise<Map<string, { change24h: number;
       
       if (current?.price && historical?.price) {
         const change24h = ((current.price - historical.price) / historical.price) * 100;
-        result.set(symbol.toLowerCase(), { 
-          change24h, 
-          price24hAgo: historical.price 
+        result.set(symbol.toLowerCase(), {
+          change24h,
+          price24hAgo: historical.price,
         });
       }
     });
@@ -324,6 +324,34 @@ const fetchDefiLlama24hData = async (): Promise<Map<string, { change24h: number;
     console.warn("[Prices] DeFiLlama 24h fetch failed:", e);
   }
   
+  return result;
+};
+
+// Fetch current prices from DeFiLlama (fills gaps when oracle/WebSocket don't cover a token)
+const fetchDefiLlamaCurrentPrices = async (): Promise<Map<string, number>> => {
+  const result = new Map<string, number>();
+
+  try {
+    const tokens = Object.values(DEFI_LLAMA_TOKENS).join(",");
+    const url = `https://coins.llama.fi/prices/current/${tokens}`;
+
+    const response = await safeFetch(url);
+    if (!response) return result;
+
+    const data = await response.json();
+    if (!data?.coins) return result;
+
+    Object.entries(DEFI_LLAMA_TOKENS).forEach(([symbol, llamaKey]) => {
+      const current = data.coins?.[llamaKey];
+      const price = Number(current?.price);
+      if (Number.isFinite(price) && price > 0) {
+        result.set(symbol.toLowerCase(), price);
+      }
+    });
+  } catch (e) {
+    console.warn("[Prices] DeFiLlama current price fetch failed:", e);
+  }
+
   return result;
 };
 
@@ -366,7 +394,7 @@ export const useCryptoPrices = () => {
   const PRICE_SAVE_THROTTLE_MS = 5000;
   const DEFI_LLAMA_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
-  // Load ZK-encrypted cached prices and fetch DeFiLlama 24h data on mount
+  // Load ZK-encrypted cached prices and fetch DeFiLlama data on mount
   useEffect(() => {
     const loadCachedPrices = async () => {
       try {
@@ -409,16 +437,62 @@ export const useCryptoPrices = () => {
           }
         }
         
-        // Fetch fresh DeFiLlama data
+        // Fetch fresh DeFiLlama 24h % data
         const fresh24h = await fetchDefiLlama24hData();
         if (fresh24h.size > 0) {
           defiLlama24hRef.current = fresh24h;
           lastDefiLlamaFetchRef.current = Date.now();
-          await zkStorage.setItem(DEFI_LLAMA_24H_CACHE_KEY, JSON.stringify({
-            timestamp: Date.now(),
-            data: Object.fromEntries(fresh24h),
-          }));
+          await zkStorage.setItem(
+            DEFI_LLAMA_24H_CACHE_KEY,
+            JSON.stringify({
+              timestamp: Date.now(),
+              data: Object.fromEntries(fresh24h),
+            })
+          );
           console.log(`[Prices] ✓ Fetched ${fresh24h.size} DeFiLlama 24h percentages`);
+        }
+
+        // Fetch DeFiLlama current prices to fill any "0" gaps immediately
+        const current = await fetchDefiLlamaCurrentPrices();
+        if (current.size > 0) {
+          const now = Date.now();
+          let hasGapFills = false;
+
+          const recordHistory = (symbol: string, price: number) => {
+            if (price <= 0) return;
+            const history = priceHistoryRef.current.get(symbol) || [];
+            history.push({ price, timestamp: now });
+            const cutoff = now - 24 * 60 * 60 * 1000;
+            priceHistoryRef.current.set(symbol, history.filter((h) => h.timestamp > cutoff));
+          };
+
+          current.forEach((price, symbol) => {
+            const existing = pricesRef.current.get(symbol);
+            if (!existing) return;
+
+            // Only fill gaps (don't overwrite WebSocket/oracle live prices)
+            if (existing.current_price > 0) return;
+
+            const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || existing.circulating_supply;
+            pricesRef.current.set(symbol, {
+              ...existing,
+              current_price: price,
+              high_24h: price,
+              low_24h: price,
+              market_cap: price * supply,
+              lastUpdate: now,
+              source: "DeFiLlama",
+            });
+            recordHistory(symbol, price);
+            hasGapFills = true;
+          });
+
+          if (hasGapFills) {
+            const priceArray = Array.from(pricesRef.current.values()).sort(
+              (a, b) => (b.market_cap || 0) - (a.market_cap || 0)
+            );
+            setPrices(priceArray);
+          }
         }
       } catch (e) {
         console.warn("[Prices] Failed to load ZK cache:", e);
@@ -430,16 +504,62 @@ export const useCryptoPrices = () => {
     
     loadCachedPrices();
     
-    // Refresh DeFiLlama data every 5 minutes
-    const interval = setInterval(async () => {
+    // Refresh DeFiLlama 24h data every 5 minutes
+    const interval24h = setInterval(async () => {
       const fresh24h = await fetchDefiLlama24hData();
       if (fresh24h.size > 0) {
         defiLlama24hRef.current = fresh24h;
         lastDefiLlamaFetchRef.current = Date.now();
       }
     }, DEFI_LLAMA_REFRESH_MS);
+
+    // Refresh DeFiLlama current prices (gap-fill) every 60s
+    const intervalCurrent = setInterval(async () => {
+      const current = await fetchDefiLlamaCurrentPrices();
+      if (current.size === 0) return;
+
+      const now = Date.now();
+      let hasGapFills = false;
+
+      const recordHistory = (symbol: string, price: number) => {
+        if (price <= 0) return;
+        const history = priceHistoryRef.current.get(symbol) || [];
+        history.push({ price, timestamp: now });
+        const cutoff = now - 24 * 60 * 60 * 1000;
+        priceHistoryRef.current.set(symbol, history.filter((h) => h.timestamp > cutoff));
+      };
+
+      current.forEach((price, symbol) => {
+        const existing = pricesRef.current.get(symbol);
+        if (!existing) return;
+        if (existing.current_price > 0) return;
+
+        const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || existing.circulating_supply;
+        pricesRef.current.set(symbol, {
+          ...existing,
+          current_price: price,
+          high_24h: price,
+          low_24h: price,
+          market_cap: price * supply,
+          lastUpdate: now,
+          source: "DeFiLlama",
+        });
+        recordHistory(symbol, price);
+        hasGapFills = true;
+      });
+
+      if (hasGapFills) {
+        const priceArray = Array.from(pricesRef.current.values()).sort(
+          (a, b) => (b.market_cap || 0) - (a.market_cap || 0)
+        );
+        setPrices(priceArray);
+      }
+    }, 60000);
     
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval24h);
+      clearInterval(intervalCurrent);
+    };
   }, []);
 
   // Save prices to ZK-encrypted storage (throttled)
