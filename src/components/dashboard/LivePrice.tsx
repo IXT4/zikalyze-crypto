@@ -55,7 +55,7 @@ const usePriceDirection = (value: number) => {
   return { direction, key };
 };
 
-// Simple price display without animations
+// Subtle fade price display
 const PriceDisplay = ({ 
   formattedPrice, 
   className 
@@ -63,9 +63,29 @@ const PriceDisplay = ({
   formattedPrice: string;
   className?: string;
 }) => {
+  const [displayPrice, setDisplayPrice] = useState(formattedPrice);
+  const [isFading, setIsFading] = useState(false);
+
+  useEffect(() => {
+    if (formattedPrice !== displayPrice) {
+      setIsFading(true);
+      const timeout = setTimeout(() => {
+        setDisplayPrice(formattedPrice);
+        setIsFading(false);
+      }, 150);
+      return () => clearTimeout(timeout);
+    }
+  }, [formattedPrice, displayPrice]);
+
   return (
-    <span className={cn("tabular-nums", className)}>
-      {formattedPrice}
+    <span 
+      className={cn(
+        "tabular-nums transition-opacity duration-150",
+        isFading ? "opacity-70" : "opacity-100",
+        className
+      )}
+    >
+      {displayPrice}
     </span>
   );
 };
