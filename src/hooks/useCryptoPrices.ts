@@ -96,7 +96,9 @@ const LIVE_PRICES_CACHE_KEY = "zk_live_prices_v2";
 const PRICE_HISTORY_KEY = "zk_price_history_v1";
 
 export const useCryptoPrices = () => {
-  const [prices, setPrices] = useState<CryptoPrice[]>(() => buildInitialPrices());
+  // Initialize with decentralized token registry
+  const initialPrices = buildInitialPrices();
+  const [prices, setPrices] = useState<CryptoPrice[]>(initialPrices);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectedSources, setConnectedSources] = useState<string[]>([]);
@@ -105,7 +107,11 @@ export const useCryptoPrices = () => {
   // Decentralized Oracle Integration - Pyth Primary, DIA/Redstone Fallback
   const oracle = useOraclePrices([]);
   
-  const pricesRef = useRef<Map<string, CryptoPrice>>(new Map());
+  // Initialize pricesRef Map from initial prices
+  const pricesRef = useRef<Map<string, CryptoPrice>>(new Map(
+    initialPrices.map(p => [p.symbol, p])
+  ));
+  
   const lastUpdateTimeRef = useRef<Map<string, number>>(new Map());
   const pricesInitializedRef = useRef(false);
   const oracleUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
