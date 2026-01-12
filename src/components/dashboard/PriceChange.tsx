@@ -1,11 +1,111 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📈 PriceChange — CoinMarketCap-Style Price Movement Display
+// 📈 PriceChange — Smooth Animated Percentage Change Display
 // ═══════════════════════════════════════════════════════════════════════════════
-// Decentralized price data with CMC-style visual feedback
+// Decentralized price data with smooth tick-by-tick animations
 // ═══════════════════════════════════════════════════════════════════════════════
 
+import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { ChevronUp, ChevronDown, Minus } from "lucide-react";
+
+// Smooth number animation hook
+const useAnimatedValue = (targetValue: number, duration: number = 300) => {
+  const [displayValue, setDisplayValue] = useState(targetValue);
+  const animationRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const startValueRef = useRef<number>(targetValue);
+  const isFirstRender = useRef(true);
+
+  const animate = useCallback((timestamp: number) => {
+    if (!startTimeRef.current) startTimeRef.current = timestamp;
+    
+    const elapsed = timestamp - startTimeRef.current;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Ease-out cubic for smooth deceleration
+    const easeOut = 1 - Math.pow(1 - progress, 3);
+    
+    const currentValue = startValueRef.current + 
+      (targetValue - startValueRef.current) * easeOut;
+    
+    setDisplayValue(currentValue);
+    
+    if (progress < 1) {
+      animationRef.current = requestAnimationFrame(animate);
+    }
+  }, [targetValue, duration]);
+
+  useEffect(() => {
+    // Skip animation on first render
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      setDisplayValue(targetValue);
+      return;
+    }
+    
+    // Start animation from current display value
+    startValueRef.current = displayValue;
+    startTimeRef.current = 0;
+    
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    
+    animationRef.current = requestAnimationFrame(animate);
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [targetValue, animate]);
+
+  return displayValue;
+};
+
+// Flash effect hook for direction changes
+const useFlashEffect = (value: number) => {
+  const [flashClass, setFlashClass] = useState<string | null>(null);
+  const prevValueRef = useRef<number | undefined>(undefined);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      prevValueRef.current = value;
+      return;
+    }
+
+    if (prevValueRef.current === undefined || value === prevValueRef.current) return;
+
+    // Detect direction change or significant movement
+    const prevPositive = prevValueRef.current > 0;
+    const currPositive = value > 0;
+    const directionChanged = prevPositive !== currPositive;
+    const significantChange = Math.abs(value - prevValueRef.current) > 0.1;
+
+    if (directionChanged || significantChange) {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      setFlashClass(value > prevValueRef.current ? "change-flash-up" : "change-flash-down");
+
+      timeoutRef.current = setTimeout(() => {
+        setFlashClass(null);
+      }, 600);
+    }
+
+    prevValueRef.current = value;
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [value]);
+
+  return flashClass;
+};
 
 interface PriceChangeProps {
   value: number;
@@ -24,10 +124,12 @@ export const PriceChange = ({
   animated = true,
   className,
 }: PriceChangeProps) => {
-  const isPositive = value > 0;
-  const isNegative = value < 0;
-  const isNeutral = value === 0;
-  const absValue = Math.abs(value);
+  const animatedValue = useAnimatedValue(value, 250);
+  const flashClass = useFlashEffect(value);
+  
+  const isPositive = animatedValue > 0;
+  const isNegative = animatedValue < 0;
+  const absValue = Math.abs(animatedValue);
   
   // Size configurations
   const sizeConfig = {
@@ -82,7 +184,7 @@ export const PriceChange = ({
   return (
     <div
       className={cn(
-        "inline-flex items-center font-medium transition-all duration-300",
+        "inline-flex items-center font-medium transition-all duration-200",
         config.gap,
         config.text,
         colors.text,
@@ -93,15 +195,14 @@ export const PriceChange = ({
           "border",
           colors.border,
         ],
-        animated && isPositive && "animate-bounce-subtle-up",
-        animated && isNegative && "animate-bounce-subtle-down",
+        flashClass,
         className
       )}
     >
       {showIcon && (
         <span
           className={cn(
-            "inline-flex items-center justify-center rounded-full",
+            "inline-flex items-center justify-center rounded-full transition-transform duration-200",
             colors.iconBg,
             size === "sm" ? "p-0.5" : "p-1"
           )}
@@ -125,15 +226,19 @@ export const PriceChangeCompact = ({
   value: number;
   className?: string;
 }) => {
-  const isPositive = value > 0;
-  const isNegative = value < 0;
-  const absValue = Math.abs(value);
+  const animatedValue = useAnimatedValue(value, 200);
+  const flashClass = useFlashEffect(value);
+  
+  const isPositive = animatedValue > 0;
+  const isNegative = animatedValue < 0;
+  const absValue = Math.abs(animatedValue);
   
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-0.5 text-sm font-medium tabular-nums transition-colors",
+        "inline-flex items-center gap-0.5 text-sm font-medium tabular-nums transition-colors duration-150",
         isPositive ? "text-success" : isNegative ? "text-destructive" : "text-muted-foreground",
+        flashClass,
         className
       )}
     >
@@ -159,9 +264,12 @@ export const PriceChangeHero = ({
   label?: string;
   className?: string;
 }) => {
-  const isPositive = value > 0;
-  const isNegative = value < 0;
-  const absValue = Math.abs(value);
+  const animatedValue = useAnimatedValue(value, 350);
+  const flashClass = useFlashEffect(value);
+  
+  const isPositive = animatedValue > 0;
+  const isNegative = animatedValue < 0;
+  const absValue = Math.abs(animatedValue);
   
   const colors = isPositive
     ? "text-success bg-success/10 border-success/20"
@@ -174,8 +282,9 @@ export const PriceChangeHero = ({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2 rounded-xl px-4 py-2 border font-semibold transition-all",
+        "inline-flex items-center gap-2 rounded-xl px-4 py-2 border font-semibold transition-all duration-200",
         colors,
+        flashClass,
         className
       )}
     >
