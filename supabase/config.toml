@@ -26,6 +26,3 @@ verify_jwt = false
 
 [functions.manage-sessions]
 verify_jwt = false
-
-[functions.crypto-candles]
-verify_jwt = false
