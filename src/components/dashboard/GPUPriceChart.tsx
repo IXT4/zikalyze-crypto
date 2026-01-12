@@ -101,29 +101,30 @@ const TimeframeSelector = memo(({ selected, onSelect }: TimeframeSelectorProps) 
 
 TimeframeSelector.displayName = "TimeframeSelector";
 
-// Crypto selector dropdown component
+// Crypto selector dropdown component - uses live WebSocket prices
 const CryptoSelector = memo(({ 
   crypto, 
-  prices, 
   onSelect 
 }: { 
   crypto: string; 
-  prices: CryptoPrice[];
   onSelect: (symbol: string) => void;
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   
+  // Use live prices from WebSocket for real-time updates
+  const { prices: livePrices } = useCryptoPrices();
+  
   const filteredPrices = useMemo(() => {
-    if (!search) return prices.slice(0, 100);
+    if (!search) return livePrices.slice(0, 100);
     const query = search.toLowerCase();
-    return prices.filter(p => 
+    return livePrices.filter(p => 
       p.symbol.toLowerCase().includes(query) || 
       p.name.toLowerCase().includes(query)
     ).slice(0, 50);
-  }, [prices, search]);
+  }, [livePrices, search]);
   
-  const selectedCrypto = prices.find(p => p.symbol.toUpperCase() === crypto.toUpperCase());
+  const selectedCrypto = livePrices.find(p => p.symbol.toUpperCase() === crypto.toUpperCase());
   
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -392,10 +393,9 @@ const GPUPriceChart = ({
       <div className="p-4 sm:p-6 pb-0">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2 flex-wrap">
-            {onSelectCrypto && prices.length > 0 ? (
+            {onSelectCrypto ? (
               <CryptoSelector 
                 crypto={crypto} 
-                prices={prices} 
                 onSelect={onSelectCrypto} 
               />
             ) : (
