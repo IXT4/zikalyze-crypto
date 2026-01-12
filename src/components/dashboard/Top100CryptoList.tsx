@@ -361,7 +361,8 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                             ? "price-flash-down" 
                             : ""
                       }`}>
-                        <LivePriceCompact value={crypto.current_price} />
+                        {/* Use WebSocket price if available, fallback to prop price */}
+                        <LivePriceCompact value={websocket.getPrice(crypto.symbol.toUpperCase())?.price || crypto.current_price} />
                       </div>
                     </td>
                     <td className="py-3 text-center hidden xs:table-cell">
