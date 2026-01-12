@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useGlobalPriceWebSocket } from "./useGlobalPriceWebSocket";
 
 const MAX_HISTORY_POINTS = 20;
-const MIN_UPDATE_INTERVAL = 1500; // 1.5 seconds between history points
+const MIN_UPDATE_INTERVAL = 1000; // 1 second between history points
 
 // Use same cache as decentralized chart data for consistency
 const TICK_CACHE_PREFIX = "zikalyze_ticks_v2_";
@@ -19,143 +19,191 @@ interface CachedTickData {
   timestamp: number;
 }
 
-// Load cached ticks from chart data
+// Load cached ticks from chart data and sample for sparkline
 const loadCachedTicks = (symbol: string): number[] => {
   try {
     const cached = localStorage.getItem(`${TICK_CACHE_PREFIX}${symbol.toUpperCase()}`);
     if (!cached) return [];
+    
     const data: CachedTickData = JSON.parse(cached);
     if (Date.now() - data.timestamp > TICK_CACHE_TTL) {
       return [];
     }
-    // Return last MAX_HISTORY_POINTS prices from cached ticks
-    const prices = data.ticks
+    
+    // Sort and get recent prices
+    const sortedTicks = data.ticks
       .sort((a, b) => a.timestamp - b.timestamp)
-      .slice(-MAX_HISTORY_POINTS * 3) // Get more data, then sample
-      .map(t => t.price);
+      .slice(-100); // Get last 100 ticks
+    
+    if (sortedTicks.length === 0) return [];
+    
+    const prices = sortedTicks.map(t => t.price);
     
     // Sample evenly to get MAX_HISTORY_POINTS
     if (prices.length <= MAX_HISTORY_POINTS) return prices;
     
-    const step = Math.floor(prices.length / MAX_HISTORY_POINTS);
+    const step = Math.max(1, Math.floor(prices.length / MAX_HISTORY_POINTS));
     const sampled: number[] = [];
+    
     for (let i = 0; i < prices.length; i += step) {
       sampled.push(prices[i]);
-      if (sampled.length >= MAX_HISTORY_POINTS) break;
+      if (sampled.length >= MAX_HISTORY_POINTS - 1) break;
     }
-    // Always include the last price
-    if (sampled[sampled.length - 1] !== prices[prices.length - 1]) {
-      sampled[sampled.length - 1] = prices[prices.length - 1];
-    }
+    
+    // Always include the last price for accuracy
+    sampled.push(prices[prices.length - 1]);
+    
     return sampled;
   } catch {
     return [];
   }
 };
 
-// Global price history storage
-const globalPriceHistory: Map<string, number[]> = new Map();
-const lastUpdateTime: Map<string, number> = new Map();
-let initialized = false;
-
-export function usePriceHistory(symbols: string[]) {
-  const [history, setHistory] = useState<Map<string, number[]>>(new Map());
-  const { prices, connected } = useGlobalPriceWebSocket(symbols);
-  const symbolsKey = useMemo(() => symbols.join(","), [symbols]);
+// Global singleton for price history across all components
+class PriceHistoryManager {
+  private history: Map<string, number[]> = new Map();
+  private lastUpdate: Map<string, number> = new Map();
+  private listeners: Set<() => void> = new Set();
+  private initialized: Set<string> = new Set();
   
-  // Initialize from cache on first load
-  useEffect(() => {
-    if (!initialized && symbols.length > 0) {
-      symbols.forEach(symbol => {
-        const upperSymbol = symbol.toUpperCase();
-        if (!globalPriceHistory.has(upperSymbol)) {
-          const cached = loadCachedTicks(upperSymbol);
-          if (cached.length > 0) {
-            globalPriceHistory.set(upperSymbol, cached);
-          } else {
-            globalPriceHistory.set(upperSymbol, []);
-          }
-          lastUpdateTime.set(upperSymbol, 0);
-        }
-      });
-      initialized = true;
-      setHistory(new Map(globalPriceHistory));
-    }
-  }, [symbolsKey]);
-  
-  // Update history when prices change from WebSocket
-  useEffect(() => {
-    if (!connected || prices.size === 0) return;
+  getHistory(symbol: string): number[] {
+    const upperSymbol = symbol.toUpperCase();
     
-    const now = Date.now();
-    let hasUpdates = false;
-    
-    prices.forEach((priceData, symbol) => {
-      const upperSymbol = symbol.toUpperCase();
-      
-      // Initialize if needed
-      if (!globalPriceHistory.has(upperSymbol)) {
-        const cached = loadCachedTicks(upperSymbol);
-        globalPriceHistory.set(upperSymbol, cached.length > 0 ? cached : []);
-        lastUpdateTime.set(upperSymbol, 0);
+    // Initialize from cache if not done
+    if (!this.initialized.has(upperSymbol)) {
+      this.initialized.add(upperSymbol);
+      const cached = loadCachedTicks(upperSymbol);
+      if (cached.length > 0) {
+        this.history.set(upperSymbol, cached);
       }
+    }
+    
+    return this.history.get(upperSymbol) || [];
+  }
+  
+  updatePrice(symbol: string, price: number): boolean {
+    const upperSymbol = symbol.toUpperCase();
+    const now = Date.now();
+    const lastUpdate = this.lastUpdate.get(upperSymbol) || 0;
+    
+    // Throttle updates
+    if (now - lastUpdate < MIN_UPDATE_INTERVAL) return false;
+    
+    // Initialize if needed
+    if (!this.initialized.has(upperSymbol)) {
+      this.initialized.add(upperSymbol);
+      const cached = loadCachedTicks(upperSymbol);
+      this.history.set(upperSymbol, cached.length > 0 ? cached : []);
+    }
+    
+    const current = this.history.get(upperSymbol) || [];
+    const lastPrice = current[current.length - 1];
+    
+    // Only add if price changed meaningfully (0.005%)
+    if (lastPrice !== undefined && Math.abs(price - lastPrice) / lastPrice < 0.00005) {
+      return false;
+    }
+    
+    const newHistory = [...current, price];
+    if (newHistory.length > MAX_HISTORY_POINTS) {
+      newHistory.shift();
+    }
+    
+    this.history.set(upperSymbol, newHistory);
+    this.lastUpdate.set(upperSymbol, now);
+    this.notifyListeners();
+    
+    return true;
+  }
+  
+  refreshFromCache(symbols: string[]) {
+    let hasChanges = false;
+    
+    symbols.forEach(symbol => {
+      const upperSymbol = symbol.toUpperCase();
+      const cached = loadCachedTicks(upperSymbol);
+      const current = this.history.get(upperSymbol) || [];
       
-      const lastUpdate = lastUpdateTime.get(upperSymbol) || 0;
-      
-      // Only add point if enough time has passed
-      if (now - lastUpdate >= MIN_UPDATE_INTERVAL) {
-        const historyArray = globalPriceHistory.get(upperSymbol) || [];
-        const lastPrice = historyArray[historyArray.length - 1];
-        
-        // Only add if price changed meaningfully (0.01%)
-        if (lastPrice === undefined || Math.abs(priceData.price - lastPrice) / lastPrice > 0.0001) {
-          const newHistory = [...historyArray, priceData.price];
-          
-          // Trim to max points
-          if (newHistory.length > MAX_HISTORY_POINTS) {
-            newHistory.shift();
-          }
-          
-          globalPriceHistory.set(upperSymbol, newHistory);
-          lastUpdateTime.set(upperSymbol, now);
-          hasUpdates = true;
-        }
+      // Use cache if it has more/newer data
+      if (cached.length > current.length) {
+        this.history.set(upperSymbol, cached);
+        this.initialized.add(upperSymbol);
+        hasChanges = true;
       }
     });
     
-    if (hasUpdates) {
-      setHistory(new Map(globalPriceHistory));
+    if (hasChanges) {
+      this.notifyListeners();
     }
+  }
+  
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  
+  private notifyListeners() {
+    this.listeners.forEach(l => l());
+  }
+  
+  getAllHistory(): Map<string, number[]> {
+    return new Map(this.history);
+  }
+}
+
+// Singleton instance
+const priceHistoryManager = new PriceHistoryManager();
+
+export function usePriceHistory(symbols: string[]) {
+  const [version, setVersion] = useState(0);
+  const { prices, connected } = useGlobalPriceWebSocket(symbols);
+  const symbolsKey = useMemo(() => symbols.map(s => s.toUpperCase()).join(","), [symbols]);
+  const mountedRef = useRef(true);
+  
+  // Subscribe to manager updates
+  useEffect(() => {
+    mountedRef.current = true;
+    
+    const unsubscribe = priceHistoryManager.subscribe(() => {
+      if (mountedRef.current) {
+        setVersion(v => v + 1);
+      }
+    });
+    
+    // Initial load from cache
+    priceHistoryManager.refreshFromCache(symbols);
+    
+    return () => {
+      mountedRef.current = false;
+      unsubscribe();
+    };
+  }, [symbolsKey]);
+  
+  // Process WebSocket price updates
+  useEffect(() => {
+    if (!connected || prices.size === 0) return;
+    
+    prices.forEach((priceData, symbol) => {
+      priceHistoryManager.updatePrice(symbol, priceData.price);
+    });
   }, [prices, connected]);
   
-  // Reload from cache periodically to get chart data
+  // Periodically refresh from chart cache
   useEffect(() => {
     const interval = setInterval(() => {
-      let hasUpdates = false;
-      
-      symbols.forEach(symbol => {
-        const upperSymbol = symbol.toUpperCase();
-        const cached = loadCachedTicks(upperSymbol);
-        const current = globalPriceHistory.get(upperSymbol) || [];
-        
-        // If cache has more data, use it
-        if (cached.length > current.length) {
-          globalPriceHistory.set(upperSymbol, cached);
-          hasUpdates = true;
-        }
-      });
-      
-      if (hasUpdates) {
-        setHistory(new Map(globalPriceHistory));
-      }
-    }, 10000); // Reload cache every 10 seconds
+      priceHistoryManager.refreshFromCache(symbols);
+    }, 5000); // Refresh every 5 seconds
     
     return () => clearInterval(interval);
   }, [symbolsKey]);
   
   const getHistory = useCallback((symbol: string): number[] => {
-    return globalPriceHistory.get(symbol.toUpperCase()) || [];
-  }, [history]);
+    return priceHistoryManager.getHistory(symbol);
+  }, [version]);
+  
+  const history = useMemo(() => {
+    return priceHistoryManager.getAllHistory();
+  }, [version]);
   
   return { history, getHistory };
 }
