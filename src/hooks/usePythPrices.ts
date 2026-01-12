@@ -175,6 +175,15 @@ const saveCache = (prices: Map<string, PythPriceData>) => {
   } catch {}
 };
 
+// Priority feeds for SSE streaming (most important assets - limited to avoid URL length issues)
+const PRIORITY_FEEDS = [
+  "BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "BNB/USD",
+  "ADA/USD", "DOGE/USD", "TRX/USD", "AVAX/USD", "TON/USD",
+  "LINK/USD", "DOT/USD", "MATIC/USD", "LTC/USD", "SHIB/USD",
+  "ATOM/USD", "UNI/USD", "XLM/USD", "NEAR/USD", "ARB/USD",
+  "OP/USD", "APT/USD", "SUI/USD", "FIL/USD", "INJ/USD",
+];
+
 export const usePythPrices = (_symbols: string[] = []) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -189,19 +198,46 @@ export const usePythPrices = (_symbols: string[] = []) => {
   const endpointIndexRef = useRef(0);
   const reconnectAttemptsRef = useRef(0);
   const lastSaveRef = useRef(0);
+  const restFetchIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const getPrice = useCallback((symbol: string): PythPriceData | undefined => {
     const normalizedSymbol = symbol.toUpperCase().replace(/USD$/, "") + "/USD";
     return pricesMapRef.current.get(normalizedSymbol);
   }, []);
 
-  // Build SSE URL with all feed IDs (proper format with 0x prefix)
+  // Build SSE URL with priority feed IDs only (to avoid URL length issues)
   const buildSSEUrl = useCallback((endpointIndex: number) => {
     const baseUrl = HERMES_ENDPOINTS[endpointIndex % HERMES_ENDPOINTS.length];
-    const feedIds = Object.values(PYTH_FEED_IDS);
-    // Build query string manually to avoid encoding issues
+    const feedIds = PRIORITY_FEEDS
+      .filter(symbol => PYTH_FEED_IDS[symbol])
+      .map(symbol => PYTH_FEED_IDS[symbol]);
     const idsParams = feedIds.map(id => `ids[]=0x${id}`).join("&");
     return `${baseUrl}/v2/updates/price/stream?${idsParams}&parsed=true`;
+  }, []);
+
+  // Parse price data from Pyth response
+  const parsePriceData = useCallback((feed: any): { symbol: string; data: PythPriceData } | null => {
+    const feedId = feed.id?.replace(/^0x/, "");
+    const symbol = FEED_ID_TO_SYMBOL[feedId];
+
+    if (symbol && feed.price) {
+      const price = parseFloat(feed.price.price) * Math.pow(10, feed.price.expo);
+      const confidence = parseFloat(feed.price.conf) * Math.pow(10, feed.price.expo);
+
+      if (price > 0) {
+        return {
+          symbol,
+          data: {
+            symbol: symbol.replace("/USD", ""),
+            price,
+            confidence,
+            publishTime: feed.price.publish_time * 1000,
+            source: "Pyth",
+          }
+        };
+      }
+    }
+    return null;
   }, []);
 
   // Parse SSE message and update prices
@@ -209,28 +245,14 @@ export const usePythPrices = (_symbols: string[] = []) => {
     try {
       const data = JSON.parse(event.data);
       
-      // Handle parsed format from SSE
       if (data.parsed && Array.isArray(data.parsed)) {
         let updated = false;
         
         data.parsed.forEach((feed: any) => {
-          const feedId = feed.id?.replace(/^0x/, "");
-          const symbol = FEED_ID_TO_SYMBOL[feedId];
-
-          if (symbol && feed.price) {
-            const price = parseFloat(feed.price.price) * Math.pow(10, feed.price.expo);
-            const confidence = parseFloat(feed.price.conf) * Math.pow(10, feed.price.expo);
-
-            if (price > 0) {
-              pricesMapRef.current.set(symbol, {
-                symbol: symbol.replace("/USD", ""),
-                price,
-                confidence,
-                publishTime: feed.price.publish_time * 1000,
-                source: "Pyth",
-              });
-              updated = true;
-            }
+          const result = parsePriceData(feed);
+          if (result) {
+            pricesMapRef.current.set(result.symbol, result.data);
+            updated = true;
           }
         });
 
@@ -242,7 +264,6 @@ export const usePythPrices = (_symbols: string[] = []) => {
           setError(null);
           reconnectAttemptsRef.current = 0;
 
-          // Save cache every 10 seconds
           const now = Date.now();
           if (now - lastSaveRef.current > 10000) {
             saveCache(pricesMapRef.current);
@@ -250,23 +271,70 @@ export const usePythPrices = (_symbols: string[] = []) => {
           }
         }
       }
-    } catch (e) {
-      // Silently ignore parse errors for individual messages
+    } catch {
+      // Silently ignore parse errors
     }
-  }, []);
+  }, [parsePriceData]);
 
-  // Connect to SSE stream
+  // Fetch remaining feeds via REST API in batches
+  const fetchRemainingFeeds = useCallback(async () => {
+    if (!isMountedRef.current) return;
+
+    const allSymbols = Object.keys(PYTH_FEED_IDS);
+    const remainingSymbols = allSymbols.filter(s => !PRIORITY_FEEDS.includes(s));
+    
+    // Batch into groups of 30 (safe URL length)
+    const batchSize = 30;
+    for (let i = 0; i < remainingSymbols.length; i += batchSize) {
+      if (!isMountedRef.current) break;
+      
+      const batch = remainingSymbols.slice(i, i + batchSize);
+      const feedIds = batch.map(s => PYTH_FEED_IDS[s]).filter(Boolean);
+      const idsParams = feedIds.map(id => `ids[]=0x${id}`).join("&");
+      
+      try {
+        const response = await fetch(
+          `${HERMES_ENDPOINTS[0]}/v2/updates/price/latest?${idsParams}`,
+          { signal: AbortSignal.timeout(15000) }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.parsed && Array.isArray(data.parsed)) {
+            data.parsed.forEach((feed: any) => {
+              const result = parsePriceData(feed);
+              if (result) {
+                pricesMapRef.current.set(result.symbol, result.data);
+              }
+            });
+          }
+        }
+      } catch {
+        // Silently handle batch errors
+      }
+      
+      // Small delay between batches
+      if (i + batchSize < remainingSymbols.length) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+
+    if (isMountedRef.current && pricesMapRef.current.size > 0) {
+      setPrices(new Map(pricesMapRef.current));
+      saveCache(pricesMapRef.current);
+    }
+  }, [parsePriceData]);
+
+  // Connect to SSE stream for priority feeds
   const connectSSE = useCallback(() => {
     if (!isMountedRef.current) return;
     
-    // Clean up existing connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
 
     const url = buildSSEUrl(endpointIndexRef.current);
-    // Only log on first connection or endpoint change
     if (reconnectAttemptsRef.current === 0) {
       console.log("[Pyth SSE] Connecting to:", HERMES_ENDPOINTS[endpointIndexRef.current % HERMES_ENDPOINTS.length]);
     }
@@ -282,27 +350,25 @@ export const usePythPrices = (_symbols: string[] = []) => {
           setIsConnecting(false);
           setError(null);
           reconnectAttemptsRef.current = 0;
+          // Fetch remaining feeds via REST after SSE connects
+          fetchRemainingFeeds();
         }
       };
 
       eventSource.onmessage = handleSSEMessage;
 
       eventSource.onerror = () => {
-        // Silently handle - avoid console spam
         eventSource.close();
         eventSourceRef.current = null;
         
         if (isMountedRef.current) {
-          // Keep showing as connected if we have cached data
           if (pricesMapRef.current.size === 0) {
             setIsConnected(false);
           }
           
-          // Exponential backoff with max 60 seconds
           reconnectAttemptsRef.current++;
           const delay = Math.min(2000 * Math.pow(1.5, reconnectAttemptsRef.current), 60000);
           
-          // Try next endpoint after 3 failed attempts
           if (reconnectAttemptsRef.current % 3 === 0) {
             endpointIndexRef.current++;
             console.log("[Pyth SSE] Switching to next endpoint...");
@@ -312,69 +378,64 @@ export const usePythPrices = (_symbols: string[] = []) => {
         }
       };
     } catch (e: any) {
-      // Silently handle errors
       if (isMountedRef.current) {
         setError(e.message);
-        // Retry after delay
         reconnectTimeoutRef.current = setTimeout(connectSSE, 10000);
       }
     }
-  }, [buildSSEUrl, handleSSEMessage]);
+  }, [buildSSEUrl, handleSSEMessage, fetchRemainingFeeds]);
 
-  // Initial REST fetch for immediate data while SSE connects
+  // Initial REST fetch for immediate data while SSE connects (batched)
   const fetchInitialPrices = useCallback(async () => {
-    try {
-      const feedIds = Object.values(PYTH_FEED_IDS);
-      // Build query string with 0x prefix
+    const allSymbols = Object.keys(PYTH_FEED_IDS);
+    const batchSize = 30;
+    let totalFetched = 0;
+
+    for (let i = 0; i < allSymbols.length; i += batchSize) {
+      if (!isMountedRef.current) break;
+
+      const batch = allSymbols.slice(i, i + batchSize);
+      const feedIds = batch.map(s => PYTH_FEED_IDS[s]).filter(Boolean);
       const idsParams = feedIds.map(id => `ids[]=0x${id}`).join("&");
-      
-      const response = await fetch(
-        `${HERMES_ENDPOINTS[0]}/v2/updates/price/latest?${idsParams}`,
-        { signal: AbortSignal.timeout(10000) }
-      );
 
-      if (!response.ok) {
-        console.log("[Pyth] REST API error:", response.status);
-        return;
-      }
+      try {
+        const response = await fetch(
+          `${HERMES_ENDPOINTS[0]}/v2/updates/price/latest?${idsParams}`,
+          { signal: AbortSignal.timeout(10000) }
+        );
 
-      const data = await response.json();
+        if (response.ok) {
+          const data = await response.json();
 
-      if (data.parsed && Array.isArray(data.parsed)) {
-        data.parsed.forEach((feed: any) => {
-          const feedId = feed.id?.replace(/^0x/, "");
-          const symbol = FEED_ID_TO_SYMBOL[feedId];
-
-          if (symbol && feed.price) {
-            const price = parseFloat(feed.price.price) * Math.pow(10, feed.price.expo);
-            const confidence = parseFloat(feed.price.conf) * Math.pow(10, feed.price.expo);
-
-            if (price > 0) {
-              pricesMapRef.current.set(symbol, {
-                symbol: symbol.replace("/USD", ""),
-                price,
-                confidence,
-                publishTime: feed.price.publish_time * 1000,
-                source: "Pyth",
-              });
-            }
+          if (data.parsed && Array.isArray(data.parsed)) {
+            data.parsed.forEach((feed: any) => {
+              const result = parsePriceData(feed);
+              if (result) {
+                pricesMapRef.current.set(result.symbol, result.data);
+                totalFetched++;
+              }
+            });
           }
-        });
-
-        if (isMountedRef.current && pricesMapRef.current.size > 0) {
-          saveCache(pricesMapRef.current);
-          setPrices(new Map(pricesMapRef.current));
-          setLastUpdateTime(Date.now());
-          setIsConnected(true);
-          setIsConnecting(false);
-          console.log(`[Pyth] Fetched ${pricesMapRef.current.size} prices via REST`);
         }
+      } catch {
+        // Continue with next batch
       }
-    } catch (e: any) {
-      console.log("[Pyth] REST fetch error:", e.message);
-      // Silently fail - SSE will provide data
+
+      // Small delay between batches
+      if (i + batchSize < allSymbols.length) {
+        await new Promise(r => setTimeout(r, 200));
+      }
     }
-  }, []);
+
+    if (isMountedRef.current && pricesMapRef.current.size > 0) {
+      saveCache(pricesMapRef.current);
+      setPrices(new Map(pricesMapRef.current));
+      setLastUpdateTime(Date.now());
+      setIsConnected(true);
+      setIsConnecting(false);
+      console.log(`[Pyth] Fetched ${totalFetched} prices via REST`);
+    }
+  }, [parsePriceData]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -392,8 +453,13 @@ export const usePythPrices = (_symbols: string[] = []) => {
     // Fetch initial data for quick display
     fetchInitialPrices();
 
-    // Start SSE connection for real-time updates
+    // Start SSE connection for real-time updates on priority feeds
     connectSSE();
+
+    // Periodically refresh remaining feeds via REST (every 30s)
+    restFetchIntervalRef.current = setInterval(() => {
+      fetchRemainingFeeds();
+    }, 30000);
 
     return () => {
       isMountedRef.current = false;
@@ -404,8 +470,11 @@ export const usePythPrices = (_symbols: string[] = []) => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+      if (restFetchIntervalRef.current) {
+        clearInterval(restFetchIntervalRef.current);
+      }
     };
-  }, [connectSSE, fetchInitialPrices]);
+  }, [connectSSE, fetchInitialPrices, fetchRemainingFeeds]);
 
   return {
     prices,
