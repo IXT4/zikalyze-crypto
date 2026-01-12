@@ -243,7 +243,12 @@ const GPUPriceChart = ({
   
   const displayChange = change24h ?? priceChange;
   const isPositive = displayChange >= 0;
-  const currentPrice = chartData.length > 0 ? chartData[chartData.length - 1].price : 0;
+  
+  // Use chart data price, with fallback to live prices for immediate display
+  const liveCryptoPrice = prices.find(p => p.symbol.toUpperCase() === crypto.toUpperCase());
+  const currentPrice = chartData.length > 0 
+    ? chartData[chartData.length - 1].price 
+    : (liveCryptoPrice?.current_price ?? 0);
   
   // Calculate nearest alert target
   const nearestAlert = activeAlerts.length > 0 
