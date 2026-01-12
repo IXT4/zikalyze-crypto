@@ -55,23 +55,38 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
     );
   }, [prices, searchQuery]);
 
+  // Track WebSocket update timestamps for "live" indicator
+  const [lastWsUpdate, setLastWsUpdate] = useState<number>(0);
+  const wsUpdateCountRef = useRef(0);
+
   // Detect price changes and trigger flash animations
   useEffect(() => {
     if (prices.length === 0) return;
 
     const newFlashes = new Map<string, PriceFlash>();
+    let hasAnyChange = false;
     
     prices.forEach((crypto) => {
       const prevPrice = prevPricesRef.current.get(crypto.symbol);
       if (prevPrice !== undefined && prevPrice !== crypto.current_price) {
-        if (crypto.current_price > prevPrice) {
-          newFlashes.set(crypto.symbol, "up");
-        } else if (crypto.current_price < prevPrice) {
-          newFlashes.set(crypto.symbol, "down");
+        // Only flash on meaningful changes (0.005% threshold for WebSocket sensitivity)
+        const changePercent = Math.abs((crypto.current_price - prevPrice) / prevPrice) * 100;
+        if (changePercent >= 0.005) {
+          if (crypto.current_price > prevPrice) {
+            newFlashes.set(crypto.symbol, "up");
+          } else {
+            newFlashes.set(crypto.symbol, "down");
+          }
+          hasAnyChange = true;
         }
       }
       prevPricesRef.current.set(crypto.symbol, crypto.current_price);
     });
+
+    if (hasAnyChange) {
+      setLastWsUpdate(Date.now());
+      wsUpdateCountRef.current++;
+    }
 
     if (newFlashes.size > 0) {
       setPriceFlashes(prev => {
@@ -80,14 +95,14 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
         return merged;
       });
 
-      // Clear flashes after animation
+      // Clear flashes after animation completes
       setTimeout(() => {
         setPriceFlashes(prev => {
           const updated = new Map(prev);
           newFlashes.forEach((_, key) => updated.delete(key));
           return updated;
         });
-      }, 600);
+      }, 700);
     }
   }, [prices]);
 
@@ -280,25 +295,42 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                 const hasAlert = alerts.some(a => a.symbol === crypto.symbol.toUpperCase());
                 const flash = priceFlashes.get(crypto.symbol);
                 
+                // Row flash classes for WebSocket updates
+                const rowFlashClass = flash === "up" 
+                  ? "animate-row-flash-up" 
+                  : flash === "down" 
+                    ? "animate-row-flash-down" 
+                    : "";
+                
                 return (
                   <tr
                     key={crypto.id}
                     onClick={() => onSelect(crypto.symbol.toUpperCase())}
-                    className={`border-b border-border/50 cursor-pointer transition-colors hover:bg-secondary/50 ${
+                    className={`border-b border-border/50 cursor-pointer transition-all duration-200 hover:bg-secondary/50 ${
                       isSelected ? "bg-primary/10" : ""
-                    }`}
+                    } ${rowFlashClass}`}
                   >
                     <td className="py-3 text-sm text-muted-foreground">{index + 1}</td>
                     <td className="py-3">
                       <div className="flex items-center gap-3">
-                        <img 
-                          src={crypto.image} 
-                          alt={crypto.name}
-                          className="w-10 h-10 rounded-full shrink-0"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
+                        <div className="relative">
+                          <img 
+                            src={crypto.image} 
+                            alt={crypto.name}
+                            className={`w-10 h-10 rounded-full shrink-0 transition-transform duration-200 ${
+                              flash ? "scale-110" : ""
+                            }`}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                          {/* Live update pulse indicator */}
+                          {flash && (
+                            <span className={`absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ${
+                              flash === "up" ? "bg-success" : "bg-destructive"
+                            } animate-ping`} />
+                          )}
+                        </div>
                         <div className="min-w-0">
                           <div className="font-medium text-foreground text-sm truncate">{crypto.name}</div>
                           <div className="text-xs text-muted-foreground font-semibold">{crypto.symbol.toUpperCase()}</div>
@@ -306,10 +338,20 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                       </div>
                     </td>
                     <td className="py-3 text-right">
-                      <LivePriceCompact value={crypto.current_price} />
+                      <div className={`inline-block rounded px-1.5 py-0.5 transition-all duration-200 ${
+                        flash === "up" 
+                          ? "price-flash-up" 
+                          : flash === "down" 
+                            ? "price-flash-down" 
+                            : ""
+                      }`}>
+                        <LivePriceCompact value={crypto.current_price} />
+                      </div>
                     </td>
                     <td className="py-3 text-right">
-                      <div className="flex items-center justify-end">
+                      <div className={`flex items-center justify-end ${
+                        flash ? "change-flash-" + flash : ""
+                      }`}>
                         <PriceChangeCompact value={crypto.price_change_percentage_24h} />
                       </div>
                     </td>
