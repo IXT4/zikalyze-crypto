@@ -377,7 +377,7 @@ const SentimentAnalysis = ({ crypto, price, change }: SentimentAnalysisProps) =>
           <div className={`rounded-xl p-4 ${getSentimentBg(data.summary.sentimentScore)}`}>
             <div className="text-sm text-muted-foreground mb-1">Overall Sentiment</div>
             <div className={`text-2xl font-bold ${getSentimentColor(data.summary.sentimentScore)}`}>
-              {data.summary.sentimentScore}%
+              {Math.round(data.summary.sentimentScore)}%
             </div>
             <div className="flex items-center gap-1 mt-1">
               {data.social.overall.change24h >= 0 ? (
