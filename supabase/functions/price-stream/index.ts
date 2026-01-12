@@ -514,10 +514,16 @@ serve(async (req) => {
       clearInterval(streamInterval);
     }
 
-    // Stream prices every 600ms for CoinMarketCap-like responsiveness
+    // Stream prices every 800ms for reliable updates
     streamInterval = setInterval(async () => {
-      if (!isConnected || socket.readyState !== WebSocket.OPEN) {
+      if (!isConnected) {
         if (streamInterval) clearInterval(streamInterval);
+        return;
+      }
+      
+      // Verify socket is truly open before proceeding
+      if (socket.readyState !== WebSocket.OPEN) {
+        console.log("[PriceStream] Socket not open, state:", socket.readyState);
         return;
       }
 
@@ -529,23 +535,33 @@ serve(async (req) => {
         const geckoSymbols = subscribedSymbols.filter((s) => COINGECKO_IDS[s]);
         const llamaSymbols = subscribedSymbols.filter((s) => DEFILLAMA_TOKENS[s]);
 
-        // Fetch from all sources in parallel
-        // CoinGecko less frequently (every 5th cycle = 3s) to avoid rate limits
-        const fetchPromises: Promise<Map<string, { price: number; source: string; change24h?: number }>>[] = [
-          fetchPythPricesBatch(pythSymbols),
-          fetchDefiLlamaPricesBatch(llamaSymbols),
-        ];
+        // Fetch from all sources in parallel with timeout protection
+        const fetchWithTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> => {
+          try {
+            return await Promise.race([
+              promise,
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs))
+            ]);
+          } catch {
+            return null;
+          }
+        };
         
-        // Add CoinGecko every 5th cycle (3 seconds) to respect rate limits
-        if (fetchCycle % 5 === 0) {
-          fetchPromises.push(fetchCoinGeckoPricesBatch(geckoSymbols));
+        // Always fetch Pyth (fast) and DeFiLlama (fallback)
+        const [pythResult, llamaResult] = await Promise.all([
+          fetchWithTimeout(fetchPythPricesBatch(pythSymbols), 2000),
+          fetchWithTimeout(fetchDefiLlamaPricesBatch(llamaSymbols), 3000),
+        ]);
+        
+        const pythPrices = pythResult || new Map();
+        const llamaPrices = llamaResult || new Map();
+        
+        // CoinGecko less frequently (every 8th cycle = ~6.4s) to avoid rate limits
+        let geckoPrices = new Map<string, { price: number; source: string; change24h?: number }>();
+        if (fetchCycle % 8 === 0) {
+          const geckoResult = await fetchWithTimeout(fetchCoinGeckoPricesBatch(geckoSymbols), 5000);
+          geckoPrices = geckoResult || new Map();
         }
-
-        const results = await Promise.all(fetchPromises);
-        
-        const pythPrices = results[0];
-        const llamaPrices = results[1];
-        const geckoPrices = results[2] || new Map();
 
         // Merge: Priority order - Pyth (fastest) > CoinGecko (accurate) > DeFiLlama (fallback)
         const merged = new Map<string, { price: number; source: string; change24h?: number }>();
@@ -564,7 +580,6 @@ serve(async (req) => {
         
         // Pyth overwrites with fastest oracle data
         pythPrices.forEach((data, symbol) => {
-          const existing = merged.get(symbol);
           merged.set(symbol, {
             ...data,
             // Preserve 24h change from CoinGecko if available
@@ -599,7 +614,7 @@ serve(async (req) => {
           });
         });
 
-        // Send batch update
+        // Send batch update only if socket is still open
         if (updates.length > 0 && isConnected && socket.readyState === WebSocket.OPEN) {
           const batchUpdate: BatchPriceUpdate = {
             type: "prices",
@@ -607,14 +622,18 @@ serve(async (req) => {
             timestamp: Date.now(),
           };
 
-          socket.send(JSON.stringify(batchUpdate));
+          try {
+            socket.send(JSON.stringify(batchUpdate));
+          } catch (sendErr) {
+            console.error("[PriceStream] Send error:", sendErr);
+            isConnected = false;
+          }
         }
       } catch (err) {
-        if (isConnected) {
-          console.error("[PriceStream] Error:", err);
-        }
+        console.error("[PriceStream] Streaming error:", err);
+        // Don't break the loop on error - continue trying
       }
-    }, 600); // 600ms updates for CoinMarketCap-like feel
+    }, 800); // 800ms updates for stability
   };
 
   socket.onopen = () => {
