@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useBinanceLivePrice } from "./useBinanceLivePrice";
+import { useKrakenLivePrice } from "./useKrakenLivePrice";
 import { supabase } from "@/integrations/supabase/client";
 import { useSmartNotifications } from "./useSmartNotifications";
 
@@ -54,8 +54,8 @@ export function useLiveMarketData(
   fallbackLow?: number,
   fallbackVolume?: number
 ) {
-  // Live price from WebSocket
-  const livePrice = useBinanceLivePrice(crypto, fallbackPrice, fallbackChange);
+  // Live price from Kraken WebSocket
+  const livePrice = useKrakenLivePrice(crypto, fallbackPrice, fallbackChange);
   
   // Smart notifications
   const { checkSentimentShift, checkWhaleActivity } = useSmartNotifications();
