@@ -37,12 +37,12 @@ const TIMEFRAME_CONFIG: Record<ChartTimeframe, {
   label: string;
   throttleMs: number;
 }> = {
-  "1m": { intervalMs: 60 * 1000, maxPoints: 60, label: "1 Min", throttleMs: 200 },
-  "5m": { intervalMs: 5 * 60 * 1000, maxPoints: 60, label: "5 Min", throttleMs: 500 },
-  "15m": { intervalMs: 15 * 60 * 1000, maxPoints: 48, label: "15 Min", throttleMs: 1000 },
-  "1h": { intervalMs: 60 * 60 * 1000, maxPoints: 24, label: "1 Hour", throttleMs: 2000 },
-  "4h": { intervalMs: 4 * 60 * 60 * 1000, maxPoints: 42, label: "4 Hour", throttleMs: 5000 },
-  "1d": { intervalMs: 24 * 60 * 60 * 1000, maxPoints: 30, label: "1 Day", throttleMs: 10000 },
+  "1m": { intervalMs: 60 * 1000, maxPoints: 60, label: "1 Min", throttleMs: 100 },   // Ultra-responsive
+  "5m": { intervalMs: 5 * 60 * 1000, maxPoints: 60, label: "5 Min", throttleMs: 200 },
+  "15m": { intervalMs: 15 * 60 * 1000, maxPoints: 48, label: "15 Min", throttleMs: 500 },
+  "1h": { intervalMs: 60 * 60 * 1000, maxPoints: 24, label: "1 Hour", throttleMs: 1000 },
+  "4h": { intervalMs: 4 * 60 * 60 * 1000, maxPoints: 42, label: "4 Hour", throttleMs: 2000 },
+  "1d": { intervalMs: 24 * 60 * 60 * 1000, maxPoints: 30, label: "1 Day", throttleMs: 5000 },
 };
 
 // LocalStorage persistence for raw tick data
