@@ -89,9 +89,7 @@ export const LivePriceCompact = ({
   return (
     <span
       className={cn(
-        "text-sm font-medium inline-flex items-baseline rounded px-1 -mx-1 transition-all duration-300",
-        isAnimating && direction === "up" && "price-flash-up",
-        isAnimating && direction === "down" && "price-flash-down",
+        "text-sm font-medium inline-flex items-baseline transition-colors duration-300",
         className
       )}
     >
@@ -107,7 +105,7 @@ export const LivePriceCompact = ({
   );
 };
 
-// Large ticker display - smooth counting with flash
+// Large ticker display - smooth counting without flash
 export const LivePriceLarge = ({
   value,
   className,
@@ -118,7 +116,6 @@ export const LivePriceLarge = ({
   const { formatPrice } = useCurrency();
   const [displayValue, setDisplayValue] = useState(value);
   const [direction, setDirection] = useState<"up" | "down" | null>(null);
-  const [isAnimating, setIsAnimating] = useState(false);
   const prevValueRef = useRef(value);
   const animationRef = useRef<number | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -139,7 +136,6 @@ export const LivePriceLarge = ({
 
     const newDirection = diff > 0 ? "up" : "down";
     setDirection(newDirection);
-    setIsAnimating(true);
 
     const duration = 300;
     const startTime = performance.now();
@@ -159,7 +155,6 @@ export const LivePriceLarge = ({
         prevValueRef.current = endValue;
         
         timeoutRef.current = setTimeout(() => {
-          setIsAnimating(false);
           setDirection(null);
         }, 300);
       }
@@ -176,10 +171,10 @@ export const LivePriceLarge = ({
   return (
     <span
       className={cn(
-        "text-lg font-bold tabular-nums rounded px-2 -mx-2 transition-all duration-300",
-        isAnimating && direction === "up" && "price-flash-up",
-        isAnimating && direction === "down" && "price-flash-down",
-        !isAnimating && "text-foreground",
+        "text-lg font-bold tabular-nums transition-colors duration-300",
+        direction === "up" && "text-success",
+        direction === "down" && "text-destructive",
+        !direction && "text-foreground",
         className
       )}
     >
