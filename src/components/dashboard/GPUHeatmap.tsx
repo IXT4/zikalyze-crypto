@@ -234,18 +234,6 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
           <Badge variant="outline" className="text-xs bg-primary/10 border-primary/30">
             Top 100
           </Badge>
-          {cmcConnected && (
-            <Badge variant="outline" className="text-xs bg-success/10 border-success/30 text-success flex items-center gap-1">
-              <CheckCircle className="h-3 w-3" />
-              CMC
-            </Badge>
-          )}
-          {websocket.connected && (
-            <Badge variant="outline" className="text-xs bg-red-400/10 border-red-400/30 text-red-400 flex items-center gap-1">
-              <Radio className="h-3 w-3" />
-              WS Live
-            </Badge>
-          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-3 text-xs">
