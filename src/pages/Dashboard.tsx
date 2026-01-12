@@ -11,8 +11,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import ErrorBoundary, { ChartErrorFallback, MinimalErrorFallback } from "@/components/ErrorBoundary";
 
 // Lazy load heavy chart components to reduce initial bundle
-const PriceChart = lazy(() => import("@/components/dashboard/PriceChart"));
-const VolumeChart = lazy(() => import("@/components/dashboard/VolumeChart"));
+// Using 100% decentralized oracle-only charts
+const DecentralizedPriceChart = lazy(() => import("@/components/dashboard/DecentralizedPriceChart"));
+const DecentralizedVolumeChart = lazy(() => import("@/components/dashboard/DecentralizedVolumeChart"));
 const AIMetrics = lazy(() => import("@/components/dashboard/AIMetrics"));
 const AIAnalyzer = lazy(() => import("@/components/dashboard/AIAnalyzer"));
 const Top100CryptoList = lazy(() => import("@/components/dashboard/Top100CryptoList"));
@@ -173,12 +174,12 @@ const Dashboard = () => {
             <div className="lg:col-span-2 space-y-4 md:space-y-6">
               <ErrorBoundary componentName="Price Chart" fallback={<ChartErrorFallback />}>
                 <Suspense fallback={<ChartSkeleton />}>
-                  <PriceChart crypto={selectedCrypto} coinGeckoId={liveData?.id} change24h={selected.change} />
+                  <DecentralizedPriceChart crypto={selectedCrypto} change24h={selected.change} />
                 </Suspense>
               </ErrorBoundary>
-              <ErrorBoundary componentName="Volume Chart" fallback={<ChartErrorFallback />}>
+              <ErrorBoundary componentName="Activity Chart" fallback={<ChartErrorFallback />}>
                 <Suspense fallback={<ChartSkeleton />}>
-                  <VolumeChart crypto={selectedCrypto} coinGeckoId={liveData?.id} />
+                  <DecentralizedVolumeChart crypto={selectedCrypto} />
                 </Suspense>
               </ErrorBoundary>
             </div>
