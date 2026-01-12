@@ -159,15 +159,7 @@ const CryptoTicker = ({
                 />
               </div>
               
-              <div className="flex items-center gap-2">
-                <LivePriceLarge value={price} />
-                <MiniSparkline 
-                  data={sparklineData} 
-                  width={40} 
-                  height={16} 
-                  className="opacity-80"
-                />
-              </div>
+              <LivePriceLarge value={price} />
             </button>
           );
         })}
