@@ -38,8 +38,11 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
   const { formatPrice, symbol: currencySymbol } = useCurrency();
   const { t } = useTranslation();
   
-  // Get all symbols for WebSocket and sparkline history
-  const allSymbols = useMemo(() => prices.map(p => p.symbol.toUpperCase()), [prices]);
+  // Get all symbols for WebSocket and sparkline history (server supports 100 symbols max)
+  const allSymbols = useMemo(
+    () => Array.from(new Set(prices.slice(0, 100).map((p) => p.symbol.toUpperCase()))),
+    [prices]
+  );
   const { getHistory } = usePriceHistory(allSymbols);
   
   // Direct WebSocket access for real-time price updates

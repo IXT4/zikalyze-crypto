@@ -212,15 +212,18 @@ function disconnect() {
 }
 
 function subscribe(symbols: string[]) {
-  // Merge with existing subscriptions
-  const uniqueSymbols = [...new Set([...subscribedSymbols, ...symbols.map(s => s.toUpperCase())])];
+  // Normalize, dedupe, and cap to server limit (100)
+  const normalized = symbols.map((s) => s.toUpperCase()).filter(Boolean);
+  const uniqueSymbols = [...new Set([...subscribedSymbols, ...normalized])].slice(0, 100);
   subscribedSymbols = uniqueSymbols;
-  
+
   if (globalSocket?.readyState === WebSocket.OPEN) {
-    globalSocket.send(JSON.stringify({
-      type: "subscribe",
-      symbols: subscribedSymbols,
-    }));
+    globalSocket.send(
+      JSON.stringify({
+        type: "subscribe",
+        symbols: subscribedSymbols,
+      })
+    );
   }
 }
 
