@@ -1,13 +1,14 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📊 useCryptoPrices — 100% Decentralized Price Feed with ZK Privacy
+// 📊 useCryptoPrices — Real-Time WebSocket + Decentralized Oracle Price Feed
 // ═══════════════════════════════════════════════════════════════════════════════
-// Uses Pyth/DIA/Redstone oracles exclusively for live prices
-// Metadata from decentralized registry (no centralized API dependencies)
+// PRIMARY: WebSocket streaming for sub-second updates on all 100 cryptos
+// FALLBACK: Pyth/DIA/Redstone oracles for coverage
 // ZK-encrypted local storage for privacy
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useOraclePrices } from "./useOraclePrices";
+import { useGlobalPriceWebSocket } from "./useGlobalPriceWebSocket";
 import { zkStorage } from "@/lib/zkCrypto";
 import { 
   getAllTokenMetadata, 
@@ -335,7 +336,13 @@ export const useCryptoPrices = () => {
   const [connectedSources, setConnectedSources] = useState<string[]>([]);
   const [isLive, setIsLive] = useState(false);
   
-  // Decentralized Oracle Integration - Pyth Primary, DIA/Redstone Fallback
+  // Get all symbols for WebSocket subscription
+  const allSymbols = initialPrices.map(p => p.symbol.toUpperCase());
+  
+  // PRIMARY: WebSocket streaming for real-time updates
+  const websocket = useGlobalPriceWebSocket(allSymbols);
+  
+  // FALLBACK: Decentralized Oracle Integration - Pyth Primary, DIA/Redstone Fallback
   const oracle = useOraclePrices([]);
   
   // Initialize pricesRef Map from initial prices
@@ -346,13 +353,14 @@ export const useCryptoPrices = () => {
   const lastUpdateTimeRef = useRef<Map<string, number>>(new Map());
   const pricesInitializedRef = useRef(false);
   const oracleUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const wsUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const priceHistoryRef = useRef<Map<string, { price: number; timestamp: number }[]>>(new Map());
   const lastPriceSaveRef = useRef<number>(0);
   const defiLlama24hRef = useRef<Map<string, { change24h: number; price24hAgo: number }>>(new Map());
   const lastDefiLlamaFetchRef = useRef<number>(0);
   
-  // Balanced throttle for smooth real-time updates
-  const UPDATE_THROTTLE_MS = 100;
+  // Fast throttle for WebSocket updates
+  const UPDATE_THROTTLE_MS = 50;
   const PRICE_SAVE_THROTTLE_MS = 5000;
   const DEFI_LLAMA_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -627,17 +635,81 @@ export const useCryptoPrices = () => {
     };
   }, [oracle.prices, oracle.isLive, addToHistory, calculate24hChange, savePricesToZK]);
 
-  // Track live status from decentralized oracles ONLY
+  // Apply WebSocket prices as PRIMARY source (fastest updates)
+  useEffect(() => {
+    if (!websocket.connected || websocket.prices.size === 0) return;
+    
+    if (wsUpdateTimeoutRef.current) {
+      clearTimeout(wsUpdateTimeoutRef.current);
+    }
+    
+    wsUpdateTimeoutRef.current = setTimeout(() => {
+      const now = Date.now();
+      let hasUpdates = false;
+      
+      websocket.prices.forEach((wsData, symbol) => {
+        if (!wsData || wsData.price <= 0) return;
+        
+        const lowerSymbol = symbol.toLowerCase();
+        const existing = pricesRef.current.get(lowerSymbol);
+        
+        if (existing && wsData.price > 0) {
+          const priceDiff = Math.abs(existing.current_price - wsData.price) / (existing.current_price || 1);
+          const isSignificant = priceDiff > 0.00005; // 0.005% threshold for WebSocket
+          
+          if (isSignificant) {
+            addToHistory(lowerSymbol, wsData.price);
+            const change24h = calculate24hChange(lowerSymbol, wsData.price, existing.price_change_percentage_24h);
+            
+            const newHigh24h = existing.high_24h > 0 ? Math.max(existing.high_24h, wsData.price) : wsData.price;
+            const newLow24h = existing.low_24h > 0 ? Math.min(existing.low_24h, wsData.price) : wsData.price;
+            
+            const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || existing.circulating_supply;
+            const estimatedMarketCap = wsData.price * supply;
+            
+            const updated = {
+              ...existing,
+              current_price: wsData.price,
+              price_change_percentage_24h: change24h !== 0 ? change24h : existing.price_change_percentage_24h,
+              high_24h: newHigh24h,
+              low_24h: newLow24h,
+              market_cap: estimatedMarketCap > 0 ? estimatedMarketCap : existing.market_cap,
+              lastUpdate: now,
+              source: "WebSocket",
+            };
+            pricesRef.current.set(lowerSymbol, updated);
+            hasUpdates = true;
+          }
+        }
+      });
+      
+      if (hasUpdates) {
+        const priceArray = Array.from(pricesRef.current.values())
+          .sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
+        setPrices(priceArray);
+        savePricesToZK(priceArray);
+      }
+    }, UPDATE_THROTTLE_MS);
+    
+    return () => {
+      if (wsUpdateTimeoutRef.current) {
+        clearTimeout(wsUpdateTimeoutRef.current);
+      }
+    };
+  }, [websocket.prices, websocket.connected, addToHistory, calculate24hChange, savePricesToZK]);
+
+  // Track live status from WebSocket + oracles
   useEffect(() => {
     const sources: string[] = [];
     
+    if (websocket.connected) sources.push("WebSocket");
     if (oracle.pythConnected) sources.push("Pyth Oracle");
     if (oracle.diaConnected) sources.push("DIA Oracle");
     if (oracle.redstoneConnected) sources.push("Redstone Oracle");
     
     setConnectedSources(sources);
-    setIsLive(oracle.isLive);
-  }, [oracle.isLive, oracle.pythConnected, oracle.diaConnected, oracle.redstoneConnected]);
+    setIsLive(websocket.connected || oracle.isLive);
+  }, [websocket.connected, oracle.isLive, oracle.pythConnected, oracle.diaConnected, oracle.redstoneConnected]);
 
   const getPriceBySymbol = useCallback((symbol: string): CryptoPrice | undefined => {
     return prices.find((p) => p.symbol.toUpperCase() === symbol.toUpperCase());
