@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { CryptoPrice } from "@/hooks/useCryptoPrices";
-import { Circle, Zap, Link2 } from "lucide-react";
+import { Zap, Link2 } from "lucide-react";
 import { PriceChange } from "./PriceChange";
 import { LivePriceLarge } from "./LivePrice";
 
@@ -39,9 +38,6 @@ interface CryptoTickerProps {
   connectedExchanges?: string[];
 }
 
-// Track price changes for flash animations
-type PriceFlash = "up" | "down" | null;
-
 const CryptoTicker = ({ 
   selected, 
   onSelect, 
@@ -51,50 +47,6 @@ const CryptoTicker = ({
   isLive,
   connectedExchanges = []
 }: CryptoTickerProps) => {
-  
-  // Track previous prices for flash animation
-  const prevPricesRef = useRef<Map<string, number>>(new Map());
-  const [priceFlashes, setPriceFlashes] = useState<Map<string, PriceFlash>>(new Map());
-
-  // Detect price changes and trigger flash animations
-  useEffect(() => {
-    const newFlashes = new Map<string, PriceFlash>();
-    
-    cryptoMeta.forEach((crypto) => {
-      const livePrice = getPriceBySymbol(crypto.symbol);
-      const currentPrice = livePrice?.current_price || 0;
-      const prevPrice = prevPricesRef.current.get(crypto.symbol);
-      
-      if (prevPrice !== undefined && prevPrice !== currentPrice && currentPrice > 0) {
-        if (currentPrice > prevPrice) {
-          newFlashes.set(crypto.symbol, "up");
-        } else if (currentPrice < prevPrice) {
-          newFlashes.set(crypto.symbol, "down");
-        }
-      }
-      
-      if (currentPrice > 0) {
-        prevPricesRef.current.set(crypto.symbol, currentPrice);
-      }
-    });
-
-    if (newFlashes.size > 0) {
-      setPriceFlashes(prev => {
-        const merged = new Map(prev);
-        newFlashes.forEach((value, key) => merged.set(key, value));
-        return merged;
-      });
-
-      // Clear flashes after animation
-      setTimeout(() => {
-        setPriceFlashes(prev => {
-          const updated = new Map(prev);
-          newFlashes.forEach((_, key) => updated.delete(key));
-          return updated;
-        });
-      }, 500);
-    }
-  }, [getPriceBySymbol]);
   
   // Determine oracle display
   const getOracleIcon = () => {
@@ -164,7 +116,6 @@ const CryptoTicker = ({
           const price = livePrice?.current_price || 0;
           const change = livePrice?.price_change_percentage_24h || 0;
           const source = livePrice?.source;
-          const flash = priceFlashes.get(crypto.symbol);
           
           // Determine if this price is from an oracle
           const isOraclePrice = source?.includes("Oracle") || source === "Pyth" || source === "Chainlink";
@@ -179,9 +130,7 @@ const CryptoTicker = ({
                 "flex flex-col gap-1 rounded-xl border px-4 py-3 transition-all relative",
                 selected === crypto.symbol
                   ? "border-primary bg-primary/10"
-                  : "border-border bg-card hover:border-primary/50",
-                flash === "up" && "animate-price-flash-up",
-                flash === "down" && "animate-price-flash-down"
+                  : "border-border bg-card hover:border-primary/50"
               )}
             >
               {/* Live tick dot */}
@@ -197,7 +146,6 @@ const CryptoTicker = ({
                   value={change} 
                   size="sm" 
                   showBadge={false}
-                  animated={!!flash}
                 />
               </div>
               <LivePriceLarge value={price} />
