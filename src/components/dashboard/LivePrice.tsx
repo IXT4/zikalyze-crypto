@@ -77,7 +77,7 @@ const useAnimatedPrice = (targetValue: number, duration: number = 200) => {
   return displayValue;
 };
 
-// Flash effect hook
+// Enhanced flash effect hook with more sensitive detection
 const useFlashEffect = (value: number) => {
   const [flashClass, setFlashClass] = useState<string | null>(null);
   const prevValueRef = useRef<number | undefined>(undefined);
@@ -93,6 +93,10 @@ const useFlashEffect = (value: number) => {
 
     if (!value || value <= 0 || value === prevValueRef.current) return;
 
+    // More sensitive threshold - flash on any real price change (0.0001% minimum)
+    const priceDiff = Math.abs(value - (prevValueRef.current || 0)) / (prevValueRef.current || 1);
+    if (priceDiff < 0.000001) return;
+
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -105,7 +109,7 @@ const useFlashEffect = (value: number) => {
 
     timeoutRef.current = setTimeout(() => {
       setFlashClass(null);
-    }, 800);
+    }, 600);
 
     prevValueRef.current = value;
 

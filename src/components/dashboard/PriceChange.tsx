@@ -63,7 +63,7 @@ const useAnimatedValue = (targetValue: number, duration: number = 300) => {
   return displayValue;
 };
 
-// Flash effect hook for direction changes
+// Enhanced flash effect hook - more sensitive for visible real-time updates
 const useFlashEffect = (value: number) => {
   const [flashClass, setFlashClass] = useState<string | null>(null);
   const prevValueRef = useRef<number | undefined>(undefined);
@@ -79,23 +79,22 @@ const useFlashEffect = (value: number) => {
 
     if (prevValueRef.current === undefined || value === prevValueRef.current) return;
 
-    // Detect direction change or significant movement
-    const prevPositive = prevValueRef.current > 0;
-    const currPositive = value > 0;
-    const directionChanged = prevPositive !== currPositive;
-    const significantChange = Math.abs(value - prevValueRef.current) > 0.1;
-
-    if (directionChanged || significantChange) {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-
-      setFlashClass(value > prevValueRef.current ? "change-flash-up" : "change-flash-down");
-
-      timeoutRef.current = setTimeout(() => {
-        setFlashClass(null);
-      }, 600);
+    // Flash on any visible change (0.01% threshold)
+    const change = Math.abs(value - prevValueRef.current);
+    if (change < 0.01) {
+      prevValueRef.current = value;
+      return;
     }
+
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    setFlashClass(value > prevValueRef.current ? "change-flash-up" : "change-flash-down");
+
+    timeoutRef.current = setTimeout(() => {
+      setFlashClass(null);
+    }, 500);
 
     prevValueRef.current = value;
 
