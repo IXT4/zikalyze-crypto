@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, memo } from "react";
 import { useTranslation } from "react-i18next";
 import { useCryptoPrices, CryptoPrice } from "@/hooks/useCryptoPrices";
 import { usePriceAlerts } from "@/hooks/usePriceAlerts";
@@ -18,6 +18,7 @@ import {
 import { PriceChangeCompact } from "./PriceChange";
 import { LivePriceCompact } from "./LivePrice";
 import MiniSparkline from "./MiniSparkline";
+import { cn } from "@/lib/utils";
 
 interface Top100CryptoListProps {
   onSelect: (symbol: string) => void;
@@ -25,6 +26,138 @@ interface Top100CryptoListProps {
   prices?: CryptoPrice[];
   loading?: boolean;
 }
+
+// Memoized row component with flash animation on price changes
+interface CryptoRowProps {
+  crypto: CryptoPrice;
+  index: number;
+  isSelected: boolean;
+  hasAlert: boolean;
+  sparklineData: number[];
+  livePrice: number;
+  formatPrice: (price: number) => string;
+  currencySymbol: string;
+  onSelect: (symbol: string) => void;
+  onAlertClick: (crypto: CryptoPrice, e: React.MouseEvent) => void;
+}
+
+const CryptoRow = memo(({
+  crypto,
+  index,
+  isSelected,
+  hasAlert,
+  sparklineData,
+  livePrice,
+  formatPrice,
+  currencySymbol,
+  onSelect,
+  onAlertClick,
+}: CryptoRowProps) => {
+  const [flashClass, setFlashClass] = useState<string>("");
+  const prevPriceRef = useRef(livePrice);
+
+  // Flash animation when price changes
+  useEffect(() => {
+    const prevPrice = prevPriceRef.current;
+    const diff = Math.abs(livePrice - prevPrice);
+    const threshold = prevPrice * 0.000001; // Ultra-sensitive threshold
+
+    if (diff > threshold && prevPrice !== 0) {
+      const direction = livePrice > prevPrice ? "up" : "down";
+      setFlashClass(direction === "up" ? "animate-row-flash-up" : "animate-row-flash-down");
+      prevPriceRef.current = livePrice;
+
+      // Remove flash class after animation completes
+      const timer = setTimeout(() => {
+        setFlashClass("");
+      }, 600);
+
+      return () => clearTimeout(timer);
+    }
+  }, [livePrice]);
+
+  return (
+    <tr
+      onClick={() => onSelect(crypto.symbol.toUpperCase())}
+      className={cn(
+        "border-b border-border/50 cursor-pointer transition-all duration-200 hover:bg-secondary/50",
+        isSelected && "bg-primary/10",
+        flashClass
+      )}
+    >
+      <td className="py-3 text-sm text-muted-foreground">{index + 1}</td>
+      <td className="py-3">
+        <div className="flex items-center gap-3">
+          <img
+            src={crypto.image}
+            alt={crypto.name}
+            className="w-10 h-10 rounded-full shrink-0"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+          <div className="min-w-0">
+            <div className="font-medium text-foreground text-sm truncate">{crypto.name}</div>
+            <div className="text-xs text-muted-foreground font-semibold">{crypto.symbol.toUpperCase()}</div>
+          </div>
+        </div>
+      </td>
+      <td className="py-3 text-right">
+        <LivePriceCompact value={livePrice} />
+      </td>
+      <td className="py-3 text-center hidden xs:table-cell">
+        <div className="flex justify-center">
+          <MiniSparkline data={sparklineData} width={50} height={20} />
+        </div>
+      </td>
+      <td className="py-3 text-right">
+        <PriceChangeCompact value={crypto.price_change_percentage_24h} />
+      </td>
+      <td className="py-3 text-right text-sm text-muted-foreground hidden sm:table-cell">
+        {currencySymbol}
+        {crypto.market_cap ? (crypto.market_cap / 1e9).toFixed(2) + "B" : "---"}
+      </td>
+      <td className="py-3 text-right text-sm text-muted-foreground hidden md:table-cell">
+        {crypto.circulating_supply
+          ? crypto.circulating_supply >= 1e9
+            ? (crypto.circulating_supply / 1e9).toFixed(2) + "B"
+            : crypto.circulating_supply >= 1e6
+            ? (crypto.circulating_supply / 1e6).toFixed(2) + "M"
+            : crypto.circulating_supply.toLocaleString()
+          : "---"}{" "}
+        {crypto.symbol.toUpperCase()}
+      </td>
+      <td className="py-3 text-right text-sm text-muted-foreground hidden lg:table-cell">
+        {crypto.high_24h ? formatPrice(crypto.high_24h) : "---"}
+      </td>
+      <td className="py-3 text-right text-sm text-muted-foreground hidden lg:table-cell">
+        {crypto.low_24h ? formatPrice(crypto.low_24h) : "---"}
+      </td>
+      <td className="py-3 text-right text-sm text-muted-foreground hidden xl:table-cell">
+        {(() => {
+          const v = crypto.total_volume;
+          if (!v) return "---";
+          if (v >= 1e9) return `${currencySymbol}${(v / 1e9).toFixed(2)}B`;
+          if (v >= 1e6) return `${currencySymbol}${(v / 1e6).toFixed(1)}M`;
+          if (v >= 1e3) return `${currencySymbol}${(v / 1e3).toFixed(1)}K`;
+          return `${currencySymbol}${v.toFixed(0)}`;
+        })()}
+      </td>
+      <td className="py-3 text-center">
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-8 w-8 ${hasAlert ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+          onClick={(e) => onAlertClick(crypto, e)}
+        >
+          <Bell className={`w-4 h-4 ${hasAlert ? "fill-current" : ""}`} />
+        </Button>
+      </td>
+    </tr>
+  );
+});
+
+CryptoRow.displayName = "CryptoRow";
 
 
 const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: propLoading }: Top100CryptoListProps) => {
@@ -266,91 +399,28 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
             </thead>
             <tbody>
             {filteredPrices.map((crypto, index) => {
-                const isPositive = crypto.price_change_percentage_24h >= 0;
                 const isSelected = crypto.symbol.toUpperCase() === selected;
                 const hasAlert = alerts.some(a => a.symbol === crypto.symbol.toUpperCase());
                 const sparklineData = getHistory(crypto.symbol.toUpperCase());
                 
+                // Get live WebSocket price
+                const wsPrice = websocket.getPrice(crypto.symbol.toUpperCase());
+                const livePrice = wsPrice?.price || crypto.current_price;
+                
                 return (
-                  <tr
+                  <CryptoRow
                     key={crypto.id}
-                    onClick={() => onSelect(crypto.symbol.toUpperCase())}
-                    className={`border-b border-border/50 cursor-pointer transition-all duration-200 hover:bg-secondary/50 ${
-                      isSelected ? "bg-primary/10" : ""
-                    }`}
-                  >
-                    <td className="py-3 text-sm text-muted-foreground">{index + 1}</td>
-                    <td className="py-3">
-                      <div className="flex items-center gap-3">
-                        <img 
-                          src={crypto.image} 
-                          alt={crypto.name}
-                          className="w-10 h-10 rounded-full shrink-0"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                        <div className="min-w-0">
-                          <div className="font-medium text-foreground text-sm truncate">{crypto.name}</div>
-                          <div className="text-xs text-muted-foreground font-semibold">{crypto.symbol.toUpperCase()}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 text-right">
-                      {/* Use WebSocket price if available, fallback to prop price */}
-                      <LivePriceCompact value={websocket.getPrice(crypto.symbol.toUpperCase())?.price || crypto.current_price} />
-                    </td>
-                    <td className="py-3 text-center hidden xs:table-cell">
-                      <div className="flex justify-center">
-                        <MiniSparkline 
-                          data={sparklineData} 
-                          width={50} 
-                          height={20}
-                        />
-                      </div>
-                    </td>
-                    <td className="py-3 text-right">
-                      <PriceChangeCompact value={crypto.price_change_percentage_24h} />
-                    </td>
-                    <td className="py-3 text-right text-sm text-muted-foreground hidden sm:table-cell">
-                      {currencySymbol}{crypto.market_cap ? (crypto.market_cap / 1e9).toFixed(2) + "B" : "---"}
-                    </td>
-                    <td className="py-3 text-right text-sm text-muted-foreground hidden md:table-cell">
-                      {crypto.circulating_supply 
-                        ? (crypto.circulating_supply >= 1e9 
-                          ? (crypto.circulating_supply / 1e9).toFixed(2) + "B" 
-                          : crypto.circulating_supply >= 1e6 
-                            ? (crypto.circulating_supply / 1e6).toFixed(2) + "M"
-                            : crypto.circulating_supply.toLocaleString())
-                        : "---"} {crypto.symbol.toUpperCase()}
-                    </td>
-                    <td className="py-3 text-right text-sm text-muted-foreground hidden lg:table-cell">
-                      {crypto.high_24h ? formatPrice(crypto.high_24h) : "---"}
-                    </td>
-                    <td className="py-3 text-right text-sm text-muted-foreground hidden lg:table-cell">
-                      {crypto.low_24h ? formatPrice(crypto.low_24h) : "---"}
-                    </td>
-                    <td className="py-3 text-right text-sm text-muted-foreground hidden xl:table-cell">
-                      {(() => {
-                        const v = crypto.total_volume;
-                        if (!v) return "---";
-                        if (v >= 1e9) return `${currencySymbol}${(v / 1e9).toFixed(2)}B`;
-                        if (v >= 1e6) return `${currencySymbol}${(v / 1e6).toFixed(1)}M`;
-                        if (v >= 1e3) return `${currencySymbol}${(v / 1e3).toFixed(1)}K`;
-                        return `${currencySymbol}${v.toFixed(0)}`;
-                      })()}
-                    </td>
-                    <td className="py-3 text-center">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`h-8 w-8 ${hasAlert ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
-                        onClick={(e) => handleOpenAlertDialog(crypto, e)}
-                      >
-                        <Bell className={`w-4 h-4 ${hasAlert ? "fill-current" : ""}`} />
-                      </Button>
-                    </td>
-                  </tr>
+                    crypto={crypto}
+                    index={index}
+                    isSelected={isSelected}
+                    hasAlert={hasAlert}
+                    sparklineData={sparklineData}
+                    livePrice={livePrice}
+                    formatPrice={formatPrice}
+                    currencySymbol={currencySymbol}
+                    onSelect={onSelect}
+                    onAlertClick={handleOpenAlertDialog}
+                  />
                 );
               })}
             </tbody>

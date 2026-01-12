@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 💹 LivePrice — Rolling Digit Animation for Real-Time Prices
+// 💹 LivePrice — Real-Time Price Display with Flash Animation
 // ═══════════════════════════════════════════════════════════════════════════════
-// CoinMarketCap-style rolling digits with smooth number transitions
+// Shows green flash when price goes UP, red flash when price goes DOWN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useRef, useMemo, memo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useCurrency } from "@/hooks/useCurrency";
 
@@ -13,220 +13,32 @@ interface LivePriceProps {
   className?: string;
 }
 
-// Individual rolling digit component with proper animation tracking
-const RollingDigit = memo(({ 
-  digit, 
-  index,
-  direction 
-}: { 
-  digit: string; 
-  index: number;
+// Simple rolling digit with direction-based color
+const RollingDigit = ({
+  char,
+  direction,
+  isAnimating,
+}: {
+  char: string;
   direction: "up" | "down" | null;
+  isAnimating: boolean;
 }) => {
-  const [displayDigit, setDisplayDigit] = useState(digit);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const prevDigitRef = useRef(digit);
-  const animationKey = useRef(0);
-
-  useEffect(() => {
-    // Only animate if the digit actually changed
-    if (digit !== prevDigitRef.current) {
-      animationKey.current += 1;
-      setIsAnimating(true);
-      setDisplayDigit(digit);
-      prevDigitRef.current = digit;
-      
-      const timer = setTimeout(() => {
-        setIsAnimating(false);
-      }, 200);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [digit]);
-
-  // Non-numeric characters don't animate
-  if (!/\d/.test(displayDigit)) {
-    return <span className="inline-block tabular-nums">{displayDigit}</span>;
-  }
-
   return (
-    <span 
-      key={`${index}-${animationKey.current}`}
+    <span
       className={cn(
-        "inline-block relative tabular-nums transition-colors duration-200",
-        // Use the OVERALL price direction, not individual digit comparison
-        isAnimating && direction === "up" && "animate-roll-up text-success",
-        isAnimating && direction === "down" && "animate-roll-down text-destructive",
+        "inline-block tabular-nums transition-all duration-200",
+        isAnimating && direction === "up" && "text-success animate-roll-up",
+        isAnimating && direction === "down" && "text-destructive animate-roll-down",
         !isAnimating && "text-foreground"
       )}
-      style={{ 
-        minWidth: "0.55em",
-      }}
+      style={{ minWidth: /\d/.test(char) ? "0.6em" : undefined }}
     >
-      {displayDigit}
-    </span>
-  );
-});
-
-RollingDigit.displayName = "RollingDigit";
-
-// Rolling price display with digit-by-digit animation
-const RollingPriceDisplay = memo(({ 
-  formattedPrice, 
-  value,
-  className 
-}: { 
-  formattedPrice: string;
-  value: number;
-  className?: string;
-}) => {
-  const [displayChars, setDisplayChars] = useState<string[]>(formattedPrice.split(''));
-  const [direction, setDirection] = useState<"up" | "down" | null>(null);
-  const prevValueRef = useRef<number>(value);
-  const prevFormattedRef = useRef(formattedPrice);
-  const directionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    const newChars = formattedPrice.split('');
-    
-    // Clear any pending direction reset
-    if (directionTimeoutRef.current) {
-      clearTimeout(directionTimeoutRef.current);
-    }
-    
-    // Check if value actually changed (not just formatting)
-    if (Math.abs(value - prevValueRef.current) > 0.0000001) {
-      const newDirection = value > prevValueRef.current ? "up" : "down";
-      setDirection(newDirection);
-      setDisplayChars(newChars);
-      prevValueRef.current = value;
-      prevFormattedRef.current = formattedPrice;
-      
-      // Reset direction after animation completes
-      directionTimeoutRef.current = setTimeout(() => {
-        setDirection(null);
-      }, 400);
-    } else if (formattedPrice !== prevFormattedRef.current) {
-      // Just formatting change, no animation
-      setDisplayChars(newChars);
-      prevFormattedRef.current = formattedPrice;
-    }
-    
-    return () => {
-      if (directionTimeoutRef.current) {
-        clearTimeout(directionTimeoutRef.current);
-      }
-    };
-  }, [formattedPrice, value]);
-
-  return (
-    <span className={cn("tabular-nums inline-flex items-baseline", className)}>
-      {displayChars.map((char, index) => (
-        <RollingDigit 
-          key={`pos-${index}`} 
-          index={index}
-          digit={char} 
-          direction={direction}
-        />
-      ))}
-    </span>
-  );
-});
-
-RollingPriceDisplay.displayName = "RollingPriceDisplay";
-
-// Smooth counting animation for large price changes
-const AnimatedValue = memo(({ 
-  value, 
-  formatFn,
-  className,
-  duration = 300
-}: { 
-  value: number;
-  formatFn: (v: number) => string;
-  className?: string;
-  duration?: number;
-}) => {
-  const [displayValue, setDisplayValue] = useState(value);
-  const [direction, setDirection] = useState<"up" | "down" | null>(null);
-  const animationRef = useRef<number | null>(null);
-  const prevValueRef = useRef(value);
-
-  useEffect(() => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-    }
-
-    const startValue = prevValueRef.current;
-    const endValue = value;
-    const diff = endValue - startValue;
-    
-    if (Math.abs(diff) < 0.0000001) return;
-    
-    setDirection(diff > 0 ? "up" : "down");
-    
-    const startTime = performance.now();
-    
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      // Ease-out cubic for smooth deceleration
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      const currentValue = startValue + diff * easeOut;
-      
-      setDisplayValue(currentValue);
-      
-      if (progress < 1) {
-        animationRef.current = requestAnimationFrame(animate);
-      } else {
-        setDisplayValue(endValue);
-        prevValueRef.current = endValue;
-        
-        // Clear direction after settling
-        setTimeout(() => setDirection(null), 200);
-      }
-    };
-    
-    animationRef.current = requestAnimationFrame(animate);
-    
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [value, duration]);
-
-  const formattedValue = useMemo(() => formatFn(displayValue), [formatFn, displayValue]);
-
-  return (
-    <span 
-      className={cn(
-        "tabular-nums transition-colors duration-300",
-        direction === "up" && "text-success",
-        direction === "down" && "text-destructive",
-        !direction && "text-foreground",
-        className
-      )}
-    >
-      {formattedValue}
-    </span>
-  );
-});
-
-AnimatedValue.displayName = "AnimatedValue";
-
-export const LivePrice = ({ value, className }: LivePriceProps) => {
-  const { formatPrice } = useCurrency();
-
-  return (
-    <span className={cn("font-semibold", className)}>
-      <AnimatedValue value={value} formatFn={formatPrice} duration={250} />
+      {char}
     </span>
   );
 };
 
-// Compact version for tables - uses rolling digits with direct value tracking
+// Compact version for tables - rolling digits with flash effect
 export const LivePriceCompact = ({
   value,
   className,
@@ -235,27 +47,69 @@ export const LivePriceCompact = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const [currentValue, setCurrentValue] = useState(value);
-  const [formattedPrice, setFormattedPrice] = useState(() => formatPrice(value));
+  const [displayPrice, setDisplayPrice] = useState(() => formatPrice(value));
+  const [direction, setDirection] = useState<"up" | "down" | null>(null);
+  const [isAnimating, setIsAnimating] = useState(false);
   const prevValueRef = useRef(value);
+  const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // Only update if value actually changed
-    if (Math.abs(value - prevValueRef.current) > 0.0000001) {
+    // Only animate if value actually changed (more than 0.0001% difference)
+    const diff = Math.abs(value - prevValueRef.current);
+    const threshold = prevValueRef.current * 0.000001; // Ultra-sensitive
+    
+    if (diff > threshold && prevValueRef.current !== 0) {
+      // Clear any pending animation timeout
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+      
+      // Set direction based on price movement
+      const newDirection = value > prevValueRef.current ? "up" : "down";
+      setDirection(newDirection);
+      setIsAnimating(true);
+      setDisplayPrice(formatPrice(value));
       prevValueRef.current = value;
-      setCurrentValue(value);
-      setFormattedPrice(formatPrice(value));
+      
+      // Reset animation after 400ms
+      animationTimeoutRef.current = setTimeout(() => {
+        setIsAnimating(false);
+        setDirection(null);
+      }, 400);
+    } else if (formatPrice(value) !== displayPrice) {
+      // Just formatting change, update without animation
+      setDisplayPrice(formatPrice(value));
     }
-  }, [value, formatPrice]);
+
+    return () => {
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+    };
+  }, [value, formatPrice, displayPrice]);
 
   return (
-    <span className={cn("text-sm font-medium", className)}>
-      <RollingPriceDisplay formattedPrice={formattedPrice} value={currentValue} />
+    <span
+      className={cn(
+        "text-sm font-medium inline-flex items-baseline rounded px-1 -mx-1 transition-all duration-300",
+        isAnimating && direction === "up" && "price-flash-up",
+        isAnimating && direction === "down" && "price-flash-down",
+        className
+      )}
+    >
+      {displayPrice.split("").map((char, i) => (
+        <RollingDigit
+          key={`${i}-${char}`}
+          char={char}
+          direction={direction}
+          isAnimating={isAnimating}
+        />
+      ))}
     </span>
   );
 };
 
-// Large ticker display - uses smooth counting
+// Large ticker display - smooth counting with flash
 export const LivePriceLarge = ({
   value,
   className,
@@ -264,12 +118,81 @@ export const LivePriceLarge = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
+  const [displayValue, setDisplayValue] = useState(value);
+  const [direction, setDirection] = useState<"up" | "down" | null>(null);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const prevValueRef = useRef(value);
+  const animationRef = useRef<number | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    const startValue = prevValueRef.current;
+    const endValue = value;
+    const diff = endValue - startValue;
+
+    if (Math.abs(diff) < 0.0000001) return;
+
+    const newDirection = diff > 0 ? "up" : "down";
+    setDirection(newDirection);
+    setIsAnimating(true);
+
+    const duration = 300;
+    const startTime = performance.now();
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      const currentValue = startValue + diff * easeOut;
+
+      setDisplayValue(currentValue);
+
+      if (progress < 1) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        setDisplayValue(endValue);
+        prevValueRef.current = endValue;
+        
+        timeoutRef.current = setTimeout(() => {
+          setIsAnimating(false);
+          setDirection(null);
+        }, 300);
+      }
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [value]);
 
   return (
-    <span className={cn("text-lg font-bold", className)}>
-      <AnimatedValue value={value} formatFn={formatPrice} duration={300} />
+    <span
+      className={cn(
+        "text-lg font-bold tabular-nums rounded px-2 -mx-2 transition-all duration-300",
+        isAnimating && direction === "up" && "price-flash-up",
+        isAnimating && direction === "down" && "price-flash-down",
+        !isAnimating && "text-foreground",
+        className
+      )}
+    >
+      {formatPrice(displayValue)}
     </span>
   );
+};
+
+// Default export - uses AnimatedValue approach
+export const LivePrice = ({ value, className }: LivePriceProps) => {
+  return <LivePriceLarge value={value} className={className} />;
 };
 
 export default LivePrice;
