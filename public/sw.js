@@ -1,5 +1,6 @@
 // Service Worker for Push Notifications, Offline Caching, and Background AI Learning
-const CACHE_NAME = 'zikalyze-v5';
+// NOTE: Cache name bump forces clients to pull the latest build (fixes stale JS causing no live updates)
+const CACHE_NAME = 'zikalyze-v6';
 const STATIC_ASSETS = [
   '/',
   '/favicon.ico',
