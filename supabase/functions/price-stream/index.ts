@@ -333,24 +333,33 @@ serve(async (req) => {
         llamaPrices.forEach((data, symbol) => merged.set(symbol, data));
         pythPrices.forEach((data, symbol) => merged.set(symbol, data)); // Pyth overwrites
 
-        // Stream real prices only - no artificial movement
-        const updates: Array<{ symbol: string; price: number; source: string }> = [];
+        // Stream real prices - CoinMarketCap style with all updates
+        const updates: Array<{ symbol: string; price: number; source: string; change?: number }> = [];
         
         merged.forEach((data, symbol) => {
-          // Only send if price actually changed from last update
           const lastPrice = lastPrices.get(symbol);
-          if (lastPrice && data.price === lastPrice) {
-            return; // Skip unchanged prices
+          
+          // Calculate price change percentage for this update
+          let priceChange = 0;
+          if (lastPrice && lastPrice > 0) {
+            priceChange = ((data.price - lastPrice) / lastPrice) * 100;
+          }
+          
+          // Skip only if price is exactly the same (no movement)
+          if (lastPrice && Math.abs(data.price - lastPrice) < 0.0000001) {
+            return;
           }
           
           lastPrices.set(symbol, data.price);
           updates.push({
             symbol,
-            price: data.price, // Real price only, no modification
+            price: data.price,
             source: data.source,
+            change: priceChange,
           });
         });
 
+        // Always send updates if we have any - CoinMarketCap streams constantly
         if (updates.length > 0 && isConnected && socket.readyState === WebSocket.OPEN) {
           const batchUpdate: BatchPriceUpdate = {
             type: "prices",
@@ -365,7 +374,7 @@ serve(async (req) => {
           console.error("[PriceStream] Error:", err);
         }
       }
-    }, 500); // Poll every 500ms for real price updates
+    }, 300); // Poll every 300ms for CoinMarketCap-like real-time feel
   };
 
   socket.onopen = () => {
