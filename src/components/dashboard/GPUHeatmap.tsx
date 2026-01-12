@@ -62,6 +62,7 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
         price: price.current_price,
         change24h: price.price_change_percentage_24h || 0,
         marketCap: price.market_cap,
+        volume24h: price.total_volume || 0,
         rank: price.market_cap_rank,
         image: price.image,
       }));
@@ -100,6 +101,8 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
           borderRadius: 4,
           fontSize: isExpanded ? 11 : 9,
           maxIntensity: 8,
+          showIcons: true,
+          showVolume: isExpanded,
         });
         animatorRef.current?.start();
       }
@@ -262,18 +265,26 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
             <div
               className="absolute z-20 pointer-events-none"
               style={{
-                left: Math.min(tooltip.x + 10, (containerRef.current?.offsetWidth || 300) - 180),
-                top: Math.max(tooltip.y - 100, 10),
+                left: Math.min(tooltip.x + 10, (containerRef.current?.offsetWidth || 300) - 200),
+                top: Math.max(tooltip.y - 120, 10),
               }}
             >
-              <div className="bg-popover/95 backdrop-blur-md border border-border rounded-lg shadow-xl p-3 min-w-[160px]">
+              <div className="bg-popover/95 backdrop-blur-md border border-border rounded-lg shadow-xl p-3 min-w-[180px]">
                 <div className="flex items-center gap-2 mb-2">
+                  {tooltip.cell.image && (
+                    <img 
+                      src={tooltip.cell.image} 
+                      alt={tooltip.cell.symbol}
+                      className="w-6 h-6 rounded-full"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  )}
                   <span className="font-bold text-foreground">{tooltip.cell.symbol}</span>
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                     #{tooltip.cell.rank}
                   </Badge>
                 </div>
-                <div className="text-sm text-muted-foreground mb-1">{tooltip.cell.name}</div>
+                <div className="text-sm text-muted-foreground mb-2">{tooltip.cell.name}</div>
                 <div className="space-y-1.5 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Price:</span>
@@ -284,6 +295,10 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
                     <span className={`font-medium ${tooltip.cell.change24h >= 0 ? "text-success" : "text-destructive"}`}>
                       {formatChange(tooltip.cell.change24h)}
                     </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Volume:</span>
+                    <span className="font-medium text-foreground">{formatLargeNumber(tooltip.cell.volume24h)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">MCap:</span>
