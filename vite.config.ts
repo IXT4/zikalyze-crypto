@@ -8,6 +8,14 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig(({ mode }) => ({
   // Use relative paths for IPFS compatibility
   base: './',
+  build: {
+    rollupOptions: {
+      output: {
+        // Inline small chunks (< 10KB) to reduce network request chains
+        experimentalMinChunkSize: 10000,
+      },
+    },
+  },
   server: {
     host: "::",
     port: 8080,
