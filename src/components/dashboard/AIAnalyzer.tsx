@@ -41,7 +41,7 @@ interface AIAnalyzerProps {
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crypto-analyze`;
 const CHARS_PER_FRAME = 12; // Much faster rendering
 const FRAME_INTERVAL = 8; // 120fps smooth
-const STREAMING_INTERVAL = 2000; // Re-process every 2 seconds when streaming
+const STREAMING_INTERVAL = 5000; // Re-process every 5 seconds when streaming (reduced from 2s)
 
 const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap }: AIAnalyzerProps) => {
   const { t, i18n } = useTranslation();
@@ -537,29 +537,36 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     
     // Store latest analysis result for when user clicks Analyze
     setAnalysisResult(result);
-    setStreamUpdateCount(prev => prev + 1);
-    
-    // Silent console log for debugging
-    if (streamUpdateCount % 10 === 0) {
-      console.log(`[AI Learning] Sample #${streamUpdateCount + 1}: $${currentPrice.toFixed(2)}, bias=${result.bias}, conf=${result.confidence}%, vol=${volatility.toFixed(2)}%`);
-    }
-  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, liveData.sentiment, onChainMetrics, chartTrendData, multiTfData, streamUpdateCount]);
+    setStreamUpdateCount(prev => {
+      const newCount = prev + 1;
+      // Silent console log for debugging (every 30 samples = ~2.5 mins)
+      if (newCount % 30 === 0) {
+        console.log(`[AI Learning] Sample #${newCount}: $${currentPrice.toFixed(2)}, bias=${result.bias}, conf=${result.confidence}%, vol=${volatility.toFixed(2)}%`);
+      }
+      return newCount;
+    });
+  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, liveData.sentiment, onChainMetrics, chartTrendData, multiTfData]);
 
-  // Auto-start background learning on mount
+  // Auto-start background learning on mount (stable ref to avoid re-triggering)
+  const processBackgroundLearningRef = useRef(processBackgroundLearning);
+  processBackgroundLearningRef.current = processBackgroundLearning;
+  
   useEffect(() => {
-    if (!backgroundStreamingRef.current && liveData.priceIsLive) {
-      console.log('[AI Learning] Starting background data collection...');
-      backgroundStreamingRef.current = true;
-      setIsStreaming(true);
-      
-      // Initial learning cycle
-      processBackgroundLearning();
-      
-      // Set up interval for continuous learning
-      streamingIntervalRef.current = setInterval(() => {
-        processBackgroundLearning();
-      }, STREAMING_INTERVAL);
-    }
+    // Only start once per mount when data becomes live
+    if (backgroundStreamingRef.current) return;
+    if (!liveData.priceIsLive) return;
+    
+    console.log('[AI Learning] Starting background data collection...');
+    backgroundStreamingRef.current = true;
+    setIsStreaming(true);
+    
+    // Initial learning cycle
+    processBackgroundLearningRef.current();
+    
+    // Set up interval for continuous learning
+    streamingIntervalRef.current = setInterval(() => {
+      processBackgroundLearningRef.current();
+    }, STREAMING_INTERVAL);
     
     return () => {
       if (streamingIntervalRef.current) {
@@ -568,7 +575,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       }
       backgroundStreamingRef.current = false;
     };
-  }, [liveData.priceIsLive, processBackgroundLearning]);
+  }, [liveData.priceIsLive]);
 
   // Restart learning and reset state when crypto changes
   useEffect(() => {
