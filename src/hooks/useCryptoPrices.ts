@@ -336,8 +336,10 @@ export const useCryptoPrices = () => {
   const [connectedSources, setConnectedSources] = useState<string[]>([]);
   const [isLive, setIsLive] = useState(false);
   
-  // Get all symbols for WebSocket subscription
-  const allSymbols = initialPrices.map(p => p.symbol.toUpperCase());
+  // Get all symbols for WebSocket subscription (server supports 100 symbols max)
+  const allSymbols = Array.from(
+    new Set(initialPrices.slice(0, 100).map((p) => p.symbol.toUpperCase()))
+  );
   
   // PRIMARY: WebSocket streaming for real-time updates
   const websocket = useGlobalPriceWebSocket(allSymbols);
