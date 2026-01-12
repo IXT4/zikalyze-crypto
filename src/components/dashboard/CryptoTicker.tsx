@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { CryptoPrice } from "@/hooks/useCryptoPrices";
 import { Circle, Zap, Link2 } from "lucide-react";
 import { PriceChange } from "./PriceChange";
-import { AnimatedPrice } from "./AnimatedPrice";
+import { RollingPriceLarge } from "./RollingPrice";
 
 const cryptoMeta = [
   { symbol: "BTC", name: "Bitcoin", color: "text-warning" },
@@ -193,14 +193,7 @@ const CryptoTicker = ({
                   animated={!!flash}
                 />
               </div>
-              <AnimatedPrice 
-                value={price}
-                className={cn(
-                  "text-lg font-semibold",
-                  flash === "up" ? "text-success" : flash === "down" ? "text-destructive" : "text-foreground"
-                )}
-                showFlash={false}
-              />
+              <RollingPriceLarge value={price} />
             </button>
           );
         })}

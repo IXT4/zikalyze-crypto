@@ -14,7 +14,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { PriceChangeCompact } from "./PriceChange";
-import { AnimatedPriceCompact } from "./AnimatedPrice";
+import { RollingPriceCompact } from "./RollingPrice";
 
 interface Top100CryptoListProps {
   onSelect: (symbol: string) => void;
@@ -306,7 +306,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                       </div>
                     </td>
                     <td className="py-3 text-right">
-                      <AnimatedPriceCompact value={crypto.current_price} />
+                      <RollingPriceCompact value={crypto.current_price} />
                     </td>
                     <td className="py-3 text-right">
                       <div className="flex items-center justify-end">
