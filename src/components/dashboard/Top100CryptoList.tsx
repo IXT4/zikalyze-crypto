@@ -306,7 +306,7 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
                       </div>
                     </td>
                     <td className="py-3 text-right">
-                      <LivePriceCompact value={crypto.current_price} change24h={crypto.price_change_percentage_24h} />
+                      <LivePriceCompact value={crypto.current_price} />
                     </td>
                     <td className="py-3 text-right">
                       <div className="flex items-center justify-end">

@@ -193,7 +193,7 @@ const CryptoTicker = ({
                   animated={!!flash}
                 />
               </div>
-              <LivePriceLarge value={price} change24h={change} />
+              <LivePriceLarge value={price} />
             </button>
           );
         })}

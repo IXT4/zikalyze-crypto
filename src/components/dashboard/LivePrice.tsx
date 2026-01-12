@@ -10,33 +10,32 @@ import { useCurrency } from "@/hooks/useCurrency";
 
 interface LivePriceProps {
   value: number;
-  change24h?: number;
   className?: string;
 }
 
-export const LivePrice = ({ value, change24h = 0, className }: LivePriceProps) => {
+export const LivePrice = ({ value, className }: LivePriceProps) => {
   const { formatPrice } = useCurrency();
   const [displayValue, setDisplayValue] = useState(value);
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   const prevValueRef = useRef(value);
   const flashTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Base color from 24h change
-  const baseColor = change24h >= 0 ? "text-success" : "text-destructive";
-
   useEffect(() => {
     if (!value || value <= 0) return;
     if (value === prevValueRef.current) return;
 
+    // Clear pending flash
     if (flashTimeoutRef.current) {
       clearTimeout(flashTimeoutRef.current);
     }
 
+    // Determine direction and update
     const direction = value > prevValueRef.current ? "up" : "down";
     setFlash(direction);
     setDisplayValue(value);
     prevValueRef.current = value;
 
+    // Quick flash fade - 400ms for natural feel
     flashTimeoutRef.current = setTimeout(() => {
       setFlash(null);
     }, 400);
@@ -50,9 +49,9 @@ export const LivePrice = ({ value, change24h = 0, className }: LivePriceProps) =
     <span
       className={cn(
         "tabular-nums font-semibold transition-colors duration-150",
-        flash === "up" && "text-success brightness-125",
-        flash === "down" && "text-destructive brightness-125",
-        !flash && baseColor,
+        flash === "up" && "text-success",
+        flash === "down" && "text-destructive",
+        !flash && "text-foreground",
         className
       )}
     >
@@ -64,11 +63,9 @@ export const LivePrice = ({ value, change24h = 0, className }: LivePriceProps) =
 // Compact version for tables with subtle background
 export const LivePriceCompact = ({
   value,
-  change24h = 0,
   className,
 }: {
   value: number;
-  change24h?: number;
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
@@ -76,8 +73,6 @@ export const LivePriceCompact = ({
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   const prevValueRef = useRef(value);
   const flashTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const baseColor = change24h >= 0 ? "text-success" : "text-destructive";
 
   useEffect(() => {
     if (!value || value <= 0) return;
@@ -92,6 +87,7 @@ export const LivePriceCompact = ({
     setDisplayValue(value);
     prevValueRef.current = value;
 
+    // Slightly longer flash for table visibility
     flashTimeoutRef.current = setTimeout(() => {
       setFlash(null);
     }, 500);
@@ -105,9 +101,9 @@ export const LivePriceCompact = ({
     <span
       className={cn(
         "inline-block tabular-nums text-sm font-medium px-1 rounded transition-all duration-150",
-        flash === "up" && "text-success bg-success/10 brightness-125",
-        flash === "down" && "text-destructive bg-destructive/10 brightness-125",
-        !flash && baseColor,
+        flash === "up" && "text-success bg-success/10",
+        flash === "down" && "text-destructive bg-destructive/10",
+        !flash && "text-foreground bg-transparent",
         className
       )}
     >
@@ -119,11 +115,9 @@ export const LivePriceCompact = ({
 // Large ticker display
 export const LivePriceLarge = ({
   value,
-  change24h = 0,
   className,
 }: {
   value: number;
-  change24h?: number;
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
@@ -131,8 +125,6 @@ export const LivePriceLarge = ({
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   const prevValueRef = useRef(value);
   const flashTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const baseColor = change24h >= 0 ? "text-success" : "text-destructive";
 
   useEffect(() => {
     if (!value || value <= 0) return;
@@ -160,9 +152,9 @@ export const LivePriceLarge = ({
     <span
       className={cn(
         "tabular-nums text-lg font-bold transition-colors duration-150",
-        flash === "up" && "text-success brightness-125",
-        flash === "down" && "text-destructive brightness-125",
-        !flash && baseColor,
+        flash === "up" && "text-success",
+        flash === "down" && "text-destructive",
+        !flash && "text-foreground",
         className
       )}
     >
