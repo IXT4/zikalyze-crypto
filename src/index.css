@@ -58,48 +58,52 @@ All colors MUST be HSL.
   }
 }
 
-/* Price Flash Animations */
+/* Price Flash Animations - CoinMarketCap/Binance Style */
+.price-display {
+  transition: transform 0.1s ease-out;
+}
+
 @keyframes flashGreen {
   0% { 
-    color: white; 
-    background: hsla(142, 76%, 46%, 0.4);
-    transform: scale(1);
+    background: rgba(0, 255, 157, 0.45); 
+    color: white;
   }
   50% { 
-    background: hsla(142, 76%, 46%, 0.8);
-    transform: scale(1.05);
+    background: rgba(0, 255, 157, 0.85); 
+    color: #00ff9d;
   }
   100% { 
     background: transparent; 
-    color: hsl(142, 76%, 46%);
+    color: #00ff9d;
     transform: scale(1);
   }
 }
 
 @keyframes flashRed {
   0% { 
-    color: white; 
-    background: hsla(0, 72%, 51%, 0.4);
-    transform: scale(1);
+    background: rgba(255, 7, 58, 0.45); 
+    color: white;
   }
   50% { 
-    background: hsla(0, 72%, 51%, 0.8);
-    transform: scale(1.05);
+    background: rgba(255, 7, 58, 0.85); 
+    color: #ff073a;
   }
   100% { 
     background: transparent; 
-    color: hsl(0, 72%, 51%);
+    color: #ff073a;
     transform: scale(1);
   }
 }
 
 .price-flash-up {
-  animation: flashGreen 0.8s ease-out;
+  animation: flashGreen 0.8s ease-out forwards;
+  transform: scale(1.05);
   border-radius: 0.25rem;
 }
 
 .price-flash-down {
-  animation: flashRed 0.8s ease-out;
+  animation: flashRed 0.8s ease-out forwards;
+  transform: scale(1.05);
   border-radius: 0.25rem;
 }
 
