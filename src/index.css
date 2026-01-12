@@ -58,63 +58,69 @@ All colors MUST be HSL.
   }
 }
 
-/* Price Flash Animations - Highly Visible Real-Time Updates */
+/* Price Flash Animations - HIGHLY VISIBLE Real-Time Updates */
 .price-display {
   transition: transform 0.15s ease-out, color 0.3s ease-out;
+  border-radius: 4px;
 }
 
 @keyframes flashGreen {
   0% { 
-    background: rgba(0, 255, 157, 0.6); 
-    color: white;
-    transform: scale(1.04);
-    box-shadow: 0 0 12px rgba(0, 255, 157, 0.5);
+    background: linear-gradient(135deg, rgba(0, 255, 157, 0.8), rgba(0, 200, 120, 0.6)); 
+    color: white !important;
+    transform: scale(1.08);
+    box-shadow: 0 0 20px rgba(0, 255, 157, 0.7), inset 0 0 10px rgba(255, 255, 255, 0.3);
+    text-shadow: 0 0 8px rgba(0, 255, 157, 0.8);
   }
-  40% { 
-    background: rgba(0, 255, 157, 0.8); 
-    color: white;
-    box-shadow: 0 0 20px rgba(0, 255, 157, 0.6);
+  50% { 
+    background: rgba(0, 255, 157, 0.5); 
+    color: white !important;
+    box-shadow: 0 0 15px rgba(0, 255, 157, 0.5);
   }
   100% { 
     background: transparent; 
     color: #00ff9d;
     transform: scale(1);
     box-shadow: none;
+    text-shadow: none;
   }
 }
 
 @keyframes flashRed {
   0% { 
-    background: rgba(255, 7, 58, 0.6); 
-    color: white;
-    transform: scale(1.04);
-    box-shadow: 0 0 12px rgba(255, 7, 58, 0.5);
+    background: linear-gradient(135deg, rgba(255, 7, 58, 0.8), rgba(200, 0, 50, 0.6)); 
+    color: white !important;
+    transform: scale(1.08);
+    box-shadow: 0 0 20px rgba(255, 7, 58, 0.7), inset 0 0 10px rgba(255, 255, 255, 0.3);
+    text-shadow: 0 0 8px rgba(255, 7, 58, 0.8);
   }
-  40% { 
-    background: rgba(255, 7, 58, 0.8); 
-    color: white;
-    box-shadow: 0 0 20px rgba(255, 7, 58, 0.6);
+  50% { 
+    background: rgba(255, 7, 58, 0.5); 
+    color: white !important;
+    box-shadow: 0 0 15px rgba(255, 7, 58, 0.5);
   }
   100% { 
     background: transparent; 
     color: #ff073a;
     transform: scale(1);
     box-shadow: none;
+    text-shadow: none;
   }
 }
 
 .price-flash-up,
 .price-flash-down {
-  border-radius: 0.25rem;
-  padding: 0 0.25rem;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin: -2px -6px;
 }
 
 .price-flash-up {
-  animation: flashGreen 0.6s ease-out forwards;
+  animation: flashGreen 0.7s ease-out forwards;
 }
 
 .price-flash-down {
-  animation: flashRed 0.6s ease-out forwards;
+  animation: flashRed 0.7s ease-out forwards;
 }
 
 @keyframes fadeOut {
