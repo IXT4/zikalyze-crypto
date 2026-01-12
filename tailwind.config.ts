@@ -92,36 +92,18 @@ export default {
         },
         "price-flash-up": {
           "0%": {
-            backgroundColor: "hsl(var(--success) / 0.4)",
-            boxShadow: "0 0 12px hsl(var(--success) / 0.6)",
-            transform: "scale(1.02)",
-          },
-          "50%": {
-            backgroundColor: "hsl(var(--success) / 0.2)",
-            boxShadow: "0 0 6px hsl(var(--success) / 0.3)",
-            transform: "scale(1.01)",
+            backgroundColor: "hsl(var(--success) / 0.15)",
           },
           "100%": {
             backgroundColor: "transparent",
-            boxShadow: "none",
-            transform: "scale(1)",
           },
         },
         "price-flash-down": {
           "0%": {
-            backgroundColor: "hsl(var(--destructive) / 0.4)",
-            boxShadow: "0 0 12px hsl(var(--destructive) / 0.6)",
-            transform: "scale(1.02)",
-          },
-          "50%": {
-            backgroundColor: "hsl(var(--destructive) / 0.2)",
-            boxShadow: "0 0 6px hsl(var(--destructive) / 0.3)",
-            transform: "scale(1.01)",
+            backgroundColor: "hsl(var(--destructive) / 0.15)",
           },
           "100%": {
             backgroundColor: "transparent",
-            boxShadow: "none",
-            transform: "scale(1)",
           },
         },
         "bounce-subtle-up": {

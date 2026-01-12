@@ -705,7 +705,6 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
 
     setStreamStatus('connecting');
     const wsUrl = endpoints[wsStateRef.current.reconnectAttempts % endpoints.length];
-    console.log(`[OnChain] Connecting ${cryptoUpper} WebSocket: ${wsUrl}`);
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -713,7 +712,6 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
 
       ws.onopen = () => {
         if (!isMountedRef.current) return;
-        console.log(`[OnChain] ${cryptoUpper} WebSocket connected`);
         wsStateRef.current.reconnectAttempts = 0;
         setStreamStatus('connected');
         
@@ -817,7 +815,6 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
                 source: 'eth-ws',
                 streamStatus: 'connected'
               });
-              console.log(`[OnChain] ETH New block: ${blockNum}`);
             }
           }
         } catch {
@@ -826,32 +823,26 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
       };
 
       ws.onerror = () => {
-        console.warn(`[OnChain] ${cryptoUpper} WebSocket error`);
+        // Silent error - will trigger onclose for reconnect
         setStreamStatus('disconnected');
       };
 
-      ws.onclose = (event) => {
-        console.log(`[OnChain] ${cryptoUpper} WebSocket closed: ${event.code}`);
+      ws.onclose = () => {
         wsStateRef.current.socket = null;
         
         if (!isMountedRef.current) return;
         setStreamStatus('disconnected');
 
+        // Silent reconnection
         if (wsStateRef.current.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           const delay = BASE_RECONNECT_DELAY * Math.pow(2, wsStateRef.current.reconnectAttempts);
-          console.log(`[OnChain] Reconnecting ${cryptoUpper} in ${delay}ms (attempt ${wsStateRef.current.reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
-          
           wsStateRef.current.reconnectAttempts++;
           wsStateRef.current.reconnectTimeout = setTimeout(() => {
             if (isMountedRef.current) connectWebSocket();
           }, delay);
-        } else {
-          console.log(`[OnChain] ${cryptoUpper} WebSocket max attempts, staying on REST`);
-          setStreamStatus('disconnected');
         }
       };
-    } catch (e) {
-      console.error(`[OnChain] ${cryptoUpper} WebSocket error:`, e);
+    } catch {
       setStreamStatus('disconnected');
     }
   }, [updateMetrics]);

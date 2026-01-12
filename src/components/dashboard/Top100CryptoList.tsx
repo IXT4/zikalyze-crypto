@@ -53,36 +53,12 @@ const CryptoRow = memo(({
   onSelect,
   onAlertClick,
 }: CryptoRowProps) => {
-  const [flashClass, setFlashClass] = useState<string>("");
-  const prevPriceRef = useRef(livePrice);
-
-  // Flash animation when price changes
-  useEffect(() => {
-    const prevPrice = prevPriceRef.current;
-    const diff = Math.abs(livePrice - prevPrice);
-    const threshold = prevPrice * 0.000001; // Ultra-sensitive threshold
-
-    if (diff > threshold && prevPrice !== 0) {
-      const direction = livePrice > prevPrice ? "up" : "down";
-      setFlashClass(direction === "up" ? "animate-row-flash-up" : "animate-row-flash-down");
-      prevPriceRef.current = livePrice;
-
-      // Remove flash class after animation completes
-      const timer = setTimeout(() => {
-        setFlashClass("");
-      }, 600);
-
-      return () => clearTimeout(timer);
-    }
-  }, [livePrice]);
-
   return (
     <tr
       onClick={() => onSelect(crypto.symbol.toUpperCase())}
       className={cn(
-        "border-b border-border/50 cursor-pointer transition-all duration-200 hover:bg-secondary/50",
-        isSelected && "bg-primary/10",
-        flashClass
+        "border-b border-border/50 cursor-pointer transition-colors duration-200 hover:bg-secondary/50",
+        isSelected && "bg-primary/10"
       )}
     >
       <td className="py-3 text-sm text-muted-foreground">{index + 1}</td>

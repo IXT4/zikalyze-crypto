@@ -26,9 +26,9 @@ const RollingDigit = ({
   return (
     <span
       className={cn(
-        "inline-block tabular-nums transition-all duration-200",
-        isAnimating && direction === "up" && "text-success animate-roll-up",
-        isAnimating && direction === "down" && "text-destructive animate-roll-down",
+        "inline-block tabular-nums transition-colors duration-300",
+        isAnimating && direction === "up" && "text-success",
+        isAnimating && direction === "down" && "text-destructive",
         !isAnimating && "text-foreground"
       )}
       style={{ minWidth: /\d/.test(char) ? "0.6em" : undefined }}
@@ -54,31 +54,29 @@ export const LivePriceCompact = ({
   const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // Only animate if value actually changed (more than 0.0001% difference)
+    // Only animate on meaningful changes (>0.01%)
     const diff = Math.abs(value - prevValueRef.current);
-    const threshold = prevValueRef.current * 0.000001; // Ultra-sensitive
+    const threshold = prevValueRef.current * 0.0001;
     
     if (diff > threshold && prevValueRef.current !== 0) {
-      // Clear any pending animation timeout
       if (animationTimeoutRef.current) {
         clearTimeout(animationTimeoutRef.current);
       }
       
-      // Set direction based on price movement
       const newDirection = value > prevValueRef.current ? "up" : "down";
       setDirection(newDirection);
       setIsAnimating(true);
       setDisplayPrice(formatPrice(value));
       prevValueRef.current = value;
       
-      // Reset animation after 400ms
+      // Shorter animation duration
       animationTimeoutRef.current = setTimeout(() => {
         setIsAnimating(false);
         setDirection(null);
-      }, 400);
+      }, 300);
     } else if (formatPrice(value) !== displayPrice) {
-      // Just formatting change, update without animation
       setDisplayPrice(formatPrice(value));
+      prevValueRef.current = value;
     }
 
     return () => {
