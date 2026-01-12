@@ -2,6 +2,7 @@
 // 🌡️ GPU Heatmap Renderer — Real-time Crypto Market Visualization
 // ═══════════════════════════════════════════════════════════════════════════════
 // Renders a grid of 100 cryptocurrencies with color-coded price changes
+// Includes: crypto icons, real-time prices, volume, flash animations
 // WebGPU → WebGL2 → Canvas2D fallback chain
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -11,6 +12,7 @@ export interface HeatmapCell {
   price: number;
   change24h: number;
   marketCap: number;
+  volume24h: number;
   rank: number;
   image?: string;
   flashIntensity?: number;
@@ -24,8 +26,10 @@ export interface HeatmapConfig {
   borderRadius: number;
   fontSize: number;
   showLabels: boolean;
+  showIcons: boolean;
+  showVolume: boolean;
   animationSpeed: number;
-  maxIntensity: number; // Max % change for full color intensity
+  maxIntensity: number;
 }
 
 export interface HeatmapState {
@@ -34,6 +38,8 @@ export interface HeatmapState {
   cells: HeatmapCell[];
   lastPrices: Map<string, number>;
   flashStates: Map<string, { intensity: number; type: "up" | "down"; timestamp: number }>;
+  imageCache: Map<string, HTMLImageElement | null>;
+  pendingImages: Set<string>;
 }
 
 const DEFAULT_CONFIG: HeatmapConfig = {
@@ -43,8 +49,10 @@ const DEFAULT_CONFIG: HeatmapConfig = {
   borderRadius: 6,
   fontSize: 10,
   showLabels: true,
+  showIcons: true,
+  showVolume: false,
   animationSpeed: 0.05,
-  maxIntensity: 10, // 10% change = full color
+  maxIntensity: 10,
 };
 
 // Color interpolation for price changes
@@ -119,6 +127,49 @@ const calculateGridDimensions = (count: number, width: number, height: number): 
   return { cols, rows };
 };
 
+// Load and cache crypto icon images
+const loadImage = (
+  state: HeatmapState,
+  symbol: string,
+  imageUrl: string | undefined
+): HTMLImageElement | null => {
+  if (!imageUrl) return null;
+  
+  // Check cache first
+  if (state.imageCache.has(symbol)) {
+    return state.imageCache.get(symbol) || null;
+  }
+  
+  // Prevent duplicate loading
+  if (state.pendingImages.has(symbol)) {
+    return null;
+  }
+  
+  state.pendingImages.add(symbol);
+  
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => {
+    state.imageCache.set(symbol, img);
+    state.pendingImages.delete(symbol);
+  };
+  img.onerror = () => {
+    state.imageCache.set(symbol, null); // Cache failure to prevent retries
+    state.pendingImages.delete(symbol);
+  };
+  img.src = imageUrl;
+  
+  return null; // Image not yet loaded
+};
+
+// Format volume for display
+const formatVolume = (volume: number): string => {
+  if (volume >= 1_000_000_000) return `${(volume / 1_000_000_000).toFixed(1)}B`;
+  if (volume >= 1_000_000) return `${(volume / 1_000_000).toFixed(1)}M`;
+  if (volume >= 1_000) return `${(volume / 1_000).toFixed(1)}K`;
+  return volume.toFixed(0);
+};
+
 export const initHeatmapRenderer = (canvas: HTMLCanvasElement): HeatmapState | null => {
   const ctx = canvas.getContext("2d", { alpha: false });
   if (!ctx) return null;
@@ -129,6 +180,8 @@ export const initHeatmapRenderer = (canvas: HTMLCanvasElement): HeatmapState | n
     cells: [],
     lastPrices: new Map(),
     flashStates: new Map(),
+    imageCache: new Map(),
+    pendingImages: new Set(),
   };
 };
 
@@ -177,12 +230,15 @@ export const renderHeatmap = (
 ): void => {
   const { ctx, canvas, cells, flashStates } = state;
   const cfg = { ...DEFAULT_CONFIG, ...config };
-  const { width, height, cellPadding, borderRadius, fontSize, showLabels, maxIntensity } = cfg;
+  const { width, height, cellPadding, borderRadius, fontSize, showLabels, showIcons, showVolume, maxIntensity } = cfg;
   
   // Handle high DPI displays
   const dpr = window.devicePixelRatio || 1;
-  canvas.width = width * dpr;
-  canvas.height = height * dpr;
+  if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.scale(dpr, dpr);
   
   // Clear canvas with dark background
@@ -224,40 +280,83 @@ export const renderHeatmap = (
     
     // Add glow effect for flashing cells
     if (flashIntensity > 0.3) {
+      ctx.save();
       ctx.shadowColor = flashType === "up" ? "rgba(0, 255, 157, 0.6)" : "rgba(255, 50, 50, 0.6)";
       ctx.shadowBlur = 15 * flashIntensity;
       ctx.fill();
-      ctx.shadowColor = "transparent";
-      ctx.shadowBlur = 0;
+      ctx.restore();
     }
     
     // Draw border
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = flashIntensity > 0.5 
+      ? (flashType === "up" ? "rgba(0, 255, 157, 0.5)" : "rgba(255, 80, 80, 0.5)")
+      : "rgba(255, 255, 255, 0.1)";
+    ctx.lineWidth = flashIntensity > 0.5 ? 2 : 1;
     ctx.stroke();
     
     if (showLabels) {
+      const hasIcon = showIcons && cell.image;
+      const iconSize = Math.min(cellWidth * 0.25, cellHeight * 0.25, 20);
+      const contentStartY = hasIcon ? y + iconSize + 2 : y;
+      const contentHeight = hasIcon ? cellHeight - iconSize - 2 : cellHeight;
+      
+      // Draw crypto icon if available
+      if (hasIcon) {
+        const img = loadImage(state, cell.symbol, cell.image);
+        if (img) {
+          const iconX = x + (cellWidth - iconSize) / 2;
+          const iconY = y + 3;
+          
+          // Circular clip for icon
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(iconX + iconSize / 2, iconY + iconSize / 2, iconSize / 2, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(img, iconX, iconY, iconSize, iconSize);
+          ctx.restore();
+          
+          // Icon border
+          ctx.beginPath();
+          ctx.arc(iconX + iconSize / 2, iconY + iconSize / 2, iconSize / 2, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+      
       // Draw symbol (main label)
-      const symbolFontSize = Math.min(fontSize * 1.2, cellHeight * 0.25);
+      const symbolFontSize = Math.min(fontSize * 1.1, contentHeight * 0.22);
       ctx.font = `bold ${symbolFontSize}px system-ui, sans-serif`;
       ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(cell.symbol.toUpperCase(), x + cellWidth / 2, y + cellHeight * 0.15);
+      ctx.fillText(cell.symbol.toUpperCase(), x + cellWidth / 2, contentStartY + contentHeight * 0.08);
       
       // Draw change percentage
-      const changeFontSize = Math.min(fontSize * 1.4, cellHeight * 0.3);
+      const changeFontSize = Math.min(fontSize * 1.3, contentHeight * 0.28);
       ctx.font = `bold ${changeFontSize}px system-ui, sans-serif`;
       ctx.fillStyle = cell.change24h >= 0 ? "rgba(180, 255, 220, 1)" : "rgba(255, 180, 180, 1)";
       ctx.textBaseline = "middle";
-      ctx.fillText(formatChange(cell.change24h), x + cellWidth / 2, y + cellHeight * 0.5);
+      ctx.fillText(formatChange(cell.change24h), x + cellWidth / 2, contentStartY + contentHeight * 0.42);
       
-      // Draw price (smaller, at bottom)
-      const priceFontSize = Math.min(fontSize * 0.9, cellHeight * 0.18);
+      // Draw price
+      const priceFontSize = Math.min(fontSize * 0.85, contentHeight * 0.16);
       ctx.font = `${priceFontSize}px system-ui, sans-serif`;
-      ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
       ctx.textBaseline = "bottom";
-      ctx.fillText(formatPrice(cell.price), x + cellWidth / 2, y + cellHeight * 0.9);
+      
+      if (showVolume && cell.volume24h > 0) {
+        // Show both price and volume
+        ctx.fillText(formatPrice(cell.price), x + cellWidth / 2, contentStartY + contentHeight * 0.72);
+        
+        // Draw volume
+        const volumeFontSize = Math.min(fontSize * 0.7, contentHeight * 0.13);
+        ctx.font = `${volumeFontSize}px system-ui, sans-serif`;
+        ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+        ctx.fillText(`Vol: ${formatVolume(cell.volume24h)}`, x + cellWidth / 2, contentStartY + contentHeight * 0.92);
+      } else {
+        ctx.fillText(formatPrice(cell.price), x + cellWidth / 2, contentStartY + contentHeight * 0.85);
+      }
     }
   });
 };
