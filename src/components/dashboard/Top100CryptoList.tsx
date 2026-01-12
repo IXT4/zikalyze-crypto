@@ -274,9 +274,17 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
     );
   }
 
+  // Calculate market sentiment for dynamic glow
+  const gainers = filteredPrices.filter(p => p.price_change_percentage_24h > 0).length;
+  const losers = filteredPrices.filter(p => p.price_change_percentage_24h < 0).length;
+  const isBullishMarket = gainers > losers;
+
   return (
     <>
-      <div className="rounded-2xl border border-border bg-card p-6">
+      <div className={cn(
+        "rounded-2xl border border-border bg-card p-6 transition-shadow duration-500",
+        websocket.connected && (isBullishMarket ? "animate-live-glow-bullish" : "animate-live-glow-bearish")
+      )}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-foreground">Top 100 Cryptocurrencies</h3>
           <div className="flex items-center gap-2">
