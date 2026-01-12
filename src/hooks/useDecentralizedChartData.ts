@@ -251,14 +251,13 @@ export const useDecentralizedChartData = (
     const now = Date.now();
     const newPrice = wsPrice.price;
     
-    // Smoother throttle for chart updates
-    const throttleMs = Math.max(300, config.throttleMs);
+    // Use timeframe-appropriate throttling for smooth updates
+    const throttleMs = config.throttleMs;
     if (now - lastUpdateRef.current < throttleMs) return;
     
-    // Only add if price changed meaningfully (less sensitive for smoother charts)
-    if (lastPriceRef.current !== null) {
-      const priceDiff = Math.abs(newPrice - lastPriceRef.current) / lastPriceRef.current;
-      if (priceDiff < 0.0001) return; // 0.01% threshold for smoother updates
+    // Always record real price changes, skip only truly identical prices
+    if (lastPriceRef.current !== null && newPrice === lastPriceRef.current) {
+      return;
     }
     
     lastUpdateRef.current = now;
@@ -274,21 +273,16 @@ export const useDecentralizedChartData = (
     rawTicksRef.current = [...rawTicksRef.current, newTick];
     setCurrentSource("WebSocket");
     
-    // Re-aggregate at a calmer pace for smooth chart transitions
-    const aggregationInterval = Math.max(config.throttleMs, 500);
-    if (now - lastAggregationRef.current > aggregationInterval) {
-      lastAggregationRef.current = now;
-      
-      const aggregated = aggregateToTimeframe(rawTicksRef.current, timeframe);
-      setChartData(aggregated);
-      setIsBuilding(aggregated.length < 3);
-      
-      if (aggregated.length > 1) {
-        const firstPrice = aggregated[0].price;
-        const lastPrice = aggregated[aggregated.length - 1].price;
-        const change = ((lastPrice - firstPrice) / firstPrice) * 100;
-        setPriceChange(change);
-      }
+    // Aggregate on every meaningful update for accurate real-time streaming
+    const aggregated = aggregateToTimeframe(rawTicksRef.current, timeframe);
+    setChartData(aggregated);
+    setIsBuilding(aggregated.length < 3);
+    
+    if (aggregated.length > 1) {
+      const firstPrice = aggregated[0].price;
+      const lastPrice = aggregated[aggregated.length - 1].price;
+      const change = ((lastPrice - firstPrice) / firstPrice) * 100;
+      setPriceChange(change);
     }
     
     // Save to cache periodically
