@@ -115,12 +115,9 @@ const CryptoTicker = ({
           const livePrice = getPriceBySymbol(crypto.symbol);
           const price = livePrice?.current_price || 0;
           const change = livePrice?.price_change_percentage_24h || 0;
-          const source = livePrice?.source;
           
-          // Determine if this price is from an oracle
-          const isOraclePrice = source?.includes("Oracle") || source === "Pyth" || source === "Chainlink";
-          // Kaspa may not always be covered by oracle feeds; still show the live tick dot when the overall stream is live
-          const showTickDot = !!isLive && (isOraclePrice || crypto.symbol === "KAS");
+          // Show live dot for all cryptos when stream is live and price is available
+          const showTickDot = !!isLive && price > 0;
           
           return (
             <button
