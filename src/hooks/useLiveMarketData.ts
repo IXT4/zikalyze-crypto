@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useKrakenLivePrice } from "./useKrakenLivePrice";
+import { useOraclePrices } from "./useOraclePrices";
 import { supabase } from "@/integrations/supabase/client";
 import { useSmartNotifications } from "./useSmartNotifications";
 
@@ -44,7 +44,7 @@ export interface LiveMarketData {
   dataSourcesSummary: string;
 }
 
-// No polling - data updates reactively when WebSocket price changes
+// No polling - data updates reactively when oracle price changes
 
 export function useLiveMarketData(
   crypto: string,
@@ -54,8 +54,21 @@ export function useLiveMarketData(
   fallbackLow?: number,
   fallbackVolume?: number
 ) {
-  // Live price from Kraken WebSocket
-  const livePrice = useKrakenLivePrice(crypto, fallbackPrice, fallbackChange);
+  // Live price from decentralized oracles (Pyth SSE primary, DIA/Redstone fallback)
+  const oraclePrices = useOraclePrices([crypto]);
+  const oraclePrice = oraclePrices.getPrice(crypto);
+  
+  // Build live price object from oracle data
+  const livePrice = {
+    price: oraclePrice?.price || fallbackPrice,
+    change24h: fallbackChange, // Oracle doesn't provide 24h change, use fallback
+    high24h: fallbackHigh || 0,
+    low24h: fallbackLow || 0,
+    volume: fallbackVolume || 0,
+    lastUpdate: oraclePrice?.lastUpdate || Date.now(),
+    isLive: oraclePrices.isLive && !!oraclePrice,
+    source: oraclePrice?.source || 'Cached',
+  };
   
   // Smart notifications
   const { checkSentimentShift, checkWhaleActivity } = useSmartNotifications();
