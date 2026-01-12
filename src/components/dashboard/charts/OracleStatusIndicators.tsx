@@ -28,44 +28,13 @@ const SOURCE_CONFIG: Record<string, { icon: React.ReactNode; color: string; bg: 
 };
 
 export const OracleSourceBadge = ({ source }: { source: OracleSource }) => {
-  if (!source || source === "none") return null;
-  
-  const config = SOURCE_CONFIG[source];
-  if (!config) return null;
-
-  return (
-    <span className={cn(
-      "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium",
-      config.bg, 
-      config.color
-    )}>
-      {config.icon}
-      {source}
-    </span>
-  );
+  // Hidden - no source badges displayed
+  return null;
 };
 
 export const OracleConnectionDots = ({ status }: { status: OracleStatusProps }) => {
-  // Only show Pyth and WebSocket indicators now
-  const dots = [
-    { connected: status.pythConnected, label: "Pyth", color: "bg-chart-cyan" },
-    { connected: status.primarySource === "WebSocket", label: "WebSocket", color: "bg-red-400" },
-  ];
-
-  return (
-    <div className="flex items-center gap-1">
-      {dots.map((dot) => (
-        <div
-          key={dot.label}
-          className={cn(
-            "h-1.5 w-1.5 rounded-full transition-colors",
-            dot.connected ? dot.color : "bg-muted-foreground/30"
-          )}
-          title={`${dot.label}: ${dot.connected ? "Connected" : "Disconnected"}`}
-        />
-      ))}
-    </div>
-  );
+  // Hidden - no connection dots displayed
+  return null;
 };
 
 export const LiveBadge = () => (
