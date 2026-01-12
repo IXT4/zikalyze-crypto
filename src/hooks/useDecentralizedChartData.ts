@@ -251,14 +251,14 @@ export const useDecentralizedChartData = (
     const now = Date.now();
     const newPrice = wsPrice.price;
     
-    // Lower throttle for WebSocket (faster updates)
-    const throttleMs = Math.max(100, config.throttleMs / 2);
+    // Smoother throttle for chart updates
+    const throttleMs = Math.max(300, config.throttleMs);
     if (now - lastUpdateRef.current < throttleMs) return;
     
-    // Only add if price changed meaningfully (ultra-sensitive for chart)
+    // Only add if price changed meaningfully (less sensitive for smoother charts)
     if (lastPriceRef.current !== null) {
       const priceDiff = Math.abs(newPrice - lastPriceRef.current) / lastPriceRef.current;
-      if (priceDiff < 0.00001) return; // 0.001% threshold for chart responsiveness
+      if (priceDiff < 0.0001) return; // 0.01% threshold for smoother updates
     }
     
     lastUpdateRef.current = now;
@@ -274,8 +274,8 @@ export const useDecentralizedChartData = (
     rawTicksRef.current = [...rawTicksRef.current, newTick];
     setCurrentSource("WebSocket");
     
-    // Re-aggregate immediately for chart responsiveness
-    const aggregationInterval = Math.min(config.throttleMs, 300);
+    // Re-aggregate at a calmer pace for smooth chart transitions
+    const aggregationInterval = Math.max(config.throttleMs, 500);
     if (now - lastAggregationRef.current > aggregationInterval) {
       lastAggregationRef.current = now;
       
