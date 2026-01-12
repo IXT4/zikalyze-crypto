@@ -145,31 +145,54 @@ export function getAllTokenMetadata(): TokenMetadata[] {
   return DECENTRALIZED_TOKEN_REGISTRY;
 }
 
-// Generate token image URL using decentralized CDN (jsDelivr + open-source icons)
-const CRYPTO_ICON_CDN = "https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color";
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🖼️ Web3Icons CDN - 2700+ token icons with high reliability
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// Symbol mappings for tokens with different file names in the icon repo
-const ICON_SYMBOL_MAP: Record<string, string> = {
-  MATIC: "matic",
-  LUNC: "luna", // Terra Classic uses old Luna icon
-  EGLD: "egld",
-  SHIB: "shib",
-  AGIX: "agix",
-  WLD: "wld",
+// Primary: @web3icons (2700+ tokens) - Most comprehensive
+const WEB3ICONS_CDN = "https://cdn.jsdelivr.net/npm/@web3icons/core@latest/svgs/tokens/branded";
+
+// Fallback: spothq/cryptocurrency-icons (400+ tokens) - Well maintained
+const SPOTHQ_CDN = "https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/color";
+
+// Symbol mappings for tokens with different names in the icon repos
+const ICON_SYMBOL_MAP: Record<string, { web3: string; spothq: string }> = {
+  MATIC: { web3: "MATIC", spothq: "matic" },
+  LUNC: { web3: "LUNC", spothq: "luna" },
+  EGLD: { web3: "EGLD", spothq: "egld" },
+  SHIB: { web3: "SHIB", spothq: "shib" },
+  AGIX: { web3: "AGIX", spothq: "agix" },
+  WLD: { web3: "WLD", spothq: "wld" },
+  ARB: { web3: "ARB", spothq: "arb" },
+  OP: { web3: "OP", spothq: "op" },
+  APT: { web3: "APT", spothq: "apt" },
+  SUI: { web3: "SUI", spothq: "sui" },
+  TIA: { web3: "TIA", spothq: "tia" },
+  SEI: { web3: "SEI", spothq: "sei" },
+  JUP: { web3: "JUP", spothq: "jup" },
+  BONK: { web3: "BONK", spothq: "bonk" },
+  WIF: { web3: "WIF", spothq: "wif" },
+  PEPE: { web3: "PEPE", spothq: "pepe" },
+  FLOKI: { web3: "FLOKI", spothq: "floki" },
 };
 
+// Get web3icons URL (primary - 2700+ tokens)
 export function getTokenImageUrl(symbol: string): string {
   const upperSymbol = symbol.toUpperCase().replace(/USD$/, '');
-  const lowerSymbol = (ICON_SYMBOL_MAP[upperSymbol] || upperSymbol).toLowerCase();
-  
-  // Use jsDelivr CDN for open-source cryptocurrency icons
-  return `${CRYPTO_ICON_CDN}/${lowerSymbol}.svg`;
+  const iconName = ICON_SYMBOL_MAP[upperSymbol]?.web3 || upperSymbol;
+  return `${WEB3ICONS_CDN}/${iconName}.svg`;
 }
 
-// Fallback image URL generator for tokens not in the main icon set
+// Get spothq fallback URL (secondary - 400+ tokens)  
+export function getSpothqFallbackUrl(symbol: string): string {
+  const upperSymbol = symbol.toUpperCase().replace(/USD$/, '');
+  const iconName = ICON_SYMBOL_MAP[upperSymbol]?.spothq || upperSymbol.toLowerCase();
+  return `${SPOTHQ_CDN}/${iconName}.svg`;
+}
+
+// Final fallback - deterministic avatar for unknown tokens
 export function getFallbackIconUrl(symbol: string): string {
   const upperSymbol = symbol.toUpperCase().replace(/USD$/, '');
-  // Use deterministic avatar as fallback
   return `https://api.dicebear.com/7.x/identicon/svg?seed=${upperSymbol}&backgroundColor=0d1117`;
 }
 
