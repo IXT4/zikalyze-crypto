@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 💹 LivePrice — Real-Time Trading Price Display
+// 💹 LivePrice — CoinMarketCap-Style Real-Time Price Flash
 // ═══════════════════════════════════════════════════════════════════════════════
-// Natural, fast price updates like real trading platforms
+// Smooth, vibrant price updates like Binance/CoinMarketCap live tickers
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef } from "react";
@@ -15,52 +15,62 @@ interface LivePriceProps {
 
 export const LivePrice = ({ value, className }: LivePriceProps) => {
   const { formatPrice } = useCurrency();
-  const [displayValue, setDisplayValue] = useState(value);
-  const [flash, setFlash] = useState<"up" | "down" | null>(null);
-  const prevValueRef = useRef(value);
-  const flashTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [flashClass, setFlashClass] = useState<string | null>(null);
+  const prevValueRef = useRef<number | undefined>(undefined);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
-    if (!value || value <= 0) return;
-    if (value === prevValueRef.current) return;
-
-    // Clear pending flash
-    if (flashTimeoutRef.current) {
-      clearTimeout(flashTimeoutRef.current);
+    // Skip flash on initial mount
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      prevValueRef.current = value;
+      return;
     }
 
-    // Determine direction and update
-    const direction = value > prevValueRef.current ? "up" : "down";
-    setFlash(direction);
-    setDisplayValue(value);
-    prevValueRef.current = value;
+    // Skip if no valid value or no change
+    if (!value || value <= 0 || value === prevValueRef.current) return;
 
-    // Match CSS animation duration - 800ms
-    flashTimeoutRef.current = setTimeout(() => {
-      setFlash(null);
+    // Clear any pending timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Determine direction and apply flash class
+    if (value > prevValueRef.current!) {
+      setFlashClass("price-flash-up");
+    } else if (value < prevValueRef.current!) {
+      setFlashClass("price-flash-down");
+    }
+
+    // Remove flash class after exactly 800ms
+    timeoutRef.current = setTimeout(() => {
+      setFlashClass(null);
     }, 800);
 
+    // Update ref with current price
+    prevValueRef.current = value;
+
     return () => {
-      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [value]);
 
   return (
     <span
       className={cn(
-        "tabular-nums font-semibold inline-block",
-        flash === "up" && "price-flash-up",
-        flash === "down" && "price-flash-down",
-        !flash && "text-foreground",
+        "price-display tabular-nums font-semibold inline-block",
+        flashClass,
+        !flashClass && "text-foreground",
         className
       )}
     >
-      {formatPrice(displayValue)}
+      {formatPrice(value)}
     </span>
   );
 };
 
-// Compact version for tables with subtle background
+// Compact version for tables
 export const LivePriceCompact = ({
   value,
   className,
@@ -69,45 +79,51 @@ export const LivePriceCompact = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const [displayValue, setDisplayValue] = useState(value);
-  const [flash, setFlash] = useState<"up" | "down" | null>(null);
-  const prevValueRef = useRef(value);
-  const flashTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [flashClass, setFlashClass] = useState<string | null>(null);
+  const prevValueRef = useRef<number | undefined>(undefined);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
-    if (!value || value <= 0) return;
-    if (value === prevValueRef.current) return;
-
-    if (flashTimeoutRef.current) {
-      clearTimeout(flashTimeoutRef.current);
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      prevValueRef.current = value;
+      return;
     }
 
-    const direction = value > prevValueRef.current ? "up" : "down";
-    setFlash(direction);
-    setDisplayValue(value);
-    prevValueRef.current = value;
+    if (!value || value <= 0 || value === prevValueRef.current) return;
 
-    // Match CSS animation duration - 800ms
-    flashTimeoutRef.current = setTimeout(() => {
-      setFlash(null);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    if (value > prevValueRef.current!) {
+      setFlashClass("price-flash-up");
+    } else if (value < prevValueRef.current!) {
+      setFlashClass("price-flash-down");
+    }
+
+    timeoutRef.current = setTimeout(() => {
+      setFlashClass(null);
     }, 800);
 
+    prevValueRef.current = value;
+
     return () => {
-      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [value]);
 
   return (
     <span
       className={cn(
-        "inline-block tabular-nums text-sm font-medium px-1 rounded",
-        flash === "up" && "price-flash-up",
-        flash === "down" && "price-flash-down",
-        !flash && "text-foreground bg-transparent",
+        "price-display inline-block tabular-nums text-sm font-medium px-1 rounded",
+        flashClass,
+        !flashClass && "text-foreground bg-transparent",
         className
       )}
     >
-      {formatPrice(displayValue)}
+      {formatPrice(value)}
     </span>
   );
 };
@@ -121,45 +137,51 @@ export const LivePriceLarge = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const [displayValue, setDisplayValue] = useState(value);
-  const [flash, setFlash] = useState<"up" | "down" | null>(null);
-  const prevValueRef = useRef(value);
-  const flashTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [flashClass, setFlashClass] = useState<string | null>(null);
+  const prevValueRef = useRef<number | undefined>(undefined);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
-    if (!value || value <= 0) return;
-    if (value === prevValueRef.current) return;
-
-    if (flashTimeoutRef.current) {
-      clearTimeout(flashTimeoutRef.current);
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      prevValueRef.current = value;
+      return;
     }
 
-    const direction = value > prevValueRef.current ? "up" : "down";
-    setFlash(direction);
-    setDisplayValue(value);
-    prevValueRef.current = value;
+    if (!value || value <= 0 || value === prevValueRef.current) return;
 
-    // Match CSS animation duration - 800ms
-    flashTimeoutRef.current = setTimeout(() => {
-      setFlash(null);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    if (value > prevValueRef.current!) {
+      setFlashClass("price-flash-up");
+    } else if (value < prevValueRef.current!) {
+      setFlashClass("price-flash-down");
+    }
+
+    timeoutRef.current = setTimeout(() => {
+      setFlashClass(null);
     }, 800);
 
+    prevValueRef.current = value;
+
     return () => {
-      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [value]);
 
   return (
     <span
       className={cn(
-        "tabular-nums text-lg font-bold inline-block",
-        flash === "up" && "price-flash-up",
-        flash === "down" && "price-flash-down",
-        !flash && "text-foreground",
+        "price-display tabular-nums text-lg font-bold inline-block",
+        flashClass,
+        !flashClass && "text-foreground",
         className
       )}
     >
-      {formatPrice(displayValue)}
+      {formatPrice(value)}
     </span>
   );
 };
