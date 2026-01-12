@@ -13,12 +13,17 @@ interface LivePriceProps {
   className?: string;
 }
 
-// Smooth number animation hook
-const useAnimatedPrice = (targetValue: number, duration: number = 300) => {
+// Fast smooth number animation hook optimized for tick-by-tick streaming
+const useAnimatedPrice = (targetValue: number, duration: number = 150) => {
   const [displayValue, setDisplayValue] = useState(targetValue);
   const animationRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const startValueRef = useRef<number>(targetValue);
+  const targetValueRef = useRef<number>(targetValue);
+
+  useEffect(() => {
+    targetValueRef.current = targetValue;
+  }, [targetValue]);
 
   const animate = useCallback((timestamp: number) => {
     if (!startTimeRef.current) startTimeRef.current = timestamp;
@@ -26,18 +31,18 @@ const useAnimatedPrice = (targetValue: number, duration: number = 300) => {
     const elapsed = timestamp - startTimeRef.current;
     const progress = Math.min(elapsed / duration, 1);
     
-    // Ease-out cubic for smooth deceleration
-    const easeOut = 1 - Math.pow(1 - progress, 3);
+    // Fast ease-out for snappy updates
+    const easeOut = 1 - Math.pow(1 - progress, 2);
     
     const currentValue = startValueRef.current + 
-      (targetValue - startValueRef.current) * easeOut;
+      (targetValueRef.current - startValueRef.current) * easeOut;
     
     setDisplayValue(currentValue);
     
     if (progress < 1) {
       animationRef.current = requestAnimationFrame(animate);
     }
-  }, [targetValue, duration]);
+  }, [duration]);
 
   useEffect(() => {
     // Skip animation for initial render or invalid values
@@ -105,7 +110,7 @@ const useFlashEffect = (value: number) => {
 
 export const LivePrice = ({ value, className }: LivePriceProps) => {
   const { formatPrice } = useCurrency();
-  const animatedValue = useAnimatedPrice(value, 300);
+  const animatedValue = useAnimatedPrice(value, 150);
   const flashClass = useFlashEffect(value);
 
   return (
@@ -131,7 +136,7 @@ export const LivePriceCompact = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const animatedValue = useAnimatedPrice(value, 250);
+  const animatedValue = useAnimatedPrice(value, 120);
   const flashClass = useFlashEffect(value);
 
   return (
@@ -157,7 +162,7 @@ export const LivePriceLarge = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const animatedValue = useAnimatedPrice(value, 350);
+  const animatedValue = useAnimatedPrice(value, 200);
   const flashClass = useFlashEffect(value);
 
   return (
