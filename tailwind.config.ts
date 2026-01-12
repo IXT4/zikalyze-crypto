@@ -208,12 +208,20 @@ export default {
             opacity: "1",
           },
         },
-        "live-glow": {
+        "live-glow-bullish": {
           "0%, 100%": {
             boxShadow: "0 0 0 1px hsl(var(--success) / 0.15), 0 0 8px 0 hsl(var(--success) / 0.1)",
           },
           "50%": {
             boxShadow: "0 0 0 1px hsl(var(--success) / 0.3), 0 0 16px 2px hsl(var(--success) / 0.2)",
+          },
+        },
+        "live-glow-bearish": {
+          "0%, 100%": {
+            boxShadow: "0 0 0 1px hsl(var(--destructive) / 0.15), 0 0 8px 0 hsl(var(--destructive) / 0.1)",
+          },
+          "50%": {
+            boxShadow: "0 0 0 1px hsl(var(--destructive) / 0.3), 0 0 16px 2px hsl(var(--destructive) / 0.2)",
           },
         },
       },
@@ -231,7 +239,8 @@ export default {
         "spin-slow": "spin-slow 2.5s linear infinite",
         "roll-up": "roll-up 0.2s ease-out forwards",
         "roll-down": "roll-down 0.2s ease-out forwards",
-        "live-glow": "live-glow 2s ease-in-out infinite",
+        "live-glow-bullish": "live-glow-bullish 2s ease-in-out infinite",
+        "live-glow-bearish": "live-glow-bearish 2s ease-in-out infinite",
       },
     },
   },

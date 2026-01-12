@@ -225,11 +225,13 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
     const sign = change >= 0 ? "+" : "";
     return `${sign}${change.toFixed(2)}%`;
   };
+  // Determine market sentiment for dynamic glow
+  const isBullishMarket = stats.gainers > stats.losers;
   
   return (
     <Card className={cn(
       "border-border bg-card/95 backdrop-blur-sm overflow-hidden transition-shadow duration-500",
-      websocket.connected && "animate-live-glow"
+      websocket.connected && (isBullishMarket ? "animate-live-glow-bullish" : "animate-live-glow-bearish")
     )}>
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
         <div className="flex items-center gap-3">
