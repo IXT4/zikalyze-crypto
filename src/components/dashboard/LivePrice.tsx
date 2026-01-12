@@ -55,84 +55,28 @@ const usePriceDirection = (value: number) => {
   return { direction, key };
 };
 
-// Animated digit component
-const AnimatedDigit = ({ 
-  char, 
-  direction, 
-  animationKey 
-}: { 
-  char: string; 
-  direction: "up" | "down" | null;
-  animationKey: number;
-}) => {
-  const isDigit = /\d/.test(char);
-  
-  if (!isDigit) {
-    return <span className="inline-block">{char}</span>;
-  }
-
-  return (
-    <span 
-      key={animationKey}
-      className={cn(
-        "inline-block",
-        direction === "up" && "animate-[slideUp_0.5s_cubic-bezier(0.34,1.56,0.64,1)]",
-        direction === "down" && "animate-[slideDown_0.5s_cubic-bezier(0.34,1.56,0.64,1)]"
-      )}
-    >
-      {char}
-    </span>
-  );
-};
-
-// Rolling price display
-const RollingPrice = ({ 
+// Simple price display without animations
+const PriceDisplay = ({ 
   formattedPrice, 
-  direction, 
-  animationKey,
   className 
 }: { 
   formattedPrice: string;
-  direction: "up" | "down" | null;
-  animationKey: number;
   className?: string;
 }) => {
-  const chars = formattedPrice.split("");
-  
   return (
-    <span className={cn("tabular-nums inline-flex", className)}>
-      {chars.map((char, i) => (
-        <AnimatedDigit 
-          key={`${i}-${char}`}
-          char={char} 
-          direction={direction}
-          animationKey={animationKey}
-        />
-      ))}
+    <span className={cn("tabular-nums", className)}>
+      {formattedPrice}
     </span>
   );
 };
 
 export const LivePrice = ({ value, className }: LivePriceProps) => {
   const { formatPrice } = useCurrency();
-  const { direction, key } = usePriceDirection(value);
   const formattedPrice = useMemo(() => formatPrice(value), [formatPrice, value]);
 
   return (
-    <span
-      className={cn(
-        "font-semibold transition-colors duration-300",
-        direction === "up" && "text-success",
-        direction === "down" && "text-destructive",
-        !direction && "text-foreground",
-        className
-      )}
-    >
-      <RollingPrice 
-        formattedPrice={formattedPrice} 
-        direction={direction} 
-        animationKey={key}
-      />
+    <span className={cn("font-semibold text-foreground", className)}>
+      <PriceDisplay formattedPrice={formattedPrice} />
     </span>
   );
 };
@@ -146,24 +90,11 @@ export const LivePriceCompact = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const { direction, key } = usePriceDirection(value);
   const formattedPrice = useMemo(() => formatPrice(value), [formatPrice, value]);
 
   return (
-    <span
-      className={cn(
-        "text-sm font-medium transition-colors duration-300",
-        direction === "up" && "text-success",
-        direction === "down" && "text-destructive",
-        !direction && "text-foreground",
-        className
-      )}
-    >
-      <RollingPrice 
-        formattedPrice={formattedPrice} 
-        direction={direction} 
-        animationKey={key}
-      />
+    <span className={cn("text-sm font-medium text-foreground", className)}>
+      <PriceDisplay formattedPrice={formattedPrice} />
     </span>
   );
 };
@@ -177,24 +108,11 @@ export const LivePriceLarge = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const { direction, key } = usePriceDirection(value);
   const formattedPrice = useMemo(() => formatPrice(value), [formatPrice, value]);
 
   return (
-    <span
-      className={cn(
-        "text-lg font-bold transition-colors duration-300",
-        direction === "up" && "text-success",
-        direction === "down" && "text-destructive",
-        !direction && "text-foreground",
-        className
-      )}
-    >
-      <RollingPrice 
-        formattedPrice={formattedPrice} 
-        direction={direction} 
-        animationKey={key}
-      />
+    <span className={cn("text-lg font-bold text-foreground", className)}>
+      <PriceDisplay formattedPrice={formattedPrice} />
     </span>
   );
 };
