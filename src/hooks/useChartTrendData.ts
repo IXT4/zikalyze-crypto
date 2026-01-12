@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📊 useChartTrendData — Real-time 24h Chart Data for AI Trend Analysis
+// 📊 useChartTrendData — Historical OHLCV Data for AI Trend Analysis
 // ═══════════════════════════════════════════════════════════════════════════════
-// Provides OHLCV candlestick data for accurate trend detection
+// Fetches historical candlestick data via edge function proxy (CORS bypass)
+// Note: Real-time prices use decentralized oracles; this is for historical OHLCV only
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';

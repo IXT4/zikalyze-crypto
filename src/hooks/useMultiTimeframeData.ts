@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // 📊 useMultiTimeframeData — Multi-Timeframe Chart Analysis (15m, 1h, 4h, Daily)
 // ═══════════════════════════════════════════════════════════════════════════════
-// Uses server-side edge function to bypass CORS and get reliable Binance data
+// Fetches historical OHLCV via edge function proxy for multi-timeframe analysis
+// Note: Real-time prices use decentralized oracles; this is for historical candles only
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';
