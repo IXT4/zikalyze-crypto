@@ -162,7 +162,7 @@ const CryptoTicker = ({
           const flash = priceFlashes.get(crypto.symbol);
           
           // Determine if this price is from an oracle
-          const isOraclePrice = source?.includes("Oracle") || source === "Pyth" || source === "Chainlink";
+          const isOraclePrice = source?.includes("Oracle") || source === "Pyth" || source === "Chainlink" || source === "Kraken";
           
           return (
             <button
