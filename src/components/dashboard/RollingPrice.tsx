@@ -100,11 +100,11 @@ export const RollingPrice = memo(({
       const prevFormatted = formatPrice(prevValueRef.current);
       const prevCharsArr = prevFormatted.split("");
       
-      // Flash effect
+      // Flash effect - longer duration for visibility
       if (showFlash) {
         const direction = value > prevValueRef.current ? "up" : "down";
         setFlash(direction);
-        setTimeout(() => setFlash(null), 400);
+        setTimeout(() => setFlash(null), 800);
       }
 
       // Find which digits changed
@@ -138,7 +138,7 @@ export const RollingPrice = memo(({
   return (
     <span
       className={cn(
-        "inline-flex items-center font-mono tabular-nums font-semibold transition-colors duration-200",
+        "inline-flex items-center font-mono tabular-nums font-semibold transition-colors duration-500",
         flash === "up" && "text-success",
         flash === "down" && "text-destructive",
         !flash && "text-foreground",
@@ -193,9 +193,10 @@ export const RollingPriceCompact = memo(({
       const prevFormatted = formatPrice(prevValueRef.current);
       const prevCharsArr = prevFormatted.split("");
       
+      // Flash effect - longer for visibility
       const direction = value > prevValueRef.current ? "up" : "down";
       setFlash(direction);
-      setTimeout(() => setFlash(null), 350);
+      setTimeout(() => setFlash(null), 700);
 
       const changedIndices = new Set<number>();
       const maxLen = Math.max(chars.length, prevCharsArr.length);
@@ -222,9 +223,9 @@ export const RollingPriceCompact = memo(({
   return (
     <span
       className={cn(
-        "inline-flex items-center font-mono tabular-nums text-sm font-medium transition-colors duration-150 rounded px-1",
-        flash === "up" && "text-success bg-success/10",
-        flash === "down" && "text-destructive bg-destructive/10",
+        "inline-flex items-center font-mono tabular-nums text-sm font-medium transition-colors duration-400 rounded px-1",
+        flash === "up" && "text-success bg-success/15",
+        flash === "down" && "text-destructive bg-destructive/15",
         !flash && "text-foreground",
         className
       )}
@@ -277,9 +278,10 @@ export const RollingPriceLarge = memo(({
       const prevFormatted = formatPrice(prevValueRef.current);
       const prevCharsArr = prevFormatted.split("");
       
+      // Flash effect - longer for visibility  
       const direction = value > prevValueRef.current ? "up" : "down";
       setFlash(direction);
-      setTimeout(() => setFlash(null), 500);
+      setTimeout(() => setFlash(null), 900);
 
       const changedIndices = new Set<number>();
       const maxLen = Math.max(chars.length, prevCharsArr.length);
@@ -306,7 +308,7 @@ export const RollingPriceLarge = memo(({
   return (
     <span
       className={cn(
-        "inline-flex items-center font-mono tabular-nums text-lg font-bold transition-colors duration-200",
+        "inline-flex items-center font-mono tabular-nums text-lg font-bold transition-colors duration-500",
         flash === "up" && "text-success",
         flash === "down" && "text-destructive",
         !flash && "text-foreground",
