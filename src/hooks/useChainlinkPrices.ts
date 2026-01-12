@@ -1,13 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🔗 useChainlinkPrices — DEPRECATED: Now uses DIA + Redstone as backup
+// 🔗 useChainlinkPrices — DEPRECATED: Stub for backwards compatibility
 // ═══════════════════════════════════════════════════════════════════════════════
-// This file now re-exports DIA prices for backwards compatibility
-// DIA is CORS-friendly and doesn't require RPC calls that get blocked
+// All price data now comes from WebSocket (price-stream) and Pyth SSE fallback
+// This hook exists only for backwards compatibility with existing components
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useDIAPrices, DIAPriceData } from "./useDIAPrices";
+import { useCallback } from "react";
 
-// Re-export for compatibility
 export interface ChainlinkPriceData {
   symbol: string;
   price: number;
@@ -16,32 +15,20 @@ export interface ChainlinkPriceData {
   source: "Chainlink";
 }
 
-// Map DIA data to Chainlink format for backwards compatibility
+// Stub hook - Chainlink/DIA removed, all data from WebSocket + Pyth
 export const useChainlinkPrices = (_symbols: string[] = []) => {
-  const dia = useDIAPrices();
-  
-  const getPrice = (symbol: string): ChainlinkPriceData | undefined => {
-    const diaPrice = dia.getPrice(symbol);
-    if (!diaPrice) return undefined;
-    
-    return {
-      symbol: diaPrice.symbol,
-      price: diaPrice.price,
-      updatedAt: diaPrice.timestamp,
-      roundId: "DIA-" + Date.now().toString(),
-      source: "Chainlink", // Keep as Chainlink for UI compatibility
-    };
-  };
+  const getPrice = useCallback((_symbol: string): ChainlinkPriceData | undefined => {
+    return undefined;
+  }, []);
 
   return {
-    prices: dia.prices,
-    isConnected: dia.isConnected,
-    isLoading: dia.isLoading,
-    error: dia.error,
+    prices: new Map(),
+    isConnected: false,
+    isLoading: false,
+    error: null,
     getPrice,
     feedsEth: {} as Record<string, string>,
   };
 };
 
-// Empty exports for compatibility
 export const CHAINLINK_FEEDS_ETH: Record<string, string> = {};

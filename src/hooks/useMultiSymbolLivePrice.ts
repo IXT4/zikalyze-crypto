@@ -1,14 +1,14 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📊 useMultiSymbolLivePrice — Decentralized Oracle-based Multi-Symbol Streaming
+// 📊 useMultiSymbolLivePrice — WebSocket + Pyth SSE Multi-Symbol Streaming
 // ═══════════════════════════════════════════════════════════════════════════════
-// Uses Pyth Network SSE for decentralized real-time price streaming (~400ms updates)
-// with DIA and Redstone as fallbacks (all CORS-friendly, no blocked requests)
+// Uses the global WebSocket (price-stream) as primary data source
+// Falls back to Pyth Network SSE for decentralized real-time streaming
+// DIA/Redstone removed due to persistent API errors
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePythPrices, PYTH_FEED_IDS } from "./usePythPrices";
-import { useDIAPrices } from "./useDIAPrices";
-import { useRedstonePrices } from "./useRedstonePrices";
+import { useGlobalPriceWebSocket } from "./useGlobalPriceWebSocket";
 
 interface SymbolPriceData {
   price: number;
@@ -34,7 +34,7 @@ const HISTORY_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
 // Cache for API-sourced 24h data (from CoinGecko metadata)
 const API_24H_CACHE_KEY = "zikalyze_api_24h_data_v1";
-const API_24H_CACHE_TTL = 10 * 60 * 1000; // 10 minutes (CoinGecko refresh rate)
+const API_24H_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 interface PriceHistoryEntry {
   price: number;
@@ -58,7 +58,6 @@ const loadAPI24hData = (): Map<string, API24hData> => {
     const result = new Map<string, API24hData>();
     Object.entries(data).forEach(([symbol, entry]) => {
       const typedEntry = entry as API24hData;
-      // Only use if not stale (10 minutes)
       if (now - typedEntry.timestamp < API_24H_CACHE_TTL) {
         result.set(symbol, typedEntry);
       }
@@ -80,7 +79,6 @@ const loadPriceHistory = (): Map<string, PriceHistoryEntry[]> => {
     const cached = localStorage.getItem(HISTORY_CACHE_KEY);
     if (!cached) return new Map();
     const data = JSON.parse(cached);
-    // Clean old entries
     const now = Date.now();
     const cleaned: Record<string, PriceHistoryEntry[]> = {};
     Object.entries(data).forEach(([symbol, entries]) => {
@@ -103,9 +101,8 @@ const savePriceHistory = (history: Map<string, PriceHistoryEntry[]>) => {
   } catch {}
 };
 
-// Validate 24h change is reasonable (prevent anomalies)
+// Validate 24h change is reasonable
 const isValidChange24h = (change: number): boolean => {
-  // Allow -99% to +1000% (reasonable crypto ranges)
   return !isNaN(change) && isFinite(change) && change > -99 && change < 1000;
 };
 
@@ -126,12 +123,21 @@ export const useMultiSymbolLivePrice = (
   const api24hDataRef = useRef<Map<string, API24hData>>(loadAPI24hData());
   const lastHistorySaveRef = useRef(0);
   
-  // Connect to decentralized oracles (all CORS-friendly)
-  const { prices: pythPrices, isConnected: pythConnected, lastUpdateTime: pythLastUpdate } = usePythPrices();
-  const { prices: diaPrices, isConnected: diaConnected, lastUpdateTime: diaLastUpdate } = useDIAPrices();
-  const { prices: redstonePrices, isConnected: redstoneConnected, lastUpdateTime: redstoneLastUpdate } = useRedstonePrices();
+  // Primary: WebSocket stream from price-stream edge function
+  const { 
+    prices: wsPrices, 
+    connected: wsConnected,
+    getPrice: wsGetPrice,
+  } = useGlobalPriceWebSocket(symbols);
+  
+  // Fallback: Pyth SSE (decentralized oracle)
+  const { 
+    prices: pythPrices, 
+    isConnected: pythConnected, 
+    lastUpdateTime: pythLastUpdate 
+  } = usePythPrices();
 
-  // Update API 24h data from fallback prices (CoinGecko metadata)
+  // Update API 24h data from fallback prices
   useEffect(() => {
     if (!fallbackPrices) return;
     const now = Date.now();
@@ -154,21 +160,18 @@ export const useMultiSymbolLivePrice = (
     }
   }, [fallbackPrices]);
 
-  // Add price to history (sample every minute to avoid storage bloat)
+  // Add price to history
   const addToHistory = useCallback((symbol: string, price: number) => {
     const now = Date.now();
     const history = priceHistoryRef.current.get(symbol) || [];
     
-    // Only add if different from last entry or 1 minute passed
     const lastEntry = history[history.length - 1];
     if (!lastEntry || now - lastEntry.timestamp > 60000) {
       history.push({ price, timestamp: now });
       
-      // Keep only last 24 hours, max 1440 entries (1 per minute)
       while (history.length > 1440) {
         history.shift();
       }
-      // Remove entries older than 24h
       while (history.length > 0 && now - history[0].timestamp > HISTORY_DURATION) {
         history.shift();
       }
@@ -177,18 +180,16 @@ export const useMultiSymbolLivePrice = (
     }
   }, []);
 
-  // Calculate 24h stats - PRIORITY: API data > local history > fallback
+  // Calculate 24h stats
   const get24hStats = useCallback((symbol: string, currentPrice: number) => {
     const upperSymbol = symbol.toUpperCase();
     
-    // PRIORITY 1: Use API-sourced 24h data (from CoinGecko) if available and fresh
+    // PRIORITY 1: API-sourced 24h data
     const apiData = api24hDataRef.current.get(upperSymbol);
     if (apiData && isValidChange24h(apiData.change24h)) {
-      // Calculate dynamic high/low that includes current price
       const history = priceHistoryRef.current.get(upperSymbol) || [];
       const historicalPrices = history.map(h => h.price);
       
-      // Use API high/low as base, but update if current price exceeds
       let high24h = apiData.high24h || currentPrice;
       let low24h = apiData.low24h || currentPrice;
       
@@ -200,15 +201,10 @@ export const useMultiSymbolLivePrice = (
         low24h = Math.min(low24h, currentPrice);
       }
       
-      return { 
-        change24h: apiData.change24h, 
-        high24h, 
-        low24h,
-        source: 'API'
-      };
+      return { change24h: apiData.change24h, high24h, low24h, source: 'API' };
     }
     
-    // PRIORITY 2: Calculate from local price history
+    // PRIORITY 2: Local price history
     const history = priceHistoryRef.current.get(upperSymbol) || [];
     
     if (history.length > 0) {
@@ -216,7 +212,6 @@ export const useMultiSymbolLivePrice = (
       const target24hAgo = now - HISTORY_DURATION;
       let oldestRelevantPrice = history[0].price;
       
-      // Find the entry closest to 24h ago
       for (const entry of history) {
         if (entry.timestamp >= target24hAgo) {
           oldestRelevantPrice = entry.price;
@@ -231,18 +226,12 @@ export const useMultiSymbolLivePrice = (
         ? ((currentPrice - oldestRelevantPrice) / oldestRelevantPrice) * 100 
         : 0;
 
-      // Only use local calculation if it's valid
       if (isValidChange24h(calculatedChange)) {
-        return { 
-          change24h: calculatedChange, 
-          high24h, 
-          low24h,
-          source: 'History'
-        };
+        return { change24h: calculatedChange, high24h, low24h, source: 'History' };
       }
     }
     
-    // PRIORITY 3: Use fallback data if provided
+    // PRIORITY 3: Fallback data
     const fallback = fallbackPrices?.[upperSymbol];
     if (fallback && isValidChange24h(fallback.change24h)) {
       return { 
@@ -253,16 +242,10 @@ export const useMultiSymbolLivePrice = (
       };
     }
 
-    // Default: return zeros (insufficient data)
-    return { 
-      change24h: 0, 
-      high24h: currentPrice, 
-      low24h: currentPrice,
-      source: 'None'
-    };
+    return { change24h: 0, high24h: currentPrice, low24h: currentPrice, source: 'None' };
   }, [fallbackPrices]);
 
-  // Update prices from oracles
+  // Update prices from WebSocket + Pyth
   useEffect(() => {
     if (!isMountedRef.current) return;
     
@@ -270,15 +253,32 @@ export const useMultiSymbolLivePrice = (
     const updatedPrices: Record<string, SymbolPriceData> = {};
     const connectedSymbols: string[] = [];
     
-    // Process requested symbols
     for (const symbol of symbols) {
       const upperSymbol = symbol.toUpperCase();
       const oracleKey = `${upperSymbol}/USD`;
 
-      // Try Pyth first (primary decentralized source with SSE streaming)
+      // PRIORITY 1: WebSocket stream (real-time from price-stream)
+      const wsPrice = wsGetPrice(upperSymbol);
+      if (wsPrice && wsPrice.price > 0) {
+        addToHistory(upperSymbol, wsPrice.price);
+        const stats = get24hStats(upperSymbol, wsPrice.price);
+
+        updatedPrices[upperSymbol] = {
+          price: wsPrice.price,
+          change24h: stats.change24h,
+          high24h: stats.high24h,
+          low24h: stats.low24h,
+          volume: 0,
+          lastUpdate: wsPrice.timestamp || now,
+          source: `WebSocket (${wsPrice.source || 'Pyth'})`,
+        };
+        connectedSymbols.push(upperSymbol);
+        continue;
+      }
+
+      // PRIORITY 2: Pyth SSE fallback
       const pythPrice = pythPrices.get(oracleKey);
       if (pythPrice && pythPrice.price > 0) {
-        // Add to history for 24h tracking
         addToHistory(upperSymbol, pythPrice.price);
         const stats = get24hStats(upperSymbol, pythPrice.price);
 
@@ -287,53 +287,15 @@ export const useMultiSymbolLivePrice = (
           change24h: stats.change24h,
           high24h: stats.high24h,
           low24h: stats.low24h,
-          volume: 0, // Pyth doesn't provide volume
+          volume: 0,
           lastUpdate: pythPrice.publishTime || now,
           source: "Pyth Oracle",
         };
         connectedSymbols.push(upperSymbol);
         continue;
       }
-
-      // Try DIA as second fallback (CORS-friendly REST API)
-      const diaPrice = diaPrices.get(oracleKey);
-      if (diaPrice && diaPrice.price > 0) {
-        addToHistory(upperSymbol, diaPrice.price);
-        const stats = get24hStats(upperSymbol, diaPrice.price);
-
-        updatedPrices[upperSymbol] = {
-          price: diaPrice.price,
-          change24h: stats.change24h,
-          high24h: stats.high24h,
-          low24h: stats.low24h,
-          volume: diaPrice.volume24h || 0,
-          lastUpdate: diaPrice.timestamp || now,
-          source: "DIA Oracle",
-        };
-        connectedSymbols.push(upperSymbol);
-        continue;
-      }
-
-      // Try Redstone as third fallback (CORS-friendly REST API)
-      const redstonePrice = redstonePrices.get(oracleKey);
-      if (redstonePrice && redstonePrice.price > 0) {
-        addToHistory(upperSymbol, redstonePrice.price);
-        const stats = get24hStats(upperSymbol, redstonePrice.price);
-
-        updatedPrices[upperSymbol] = {
-          price: redstonePrice.price,
-          change24h: stats.change24h,
-          high24h: stats.high24h,
-          low24h: stats.low24h,
-          volume: 0,
-          lastUpdate: redstonePrice.timestamp || now,
-          source: "Redstone Oracle",
-        };
-        connectedSymbols.push(upperSymbol);
-        continue;
-      }
       
-      // Use fallback if available (with proper 24h data)
+      // PRIORITY 3: Cached fallback
       if (fallbackPrices?.[upperSymbol]) {
         const fb = fallbackPrices[upperSymbol];
         updatedPrices[upperSymbol] = {
@@ -348,14 +310,12 @@ export const useMultiSymbolLivePrice = (
       }
     }
     
-    const isLive = pythConnected || diaConnected || redstoneConnected;
-    const primarySource = pythConnected 
-      ? 'Pyth Oracle (SSE)' 
-      : diaConnected 
-        ? 'DIA Oracle' 
-        : redstoneConnected
-          ? 'Redstone Oracle'
-          : 'Cached';
+    const isLive = wsConnected || pythConnected;
+    const primarySource = wsConnected 
+      ? 'WebSocket (Pyth + DeFiLlama)' 
+      : pythConnected 
+        ? 'Pyth Oracle (SSE)' 
+        : 'Cached';
     
     setState({
       prices: updatedPrices,
@@ -370,29 +330,21 @@ export const useMultiSymbolLivePrice = (
       savePriceHistory(priceHistoryRef.current);
       lastHistorySaveRef.current = now;
     }
-  }, [pythPrices, diaPrices, redstonePrices, pythConnected, diaConnected, redstoneConnected, symbols, fallbackPrices, addToHistory, get24hStats]);
+  }, [wsPrices, pythPrices, wsConnected, pythConnected, symbols, fallbackPrices, addToHistory, get24hStats, wsGetPrice]);
 
-  // Cleanup on unmount
+  // Cleanup
   useEffect(() => {
     isMountedRef.current = true;
     
     return () => {
       isMountedRef.current = false;
-      // Save history on unmount
       savePriceHistory(priceHistoryRef.current);
     };
   }, []);
 
-  // Subscribe/unsubscribe are no-ops since oracles stream all supported symbols
-  const subscribe = useCallback((_newSymbols: string[]) => {
-    // No-op: All oracles stream all supported symbols
-  }, []);
+  const subscribe = useCallback((_newSymbols: string[]) => {}, []);
+  const unsubscribe = useCallback((_removeSymbols: string[]) => {}, []);
 
-  const unsubscribe = useCallback((_removeSymbols: string[]) => {
-    // No-op: All oracles stream all supported symbols
-  }, []);
-
-  // Get price for a specific symbol
   const getPrice = useCallback((symbol: string): SymbolPriceData | null => {
     return state.prices[symbol.toUpperCase()] || null;
   }, [state.prices]);
@@ -402,12 +354,13 @@ export const useMultiSymbolLivePrice = (
     subscribe,
     unsubscribe,
     getPrice,
-    // Oracle status
+    // Status
     pythConnected,
-    diaConnected,
-    redstoneConnected,
+    wsConnected,
     pythLastUpdate,
-    // Legacy compatibility
-    chainlinkConnected: diaConnected,
+    // Legacy compatibility stubs
+    diaConnected: false,
+    redstoneConnected: false,
+    chainlinkConnected: false,
   };
 };
