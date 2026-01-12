@@ -64,7 +64,7 @@ export const PYTH_FEED_IDS: Record<string, string> = {
   "CFX/USD": "8879170230c9603342f3837cf9a8e76c61791198fb1271bb2552c9af7b33c933",
   "DYDX/USD": "6489800bb8974169adfe35f71e6e3e25f0f35db3e6d8b2f50b16f65e65f10cb5",
   "COMP/USD": "4a8e42861cabc5ecb50996f92e7cfa2bce3fd0a2423b0c44c9b423fb2bd25478",
-  "FXS/USD": "735f591e4fed988cd36df17f6b9a078dbb50b48a5d4b87e4c4d0b9c6f1e7b3a02",
+  "FXS/USD": "735f591e4fed988cd36df17f6b9a078dbb50b48a5d4b87e4c4d0b9c6f1e7b3a0",
   "GMX/USD": "b962539d0fcb272a494d65ea56f94851c2bcf8823935da05bd628916e2e9edbf",
   "RPL/USD": "24f94ac0fd8638e3fc41aab2e4df933e63f763351b640bf336a6ec70651c4503",
   "CRV/USD": "a19d04ac696c7a6616d291c7e5d1377cc8be437c327b75adb5dc1bad745fcae8",
@@ -91,8 +91,13 @@ export const PYTH_FEED_IDS: Record<string, string> = {
   "USDT/USD": "2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b",
 };
 
-// Reverse mapping
-const FEED_ID_TO_SYMBOL = Object.entries(PYTH_FEED_IDS).reduce((acc, [symbol, feedId]) => {
+// Validate feed IDs - must be exactly 64 hex chars
+const VALID_PYTH_FEEDS = Object.fromEntries(
+  Object.entries(PYTH_FEED_IDS).filter(([_, id]) => /^[0-9a-f]{64}$/i.test(id))
+);
+
+// Reverse mapping (only valid feeds)
+const FEED_ID_TO_SYMBOL = Object.entries(VALID_PYTH_FEEDS).reduce((acc, [symbol, feedId]) => {
   acc[feedId] = symbol;
   return acc;
 }, {} as Record<string, string>);
@@ -155,8 +160,8 @@ export const usePythPrices = (_symbols: string[] = []) => {
   const buildSSEUrl = useCallback((endpointIndex: number) => {
     const baseUrl = HERMES_ENDPOINTS[endpointIndex % HERMES_ENDPOINTS.length];
     const feedIds = PRIORITY_FEEDS
-      .filter(symbol => PYTH_FEED_IDS[symbol])
-      .map(symbol => PYTH_FEED_IDS[symbol]);
+      .filter(symbol => VALID_PYTH_FEEDS[symbol])
+      .map(symbol => VALID_PYTH_FEEDS[symbol]);
     const idsParams = feedIds.map(id => `ids[]=0x${id}`).join("&");
     return `${baseUrl}/v2/updates/price/stream?${idsParams}&parsed=true`;
   }, []);
@@ -226,7 +231,7 @@ export const usePythPrices = (_symbols: string[] = []) => {
   const fetchRemainingFeeds = useCallback(async () => {
     if (!isMountedRef.current) return;
 
-    const allSymbols = Object.keys(PYTH_FEED_IDS);
+    const allSymbols = Object.keys(VALID_PYTH_FEEDS);
     const remainingSymbols = allSymbols.filter(s => !PRIORITY_FEEDS.includes(s));
     
     // Batch into groups of 30 (safe URL length)
@@ -235,7 +240,7 @@ export const usePythPrices = (_symbols: string[] = []) => {
       if (!isMountedRef.current) break;
       
       const batch = remainingSymbols.slice(i, i + batchSize);
-      const feedIds = batch.map(s => PYTH_FEED_IDS[s]).filter(Boolean);
+      const feedIds = batch.map(s => VALID_PYTH_FEEDS[s]).filter(Boolean);
       const idsParams = feedIds.map(id => `ids[]=0x${id}`).join("&");
       
       try {
@@ -333,7 +338,7 @@ export const usePythPrices = (_symbols: string[] = []) => {
 
   // Initial REST fetch for immediate data while SSE connects (batched)
   const fetchInitialPrices = useCallback(async () => {
-    const allSymbols = Object.keys(PYTH_FEED_IDS);
+    const allSymbols = Object.keys(VALID_PYTH_FEEDS);
     const batchSize = 30;
     let totalFetched = 0;
 
@@ -341,7 +346,7 @@ export const usePythPrices = (_symbols: string[] = []) => {
       if (!isMountedRef.current) break;
 
       const batch = allSymbols.slice(i, i + batchSize);
-      const feedIds = batch.map(s => PYTH_FEED_IDS[s]).filter(Boolean);
+      const feedIds = batch.map(s => VALID_PYTH_FEEDS[s]).filter(Boolean);
       const idsParams = feedIds.map(id => `ids[]=0x${id}`).join("&");
 
       try {
