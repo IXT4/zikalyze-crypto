@@ -1,14 +1,14 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🎰 RollingPrice — Airport Departure Board Style Digit Animation
+// 🎰 RollingPrice — Professional Trading-Style Price Animation
 // ═══════════════════════════════════════════════════════════════════════════════
-// Each digit rolls independently like a mechanical flip display
+// Smooth, professional digit rolling with subtle flash effects
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useCurrency } from "@/hooks/useCurrency";
 
-// Single rolling digit component
+// Single rolling digit with smooth animation
 const RollingDigit = ({ 
   digit, 
   prevDigit,
@@ -22,7 +22,7 @@ const RollingDigit = ({
 }) => {
   const isNumber = /\d/.test(digit);
   
-  // For non-numbers (currency symbols, commas, dots), just display them
+  // Non-numeric characters display without animation
   if (!isNumber) {
     return (
       <span className="inline-flex items-center justify-center text-inherit">
@@ -32,30 +32,26 @@ const RollingDigit = ({
   }
 
   return (
-    <span className="relative inline-flex h-[1.2em] w-[0.6em] overflow-hidden">
-      {/* Previous digit (rolls out) */}
+    <span className="relative inline-flex h-[1.15em] w-[0.62em] overflow-hidden">
+      {/* Previous digit - slides out */}
       <span
         className={cn(
-          "absolute inset-0 flex items-center justify-center",
-          isAnimating && (direction === "up" ? "animate-roll-out-up" : "animate-roll-out-down")
+          "absolute inset-0 flex items-center justify-center will-change-transform",
+          isAnimating && (direction === "up" ? "animate-digit-out-up" : "animate-digit-out-down")
         )}
         style={{ 
           opacity: isAnimating ? undefined : 0,
-          transform: isAnimating ? undefined : (direction === "up" ? "translateY(-100%)" : "translateY(100%)"),
         }}
       >
         {prevDigit}
       </span>
       
-      {/* Current digit (rolls in) */}
+      {/* Current digit - slides in */}
       <span
         className={cn(
-          "absolute inset-0 flex items-center justify-center",
-          isAnimating && (direction === "up" ? "animate-roll-in-up" : "animate-roll-in-down")
+          "absolute inset-0 flex items-center justify-center will-change-transform",
+          isAnimating && (direction === "up" ? "animate-digit-in-up" : "animate-digit-in-down")
         )}
-        style={{ 
-          transform: isAnimating ? undefined : "translateY(0)",
-        }}
       >
         {digit}
       </span>
@@ -66,72 +62,63 @@ const RollingDigit = ({
 interface RollingPriceProps {
   value: number;
   className?: string;
-  showFlash?: boolean;
 }
 
 export const RollingPrice = ({
   value,
   className,
-  showFlash = true,
 }: RollingPriceProps) => {
   const { formatPrice } = useCurrency();
   const [displayValue, setDisplayValue] = useState(value);
   const [prevValue, setPrevValue] = useState(value);
   const [isAnimating, setIsAnimating] = useState(false);
   const [direction, setDirection] = useState<"up" | "down">("up");
-  const [flash, setFlash] = useState<"up" | "down" | null>(null);
-  const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const flashTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [flashState, setFlashState] = useState<"up" | "down" | "fade" | null>(null);
+  const timeoutsRef = useRef<NodeJS.Timeout[]>([]);
+
+  const clearTimeouts = () => {
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
+  };
 
   useEffect(() => {
-    if (!value || value <= 0) return;
+    if (!value || value <= 0 || value === displayValue) return;
     
-    // Value changed
-    if (value !== displayValue) {
-      // Clear any pending animations
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current);
-      }
-      if (flashTimeoutRef.current) {
-        clearTimeout(flashTimeoutRef.current);
-      }
+    clearTimeouts();
 
-      // Set direction and trigger animation
-      const newDirection = value > displayValue ? "up" : "down";
-      setDirection(newDirection);
-      setPrevValue(displayValue);
-      setDisplayValue(value);
-      setIsAnimating(true);
+    const newDirection = value > displayValue ? "up" : "down";
+    setDirection(newDirection);
+    setPrevValue(displayValue);
+    setDisplayValue(value);
+    setIsAnimating(true);
+    setFlashState(newDirection);
 
-      // Flash effect
-      if (showFlash) {
-        setFlash(newDirection);
-        flashTimeoutRef.current = setTimeout(() => setFlash(null), 800);
-      }
+    // Phase 1: Flash peak (immediate)
+    // Phase 2: Fade out flash (after 600ms)
+    timeoutsRef.current.push(
+      setTimeout(() => setFlashState("fade"), 600)
+    );
+    
+    // Phase 3: Clear flash (after 1000ms)
+    timeoutsRef.current.push(
+      setTimeout(() => setFlashState(null), 1000)
+    );
 
-      // Clear animation state
-      animationTimeoutRef.current = setTimeout(() => {
-        setIsAnimating(false);
-      }, 300);
-    }
+    // Clear animation state
+    timeoutsRef.current.push(
+      setTimeout(() => setIsAnimating(false), 320)
+    );
 
-    return () => {
-      if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
-      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
-    };
-  }, [value, displayValue, showFlash]);
+    return clearTimeouts;
+  }, [value, displayValue]);
 
   const currentFormatted = formatPrice(displayValue);
   const prevFormatted = formatPrice(prevValue);
-  const currentChars = currentFormatted.split("");
-  const prevChars = prevFormatted.split("");
-
-  // Pad to same length
-  const maxLen = Math.max(currentChars.length, prevChars.length);
+  const maxLen = Math.max(currentFormatted.length, prevFormatted.length);
   const paddedCurrent = currentFormatted.padStart(maxLen, " ").split("");
   const paddedPrev = prevFormatted.padStart(maxLen, " ").split("");
 
-  // Find changed indices
+  // Identify changed digits
   const changedIndices = new Set<number>();
   if (isAnimating) {
     for (let i = 0; i < maxLen; i++) {
@@ -144,10 +131,11 @@ export const RollingPrice = ({
   return (
     <span
       className={cn(
-        "inline-flex items-center font-mono tabular-nums font-semibold transition-colors duration-500",
-        flash === "up" && "text-success",
-        flash === "down" && "text-destructive",
-        !flash && "text-foreground",
+        "inline-flex items-center font-mono tabular-nums font-semibold transition-all",
+        flashState === "up" && "text-success",
+        flashState === "down" && "text-destructive", 
+        flashState === "fade" && "text-foreground transition-colors duration-400",
+        !flashState && "text-foreground",
         className
       )}
     >
@@ -164,7 +152,7 @@ export const RollingPrice = ({
   );
 };
 
-// Compact version for tables
+// Compact version for tables with background flash
 export const RollingPriceCompact = ({
   value,
   className,
@@ -177,33 +165,39 @@ export const RollingPriceCompact = ({
   const [prevValue, setPrevValue] = useState(value);
   const [isAnimating, setIsAnimating] = useState(false);
   const [direction, setDirection] = useState<"up" | "down">("up");
-  const [flash, setFlash] = useState<"up" | "down" | null>(null);
-  const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const flashTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [flashState, setFlashState] = useState<"up" | "down" | "fade" | null>(null);
+  const timeoutsRef = useRef<NodeJS.Timeout[]>([]);
+
+  const clearTimeouts = () => {
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
+  };
 
   useEffect(() => {
-    if (!value || value <= 0) return;
+    if (!value || value <= 0 || value === displayValue) return;
     
-    if (value !== displayValue) {
-      if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
-      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+    clearTimeouts();
 
-      const newDirection = value > displayValue ? "up" : "down";
-      setDirection(newDirection);
-      setPrevValue(displayValue);
-      setDisplayValue(value);
-      setIsAnimating(true);
+    const newDirection = value > displayValue ? "up" : "down";
+    setDirection(newDirection);
+    setPrevValue(displayValue);
+    setDisplayValue(value);
+    setIsAnimating(true);
+    setFlashState(newDirection);
 
-      setFlash(newDirection);
-      flashTimeoutRef.current = setTimeout(() => setFlash(null), 700);
+    timeoutsRef.current.push(
+      setTimeout(() => setFlashState("fade"), 500)
+    );
+    
+    timeoutsRef.current.push(
+      setTimeout(() => setFlashState(null), 800)
+    );
 
-      animationTimeoutRef.current = setTimeout(() => setIsAnimating(false), 280);
-    }
+    timeoutsRef.current.push(
+      setTimeout(() => setIsAnimating(false), 280)
+    );
 
-    return () => {
-      if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
-      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
-    };
+    return clearTimeouts;
   }, [value, displayValue]);
 
   const currentFormatted = formatPrice(displayValue);
@@ -224,10 +218,11 @@ export const RollingPriceCompact = ({
   return (
     <span
       className={cn(
-        "inline-flex items-center font-mono tabular-nums text-sm font-medium transition-colors duration-400 rounded px-1",
-        flash === "up" && "text-success bg-success/15",
-        flash === "down" && "text-destructive bg-destructive/15",
-        !flash && "text-foreground",
+        "inline-flex items-center font-mono tabular-nums text-sm font-medium rounded-md px-1.5 py-0.5 transition-all",
+        flashState === "up" && "text-success bg-success/20",
+        flashState === "down" && "text-destructive bg-destructive/20",
+        flashState === "fade" && "text-foreground bg-transparent transition-all duration-300",
+        !flashState && "text-foreground bg-transparent",
         className
       )}
     >
@@ -244,7 +239,7 @@ export const RollingPriceCompact = ({
   );
 };
 
-// Large ticker display
+// Large ticker display with prominent effects
 export const RollingPriceLarge = ({
   value,
   className,
@@ -257,33 +252,39 @@ export const RollingPriceLarge = ({
   const [prevValue, setPrevValue] = useState(value);
   const [isAnimating, setIsAnimating] = useState(false);
   const [direction, setDirection] = useState<"up" | "down">("up");
-  const [flash, setFlash] = useState<"up" | "down" | null>(null);
-  const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const flashTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [flashState, setFlashState] = useState<"up" | "down" | "fade" | null>(null);
+  const timeoutsRef = useRef<NodeJS.Timeout[]>([]);
+
+  const clearTimeouts = () => {
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
+  };
 
   useEffect(() => {
-    if (!value || value <= 0) return;
+    if (!value || value <= 0 || value === displayValue) return;
     
-    if (value !== displayValue) {
-      if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
-      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+    clearTimeouts();
 
-      const newDirection = value > displayValue ? "up" : "down";
-      setDirection(newDirection);
-      setPrevValue(displayValue);
-      setDisplayValue(value);
-      setIsAnimating(true);
+    const newDirection = value > displayValue ? "up" : "down";
+    setDirection(newDirection);
+    setPrevValue(displayValue);
+    setDisplayValue(value);
+    setIsAnimating(true);
+    setFlashState(newDirection);
 
-      setFlash(newDirection);
-      flashTimeoutRef.current = setTimeout(() => setFlash(null), 900);
+    timeoutsRef.current.push(
+      setTimeout(() => setFlashState("fade"), 700)
+    );
+    
+    timeoutsRef.current.push(
+      setTimeout(() => setFlashState(null), 1100)
+    );
 
-      animationTimeoutRef.current = setTimeout(() => setIsAnimating(false), 320);
-    }
+    timeoutsRef.current.push(
+      setTimeout(() => setIsAnimating(false), 350)
+    );
 
-    return () => {
-      if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
-      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
-    };
+    return clearTimeouts;
   }, [value, displayValue]);
 
   const currentFormatted = formatPrice(displayValue);
@@ -304,10 +305,11 @@ export const RollingPriceLarge = ({
   return (
     <span
       className={cn(
-        "inline-flex items-center font-mono tabular-nums text-lg font-bold transition-colors duration-500",
-        flash === "up" && "text-success",
-        flash === "down" && "text-destructive",
-        !flash && "text-foreground",
+        "inline-flex items-center font-mono tabular-nums text-lg font-bold transition-all",
+        flashState === "up" && "text-success",
+        flashState === "down" && "text-destructive",
+        flashState === "fade" && "text-foreground transition-colors duration-400",
+        !flashState && "text-foreground",
         className
       )}
     >
