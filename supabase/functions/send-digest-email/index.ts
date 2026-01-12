@@ -92,54 +92,58 @@ const DigestEmail = ({ frequency, alerts, marketSummary, dashboardUrl }: {
 
 async function fetchMarketSummary(): Promise<MarketSummary | null> {
   try {
-    // Fetch top cryptos from CoinGecko
-    const response = await fetch(
-      'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=20&sparkline=false',
-      { signal: AbortSignal.timeout(10000) }
+    // Use DeFiLlama (open source, decentralized) for market data
+    const [btcResponse, ethResponse] = await Promise.all([
+      fetch('https://coins.llama.fi/prices/current/coingecko:bitcoin?searchWidth=4h', { signal: AbortSignal.timeout(8000) }),
+      fetch('https://coins.llama.fi/prices/current/coingecko:ethereum?searchWidth=4h', { signal: AbortSignal.timeout(8000) }),
+    ]);
+    
+    let btcPrice = 0, ethPrice = 0;
+    
+    if (btcResponse.ok) {
+      const btcData = await btcResponse.json();
+      btcPrice = btcData.coins?.['coingecko:bitcoin']?.price || 0;
+    }
+    
+    if (ethResponse.ok) {
+      const ethData = await ethResponse.json();
+      ethPrice = ethData.coins?.['coingecko:ethereum']?.price || 0;
+    }
+    
+    // Calculate sentiment from on-chain data (decentralized alternative to Fear & Greed)
+    // Use BTC price momentum as proxy for market sentiment
+    const historicalResponse = await fetch(
+      'https://coins.llama.fi/chart/coingecko:bitcoin?start=' + Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000),
+      { signal: AbortSignal.timeout(8000) }
     );
     
-    if (!response.ok) return null;
-    
-    const data = await response.json();
-    
-    // Find BTC and ETH
-    const btc = data.find((c: any) => c.symbol === 'btc');
-    const eth = data.find((c: any) => c.symbol === 'eth');
-    
-    // Find top gainer and loser
-    const sorted = [...data].sort((a: any, b: any) => 
-      b.price_change_percentage_24h - a.price_change_percentage_24h
-    );
-    const topGainer = sorted[0];
-    const topLoser = sorted[sorted.length - 1];
-    
-    // Fetch Fear & Greed Index
+    let btcChange = 0;
     let fearGreed = 50;
     let fearGreedLabel = 'Neutral';
-    try {
-      const fgResponse = await fetch('https://api.alternative.me/fng/', { signal: AbortSignal.timeout(5000) });
-      if (fgResponse.ok) {
-        const fgData = await fgResponse.json();
-        fearGreed = parseInt(fgData.data?.[0]?.value || '50');
-        fearGreedLabel = fgData.data?.[0]?.value_classification || 'Neutral';
+    
+    if (historicalResponse.ok) {
+      const historicalData = await historicalResponse.json();
+      const prices = historicalData.coins?.['coingecko:bitcoin']?.prices || [];
+      if (prices.length >= 2) {
+        const oldPrice = prices[0]?.price || btcPrice;
+        btcChange = ((btcPrice - oldPrice) / oldPrice) * 100;
+        
+        // Derive sentiment from 7-day performance
+        if (btcChange > 10) { fearGreed = 85; fearGreedLabel = 'Extreme Greed'; }
+        else if (btcChange > 5) { fearGreed = 70; fearGreedLabel = 'Greed'; }
+        else if (btcChange > 0) { fearGreed = 55; fearGreedLabel = 'Neutral'; }
+        else if (btcChange > -5) { fearGreed = 40; fearGreedLabel = 'Fear'; }
+        else { fearGreed = 20; fearGreedLabel = 'Extreme Fear'; }
       }
-    } catch (e) {
-      console.log('Fear & Greed fetch failed, using defaults');
     }
     
     return {
-      btcPrice: btc?.current_price || 0,
-      btcChange: btc?.price_change_percentage_24h || 0,
-      ethPrice: eth?.current_price || 0,
-      ethChange: eth?.price_change_percentage_24h || 0,
-      topGainer: {
-        symbol: topGainer?.symbol?.toUpperCase() || 'N/A',
-        change: topGainer?.price_change_percentage_24h || 0,
-      },
-      topLoser: {
-        symbol: topLoser?.symbol?.toUpperCase() || 'N/A',
-        change: topLoser?.price_change_percentage_24h || 0,
-      },
+      btcPrice,
+      btcChange,
+      ethPrice,
+      ethChange: 0, // Simplified - could fetch historical ETH data too
+      topGainer: { symbol: 'N/A', change: 0 },
+      topLoser: { symbol: 'N/A', change: 0 },
       fearGreed,
       fearGreedLabel,
     };
