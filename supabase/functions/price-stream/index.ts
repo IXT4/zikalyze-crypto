@@ -333,25 +333,20 @@ serve(async (req) => {
         llamaPrices.forEach((data, symbol) => merged.set(symbol, data));
         pythPrices.forEach((data, symbol) => merged.set(symbol, data)); // Pyth overwrites
 
-        // Stream accurate prices with minimal artificial movement
+        // Stream real prices only - no artificial movement
         const updates: Array<{ symbol: string; price: number; source: string }> = [];
         
         merged.forEach((data, symbol) => {
-          let finalPrice = data.price;
+          // Only send if price actually changed from last update
           const lastPrice = lastPrices.get(symbol);
-          
-          // Only apply tiny smoothing when price hasn't changed from source
-          // This prevents jarring updates while maintaining accuracy
-          if (lastPrice && lastPrice > 0 && Math.abs(data.price - lastPrice) / lastPrice < 0.00001) {
-            // Minimal smoothing (±0.0001% to ±0.0005%) only when source price is static
-            const microMovement = 1 + (Math.random() - 0.5) * 0.00001;
-            finalPrice = lastPrice * microMovement;
+          if (lastPrice && data.price === lastPrice) {
+            return; // Skip unchanged prices
           }
           
-          lastPrices.set(symbol, finalPrice);
+          lastPrices.set(symbol, data.price);
           updates.push({
             symbol,
-            price: finalPrice,
+            price: data.price, // Real price only, no modification
             source: data.source,
           });
         });
@@ -370,7 +365,7 @@ serve(async (req) => {
           console.error("[PriceStream] Error:", err);
         }
       }
-    }, 1000); // 1 update per second for stable, accurate streaming
+    }, 500); // Poll every 500ms for real price updates
   };
 
   socket.onopen = () => {
