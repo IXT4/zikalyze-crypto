@@ -12,10 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import ErrorBoundary, { ChartErrorFallback, MinimalErrorFallback } from "@/components/ErrorBoundary";
 
-// Lazy load heavy chart components to reduce initial bundle
-// Using GPU-accelerated rendering + decentralized oracle data
-const DecentralizedVolumeChart = lazy(() => import("@/components/dashboard/DecentralizedVolumeChart"));
-const GPUPriceChart = lazy(() => import("@/components/dashboard/GPUPriceChart"));
+// Lazy load heavy components to reduce initial bundle
 const GPUHeatmap = lazy(() => import("@/components/dashboard/GPUHeatmap"));
 const AIMetrics = lazy(() => import("@/components/dashboard/AIMetrics"));
 const AIAnalyzer = lazy(() => import("@/components/dashboard/AIAnalyzer"));
@@ -166,40 +163,25 @@ const Dashboard = () => {
             </Suspense>
           </ErrorBoundary>
 
-          {/* Charts Grid */}
-          <div className="grid gap-4 md:gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-4 md:space-y-6">
-              {/* GPU-Accelerated Live Streaming Chart (WebGPU/WebGL2/Canvas2D) */}
-              <ErrorBoundary componentName="GPU Price Chart" fallback={<ChartErrorFallback />}>
-                <Suspense fallback={<ChartSkeleton />}>
-                  <GPUPriceChart crypto={selectedCrypto} change24h={selected.change} height={320} />
-                </Suspense>
-              </ErrorBoundary>
-              <ErrorBoundary componentName="Activity Chart" fallback={<ChartErrorFallback />}>
-                <Suspense fallback={<ChartSkeleton />}>
-                  <DecentralizedVolumeChart crypto={selectedCrypto} />
-                </Suspense>
-              </ErrorBoundary>
-            </div>
-            <div className="space-y-4 md:space-y-6">
-              <ErrorBoundary componentName="AI Metrics" fallback={<MinimalErrorFallback />}>
-                <Suspense fallback={<MetricsSkeleton />}>
-                  <AIMetrics 
-                    price={selected.price}
-                    change={selected.change}
-                    high24h={liveData?.high_24h}
-                    low24h={liveData?.low_24h}
-                    volume={liveData?.total_volume}
-                    marketCap={liveData?.market_cap}
-                  />
-                </Suspense>
-              </ErrorBoundary>
-              <ErrorBoundary componentName="Oracle Cross-Validation" fallback={<MinimalErrorFallback />}>
-                <Suspense fallback={<MetricsSkeleton />}>
-                  <OracleCrossValidation crypto={selectedCrypto} />
-                </Suspense>
-              </ErrorBoundary>
-            </div>
+          {/* Metrics Grid */}
+          <div className="grid gap-4 md:gap-6 lg:grid-cols-2">
+            <ErrorBoundary componentName="AI Metrics" fallback={<MinimalErrorFallback />}>
+              <Suspense fallback={<MetricsSkeleton />}>
+                <AIMetrics 
+                  price={selected.price}
+                  change={selected.change}
+                  high24h={liveData?.high_24h}
+                  low24h={liveData?.low_24h}
+                  volume={liveData?.total_volume}
+                  marketCap={liveData?.market_cap}
+                />
+              </Suspense>
+            </ErrorBoundary>
+            <ErrorBoundary componentName="Oracle Cross-Validation" fallback={<MinimalErrorFallback />}>
+              <Suspense fallback={<MetricsSkeleton />}>
+                <OracleCrossValidation crypto={selectedCrypto} />
+              </Suspense>
+            </ErrorBoundary>
           </div>
 
           {/* GPU Market Heatmap */}
