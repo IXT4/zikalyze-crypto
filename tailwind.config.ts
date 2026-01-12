@@ -158,6 +158,26 @@ export default {
             opacity: "1",
           },
         },
+        "roll-out-down": {
+          "0%": {
+            transform: "translateY(0)",
+            opacity: "1",
+          },
+          "100%": {
+            transform: "translateY(100%)",
+            opacity: "0",
+          },
+        },
+        "roll-in-down": {
+          "0%": {
+            transform: "translateY(-100%)",
+            opacity: "0",
+          },
+          "100%": {
+            transform: "translateY(0)",
+            opacity: "1",
+          },
+        },
         "spin-slow": {
           from: {
             transform: "rotate(0deg)",
@@ -174,8 +194,10 @@ export default {
         "price-flash-down": "price-flash-down 0.6s ease-out",
         "bounce-subtle-up": "bounce-subtle-up 0.4s ease-out",
         "bounce-subtle-down": "bounce-subtle-down 0.4s ease-out",
-        "roll-out-up": "roll-out-up 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards",
-        "roll-in-up": "roll-in-up 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "roll-out-up": "roll-out-up 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "roll-in-up": "roll-in-up 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "roll-out-down": "roll-out-down 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "roll-in-down": "roll-in-down 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards",
         "spin-slow": "spin-slow 2.5s linear infinite",
       },
     },
