@@ -15,25 +15,12 @@ const useAnimatedValue = (targetValue: number, duration: number = 300) => {
   const startTimeRef = useRef<number>(0);
   const startValueRef = useRef<number>(targetValue);
   const isFirstRender = useRef(true);
+  const targetRef = useRef(targetValue);
+  const displayRef = useRef(displayValue);
 
-  const animate = useCallback((timestamp: number) => {
-    if (!startTimeRef.current) startTimeRef.current = timestamp;
-    
-    const elapsed = timestamp - startTimeRef.current;
-    const progress = Math.min(elapsed / duration, 1);
-    
-    // Ease-out cubic for smooth deceleration
-    const easeOut = 1 - Math.pow(1 - progress, 3);
-    
-    const currentValue = startValueRef.current + 
-      (targetValue - startValueRef.current) * easeOut;
-    
-    setDisplayValue(currentValue);
-    
-    if (progress < 1) {
-      animationRef.current = requestAnimationFrame(animate);
-    }
-  }, [targetValue, duration]);
+  // Keep refs in sync
+  targetRef.current = targetValue;
+  displayRef.current = displayValue;
 
   useEffect(() => {
     // Skip animation on first render
@@ -44,12 +31,31 @@ const useAnimatedValue = (targetValue: number, duration: number = 300) => {
     }
     
     // Start animation from current display value
-    startValueRef.current = displayValue;
+    startValueRef.current = displayRef.current;
     startTimeRef.current = 0;
     
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
     }
+    
+    const animate = (timestamp: number) => {
+      if (!startTimeRef.current) startTimeRef.current = timestamp;
+      
+      const elapsed = timestamp - startTimeRef.current;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease-out cubic for smooth deceleration
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      
+      const currentValue = startValueRef.current + 
+        (targetRef.current - startValueRef.current) * easeOut;
+      
+      setDisplayValue(currentValue);
+      
+      if (progress < 1) {
+        animationRef.current = requestAnimationFrame(animate);
+      }
+    };
     
     animationRef.current = requestAnimationFrame(animate);
     
@@ -58,7 +64,7 @@ const useAnimatedValue = (targetValue: number, duration: number = 300) => {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [targetValue, animate]);
+  }, [targetValue, duration]);
 
   return displayValue;
 };

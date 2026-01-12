@@ -311,24 +311,36 @@ const GPUPriceChart = ({
     };
   }, []);
   
-  // Handle resize
+  // Handle resize with debounce
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    
+    let resizeTimeout: NodeJS.Timeout | null = null;
     
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width } = entry.contentRect;
         if (width > 0) {
-          setDimensions({ width, height });
-          chartManagerRef.current?.resize(width, height);
+          // Debounce resize updates
+          if (resizeTimeout) clearTimeout(resizeTimeout);
+          resizeTimeout = setTimeout(() => {
+            setDimensions(prev => {
+              if (prev.width === width && prev.height === height) return prev;
+              return { width, height };
+            });
+            chartManagerRef.current?.resize(width, height);
+          }, 100);
         }
       }
     });
     
     resizeObserver.observe(container);
     
-    return () => resizeObserver.disconnect();
+    return () => {
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeObserver.disconnect();
+    };
   }, [height]);
   
   // Real-time chart data streaming
