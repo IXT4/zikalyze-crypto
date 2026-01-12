@@ -55,33 +55,53 @@ const usePriceDirection = (value: number) => {
   return { direction, key };
 };
 
-// Subtle fade price display
+// Subtle color transition price display
 const PriceDisplay = ({ 
   formattedPrice, 
+  value,
   className 
 }: { 
   formattedPrice: string;
+  value: number;
   className?: string;
 }) => {
   const [displayPrice, setDisplayPrice] = useState(formattedPrice);
-  const [isFading, setIsFading] = useState(false);
+  const [colorClass, setColorClass] = useState<string>('');
+  const prevValueRef = useRef<number>(value);
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
+      prevValueRef.current = value;
+      return;
+    }
+
     if (formattedPrice !== displayPrice) {
-      setIsFading(true);
+      // Determine direction and set color
+      if (value > prevValueRef.current) {
+        setColorClass('text-success');
+      } else if (value < prevValueRef.current) {
+        setColorClass('text-destructive');
+      }
+      
+      setDisplayPrice(formattedPrice);
+      prevValueRef.current = value;
+      
+      // Fade color back to default after transition
       const timeout = setTimeout(() => {
-        setDisplayPrice(formattedPrice);
-        setIsFading(false);
-      }, 150);
+        setColorClass('');
+      }, 1500);
+      
       return () => clearTimeout(timeout);
     }
-  }, [formattedPrice, displayPrice]);
+  }, [formattedPrice, displayPrice, value]);
 
   return (
     <span 
       className={cn(
-        "tabular-nums transition-opacity duration-150",
-        isFading ? "opacity-70" : "opacity-100",
+        "tabular-nums transition-colors duration-700 ease-out",
+        colorClass || "text-foreground",
         className
       )}
     >
@@ -95,8 +115,8 @@ export const LivePrice = ({ value, className }: LivePriceProps) => {
   const formattedPrice = useMemo(() => formatPrice(value), [formatPrice, value]);
 
   return (
-    <span className={cn("font-semibold text-foreground", className)}>
-      <PriceDisplay formattedPrice={formattedPrice} />
+    <span className={cn("font-semibold", className)}>
+      <PriceDisplay formattedPrice={formattedPrice} value={value} />
     </span>
   );
 };
@@ -113,8 +133,8 @@ export const LivePriceCompact = ({
   const formattedPrice = useMemo(() => formatPrice(value), [formatPrice, value]);
 
   return (
-    <span className={cn("text-sm font-medium text-foreground", className)}>
-      <PriceDisplay formattedPrice={formattedPrice} />
+    <span className={cn("text-sm font-medium", className)}>
+      <PriceDisplay formattedPrice={formattedPrice} value={value} />
     </span>
   );
 };
@@ -131,8 +151,8 @@ export const LivePriceLarge = ({
   const formattedPrice = useMemo(() => formatPrice(value), [formatPrice, value]);
 
   return (
-    <span className={cn("text-lg font-bold text-foreground", className)}>
-      <PriceDisplay formattedPrice={formattedPrice} />
+    <span className={cn("text-lg font-bold", className)}>
+      <PriceDisplay formattedPrice={formattedPrice} value={value} />
     </span>
   );
 };
