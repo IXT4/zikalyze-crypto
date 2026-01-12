@@ -15,6 +15,7 @@ import ErrorBoundary, { ChartErrorFallback, MinimalErrorFallback } from "@/compo
 const DecentralizedPriceChart = lazy(() => import("@/components/dashboard/DecentralizedPriceChart"));
 const DecentralizedVolumeChart = lazy(() => import("@/components/dashboard/DecentralizedVolumeChart"));
 const GPUPriceChart = lazy(() => import("@/components/dashboard/GPUPriceChart"));
+const GPUHeatmap = lazy(() => import("@/components/dashboard/GPUHeatmap"));
 const AIMetrics = lazy(() => import("@/components/dashboard/AIMetrics"));
 const AIAnalyzer = lazy(() => import("@/components/dashboard/AIAnalyzer"));
 const Top100CryptoList = lazy(() => import("@/components/dashboard/Top100CryptoList"));
@@ -210,6 +211,13 @@ const Dashboard = () => {
               </ErrorBoundary>
             </div>
           </div>
+
+          {/* GPU Market Heatmap */}
+          <ErrorBoundary componentName="Market Heatmap" fallback={<ChartErrorFallback />}>
+            <Suspense fallback={<ChartSkeleton />}>
+              <GPUHeatmap prices={prices} loading={loading} onSelectCrypto={setSelectedCrypto} />
+            </Suspense>
+          </ErrorBoundary>
 
           {/* Top 100 Crypto List */}
           <ErrorBoundary componentName="Crypto List" fallback={<ChartErrorFallback />}>
