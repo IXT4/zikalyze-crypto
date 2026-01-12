@@ -398,8 +398,6 @@ const GPUPriceChart = ({
               <h3 className="text-lg font-semibold text-foreground">{crypto}/USD</h3>
             )}
             <OracleSourceBadge source={activeSource} />
-            {backend && <BackendBadge backend={backend} />}
-            <LiveStreamBadge isStreaming={isLive && tickRate > 0} tickRate={tickRate} />
           </div>
           
           <div className="flex items-center gap-3">
