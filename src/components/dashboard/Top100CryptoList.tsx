@@ -366,7 +366,12 @@ const Top100CryptoList = ({ onSelect, selected, prices: propPrices, loading: pro
               <tr className="text-left text-xs text-muted-foreground border-b border-border">
                 <th className="pb-3 font-medium">#</th>
                 <th className="pb-3 font-medium">Name</th>
-                <th className="pb-3 font-medium text-right">Price</th>
+                <th className="pb-3 font-medium text-right">
+                  <span className="inline-flex items-center gap-1.5">
+                    Price
+                    <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                  </span>
+                </th>
                 <th className="pb-3 font-medium text-center hidden xs:table-cell">Trend</th>
                 <th className="pb-3 font-medium text-right">24h %</th>
                 <th className="pb-3 font-medium text-right hidden sm:table-cell">Market Cap</th>
