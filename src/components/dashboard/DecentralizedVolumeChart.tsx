@@ -4,9 +4,9 @@
 // Visualizes price momentum as activity bars (oracles don't provide volume data)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { useDecentralizedChartData } from "@/hooks/useDecentralizedChartData";
+import { useGlobalPriceWebSocket } from "@/hooks/useGlobalPriceWebSocket";
 import { TrendingUp } from "lucide-react";
 import {
   OracleSourceBadge,
@@ -14,6 +14,14 @@ import {
   ChartBuildingState,
   ChartConnectingState,
 } from "./charts/OracleStatusIndicators";
+
+interface ActivityDataPoint {
+  time: string;
+  price: number;
+  momentum: number;
+  positive: boolean;
+  source: string;
+}
 
 interface DecentralizedVolumeChartProps {
   crypto: string;
@@ -27,33 +35,77 @@ const TOOLTIP_STYLE = {
 };
 
 const DecentralizedVolumeChart = ({ crypto }: DecentralizedVolumeChartProps) => {
-  const {
-    chartData,
-    isBuilding,
-    isLive,
-    currentSource,
-    oracleStatus,
-    dataPointCount,
-  } = useDecentralizedChartData(crypto);
+  const symbol = crypto.toUpperCase();
+  const ws = useGlobalPriceWebSocket([symbol]);
+  
+  const [activityData, setActivityData] = useState<ActivityDataPoint[]>([]);
+  const lastPriceRef = useRef<number | null>(null);
+  const lastUpdateRef = useRef<number>(0);
 
-  // Convert price data to momentum/activity bars
-  const momentumData = useMemo(() => {
-    return chartData.map((point, index) => {
-      if (index === 0) {
-        return { ...point, momentum: 50 };
-      }
-      const prevPrice = chartData[index - 1].price;
-      const priceChange = Math.abs((point.price - prevPrice) / prevPrice) * 100;
-      const momentum = Math.min(100, 30 + priceChange * 500);
-      return { ...point, momentum };
+  // Stream price updates into activity bars
+  useEffect(() => {
+    const wsPrice = ws.getPrice(symbol);
+    if (!wsPrice || wsPrice.price <= 0) return;
+
+    const now = Date.now();
+    const newPrice = wsPrice.price;
+
+    // Throttle updates to every 500ms for smooth activity visualization
+    if (now - lastUpdateRef.current < 500) return;
+
+    // Skip if price hasn't changed
+    if (lastPriceRef.current !== null && newPrice === lastPriceRef.current) return;
+
+    lastUpdateRef.current = now;
+
+    // Calculate momentum based on price change
+    let momentum = 50;
+    let positive = true;
+    if (lastPriceRef.current !== null) {
+      const priceChange = (newPrice - lastPriceRef.current) / lastPriceRef.current;
+      positive = priceChange >= 0;
+      momentum = Math.min(100, 30 + Math.abs(priceChange) * 10000);
+    }
+
+    const newPoint: ActivityDataPoint = {
+      time: new Date(now).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      }),
+      price: newPrice,
+      momentum,
+      positive,
+      source: "WebSocket",
+    };
+
+    lastPriceRef.current = newPrice;
+
+    setActivityData(prev => {
+      const updated = [...prev, newPoint];
+      // Keep last 30 data points for clean visualization
+      return updated.slice(-30);
     });
-  }, [chartData]);
+  }, [ws.prices, symbol, ws.getPrice]);
+
+  const isLive = ws.connected;
+  const dataPointCount = activityData.length;
+  const isBuilding = dataPointCount < 3;
+  const currentSource = ws.connected ? "WebSocket" : null;
+
+  const oracleStatus = {
+    pythConnected: false,
+    diaConnected: false,
+    redstoneConnected: false,
+    primarySource: "WebSocket" as const,
+  };
 
   const activeSource = currentSource || oracleStatus.primarySource;
 
   const renderChart = () => (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={momentumData}>
+      <BarChart data={activityData}>
         <XAxis dataKey="time" hide />
         <YAxis hide domain={[0, 100]} />
         <Tooltip
@@ -69,7 +121,7 @@ const DecentralizedVolumeChart = ({ crypto }: DecentralizedVolumeChartProps) => 
           labelStyle={{ color: "hsl(var(--muted-foreground))" }}
         />
         <Bar dataKey="momentum" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-          {momentumData.map((entry, index) => (
+          {activityData.map((entry, index) => (
             <Cell
               key={`cell-${index}`}
               fill={entry.positive ? "hsl(var(--success))" : "hsl(var(--destructive))"}

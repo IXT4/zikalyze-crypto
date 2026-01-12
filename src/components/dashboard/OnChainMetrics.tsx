@@ -214,7 +214,9 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
           <div className="font-bold text-foreground">
             {metrics.mempoolData.unconfirmedTxs > 0 
               ? metrics.mempoolData.unconfirmedTxs.toLocaleString()
-              : '—'}
+              : metrics.transactionVolume.tps 
+                ? `~${Math.round(metrics.transactionVolume.tps * 2).toLocaleString()}`
+                : '—'}
           </div>
           <div className="text-xs text-muted-foreground space-y-0.5">
             {metrics.mempoolData.avgFeeRate > 0 ? (
@@ -222,16 +224,18 @@ const OnChainMetrics = ({ crypto, price, change, volume, marketCap, coinGeckoId 
                 <span>
                   {crypto.toUpperCase() === 'BTC' 
                     ? `${metrics.mempoolData.avgFeeRate} sat/vB` 
-                    : `${metrics.mempoolData.avgFeeRate} gwei`}
+                    : crypto.toUpperCase() === 'SOL'
+                      ? `${(metrics.mempoolData.avgFeeRate / 1000).toFixed(1)}K lamports`
+                      : `${metrics.mempoolData.avgFeeRate} gwei`}
                 </span>
-                {metrics.mempoolData.fastestFee && (
+                {metrics.mempoolData.fastestFee && crypto.toUpperCase() !== 'SOL' && (
                   <span className="text-[10px] text-warning">
                     (⚡{metrics.mempoolData.fastestFee})
                   </span>
                 )}
               </div>
             ) : (
-              <span>{metrics.mempoolData.unconfirmedTxs > 0 ? 'unconfirmed' : 'live'}</span>
+              <span>{metrics.transactionVolume.tps ? 'estimated' : 'live'}</span>
             )}
           </div>
         </div>

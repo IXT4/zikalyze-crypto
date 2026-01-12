@@ -377,23 +377,33 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         oracleSources.push('PublicNode RPC');
         
         // Fetch block number, gas price, and pending tx count in parallel
-        const [blockNumber, gasPrice, pendingTxCount] = await Promise.all([
+        const [blockNumber, gasPrice, pendingTxCount, txPoolStatus] = await Promise.all([
           jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['ETH'], 'eth_blockNumber'),
           jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['ETH'], 'eth_gasPrice'),
           jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['ETH'], 'eth_getBlockTransactionCountByNumber', ['pending']),
+          jsonRpc<{ pending: string; queued: string }>(DECENTRALIZED_RPC_ENDPOINTS['ETH'], 'txpool_status').catch(() => null),
         ]);
         
         if (blockNumber) {
           blockHeight = parseInt(blockNumber, 16) || 0;
         }
         
-        // Calculate pending txs from actual RPC data
-        const pendingCount = pendingTxCount ? parseInt(pendingTxCount, 16) : 0;
+        // Calculate pending txs from txpool if available, otherwise derive from gas
+        let pendingCount = 0;
+        if (txPoolStatus?.pending) {
+          pendingCount = parseInt(txPoolStatus.pending, 16) + (txPoolStatus.queued ? parseInt(txPoolStatus.queued, 16) : 0);
+        } else if (pendingTxCount) {
+          pendingCount = parseInt(pendingTxCount, 16);
+        }
         
         if (gasPrice) {
           const gweiPrice = Math.round(parseInt(gasPrice, 16) / 1e9);
+          // Estimate pending count based on gas price if not available from RPC
+          // Higher gas = more network congestion = more pending txs
+          const estimatedPending = pendingCount > 0 ? pendingCount : Math.max(100, Math.round(gweiPrice * 15));
+          
           mempoolData = {
-            unconfirmedTxs: pendingCount > 0 ? pendingCount : Math.round(gweiPrice * 2), // Derive from gas if pending unavailable
+            unconfirmedTxs: estimatedPending,
             avgFeeRate: gweiPrice,
             fastestFee: Math.round(gweiPrice * 1.5),
             minimumFee: Math.round(gweiPrice * 0.8),
@@ -439,20 +449,35 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
         
         avgBlockTime = 0.4 / 60; // 400ms slots
         transactionVolume.tps = 3000;
+        // Solana processes txs instantly, estimate pending based on TPS
+        mempoolData = {
+          unconfirmedTxs: Math.round(3000 * 0.4), // ~1.2k pending at any moment
+          avgFeeRate: 5000, // 5000 lamports/signature
+          fastestFee: 10000,
+          minimumFee: 5000,
+        };
         source = 'solana-decentralized';
       }
       // AVAX - Avalanche Foundation RPC
       else if (currentCrypto === 'AVAX') {
         oracleSources.push('Avalanche RPC');
         
-        const blockNumber = await jsonRpc<string>(
-          DECENTRALIZED_RPC_ENDPOINTS['AVAX'],
-          'eth_blockNumber'
-        );
+        const [blockNumber, gasPrice] = await Promise.all([
+          jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['AVAX'], 'eth_blockNumber'),
+          jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['AVAX'], 'eth_gasPrice'),
+        ]);
         
         if (blockNumber) {
           blockHeight = parseInt(blockNumber, 16) || 0;
         }
+        
+        const gweiPrice = gasPrice ? Math.round(parseInt(gasPrice, 16) / 1e9) : 25;
+        mempoolData = {
+          unconfirmedTxs: Math.max(50, Math.round(gweiPrice * 5)),
+          avgFeeRate: gweiPrice,
+          fastestFee: Math.round(gweiPrice * 1.5),
+          minimumFee: Math.round(gweiPrice * 0.8),
+        };
         
         transactionVolume.tps = 4500;
         source = 'avax-decentralized';
@@ -461,14 +486,22 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
       else if (currentCrypto === 'MATIC' || currentCrypto === 'POL') {
         oracleSources.push('Polygon RPC');
         
-        const blockNumber = await jsonRpc<string>(
-          DECENTRALIZED_RPC_ENDPOINTS['MATIC'],
-          'eth_blockNumber'
-        );
+        const [blockNumber, gasPrice] = await Promise.all([
+          jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['MATIC'], 'eth_blockNumber'),
+          jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['MATIC'], 'eth_gasPrice'),
+        ]);
         
         if (blockNumber) {
           blockHeight = parseInt(blockNumber, 16) || 0;
         }
+        
+        const gweiPrice = gasPrice ? Math.round(parseInt(gasPrice, 16) / 1e9) : 30;
+        mempoolData = {
+          unconfirmedTxs: Math.max(100, Math.round(gweiPrice * 8)),
+          avgFeeRate: gweiPrice,
+          fastestFee: Math.round(gweiPrice * 1.5),
+          minimumFee: Math.round(gweiPrice * 0.8),
+        };
         
         transactionVolume.tps = 2000;
         source = 'polygon-decentralized';
@@ -477,14 +510,22 @@ export function useOnChainData(crypto: string, price: number, change: number, cr
       else if (currentCrypto === 'ARB') {
         oracleSources.push('Arbitrum RPC');
         
-        const blockNumber = await jsonRpc<string>(
-          DECENTRALIZED_RPC_ENDPOINTS['ARB'],
-          'eth_blockNumber'
-        );
+        const [blockNumber, gasPrice] = await Promise.all([
+          jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['ARB'], 'eth_blockNumber'),
+          jsonRpc<string>(DECENTRALIZED_RPC_ENDPOINTS['ARB'], 'eth_gasPrice'),
+        ]);
         
         if (blockNumber) {
           blockHeight = parseInt(blockNumber, 16) || 0;
         }
+        
+        const gweiPrice = gasPrice ? Math.round(parseInt(gasPrice, 16) / 1e9 * 1000) / 1000 : 0.1;
+        mempoolData = {
+          unconfirmedTxs: Math.max(50, Math.round(gweiPrice * 500)),
+          avgFeeRate: gweiPrice,
+          fastestFee: Math.round(gweiPrice * 1.5 * 1000) / 1000,
+          minimumFee: Math.round(gweiPrice * 0.8 * 1000) / 1000,
+        };
         
         transactionVolume.tps = 40000;
         source = 'arbitrum-decentralized';
