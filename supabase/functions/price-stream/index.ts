@@ -333,7 +333,7 @@ serve(async (req) => {
         llamaPrices.forEach((data, symbol) => merged.set(symbol, data));
         pythPrices.forEach((data, symbol) => merged.set(symbol, data)); // Pyth overwrites
 
-        // Apply micro-movements to simulate continuous ticking (like CoinMarketCap)
+        // Apply subtle micro-movements for natural feel (reduced aggressiveness)
         const updates: Array<{ symbol: string; price: number; source: string }> = [];
         
         merged.forEach((data, symbol) => {
@@ -341,8 +341,8 @@ serve(async (req) => {
           const lastPrice = lastPrices.get(symbol);
           
           if (lastPrice && lastPrice > 0) {
-            // Add realistic micro-movement (±0.001% to ±0.01%)
-            const microMovement = 1 + (Math.random() - 0.5) * 0.0002;
+            // Reduced micro-movement (±0.0005% to ±0.003%) for smoother natural feel
+            const microMovement = 1 + (Math.random() - 0.5) * 0.00006;
             finalPrice = data.price * microMovement;
           }
           
@@ -368,7 +368,7 @@ serve(async (req) => {
           console.error("[PriceStream] Error:", err);
         }
       }
-    }, 250); // 4 updates per second like CoinMarketCap
+    }, 500); // Reduced to 2 updates per second for smoother feel
   };
 
   socket.onopen = () => {
