@@ -138,19 +138,19 @@ export default {
             transform: "translateY(2px)",
           },
         },
-        "roll-out-up": {
+        "digit-out-up": {
           "0%": {
             transform: "translateY(0)",
             opacity: "1",
           },
           "100%": {
-            transform: "translateY(-100%)",
+            transform: "translateY(-110%)",
             opacity: "0",
           },
         },
-        "roll-in-up": {
+        "digit-in-up": {
           "0%": {
-            transform: "translateY(100%)",
+            transform: "translateY(110%)",
             opacity: "0",
           },
           "100%": {
@@ -158,19 +158,19 @@ export default {
             opacity: "1",
           },
         },
-        "roll-out-down": {
+        "digit-out-down": {
           "0%": {
             transform: "translateY(0)",
             opacity: "1",
           },
           "100%": {
-            transform: "translateY(100%)",
+            transform: "translateY(110%)",
             opacity: "0",
           },
         },
-        "roll-in-down": {
+        "digit-in-down": {
           "0%": {
-            transform: "translateY(-100%)",
+            transform: "translateY(-110%)",
             opacity: "0",
           },
           "100%": {
@@ -194,10 +194,10 @@ export default {
         "price-flash-down": "price-flash-down 0.6s ease-out",
         "bounce-subtle-up": "bounce-subtle-up 0.4s ease-out",
         "bounce-subtle-down": "bounce-subtle-down 0.4s ease-out",
-        "roll-out-up": "roll-out-up 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards",
-        "roll-in-up": "roll-in-up 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards",
-        "roll-out-down": "roll-out-down 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards",
-        "roll-in-down": "roll-in-down 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "digit-out-up": "digit-out-up 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "digit-in-up": "digit-in-up 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "digit-out-down": "digit-out-down 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "digit-in-down": "digit-in-down 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards",
         "spin-slow": "spin-slow 2.5s linear infinite",
       },
     },
