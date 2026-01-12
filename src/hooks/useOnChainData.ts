@@ -53,25 +53,110 @@ const DECENTRALIZED_WS_ENDPOINTS: Record<string, string[]> = {
   'ETH': [
     'wss://ethereum-rpc.publicnode.com',     // Public decentralized RPC
     'wss://eth.drpc.org',                     // Decentralized RPC
-    'wss://ethereum.publicnode.com'           // Public node
   ],
   'SOL': [], // Uses decentralized RPC REST
   'KAS': []  // Uses official Kaspa API
 };
 
-// Decentralized REST API endpoints (no centralized aggregators)
-const DECENTRALIZED_RPC_ENDPOINTS: Record<string, string> = {
-  'SOL': 'https://api.mainnet-beta.solana.com',           // Solana Foundation RPC
-  'ETH': 'https://ethereum-rpc.publicnode.com',            // Public decentralized node
-  'AVAX': 'https://api.avax.network/ext/bc/C/rpc',         // Avalanche Foundation
-  'MATIC': 'https://polygon-rpc.com',                       // Polygon public RPC
-  'ARB': 'https://arb1.arbitrum.io/rpc',                   // Arbitrum Foundation
-  'OP': 'https://mainnet.optimism.io',                     // Optimism Foundation
-  'BNB': 'https://bsc-dataseed.bnbchain.org',              // BNB Chain public
-  'FTM': 'https://rpc.ftm.tools',                          // Fantom public RPC
-  'NEAR': 'https://rpc.mainnet.near.org',                  // NEAR Foundation
-  'ATOM': 'https://cosmos-rpc.polkachu.com',               // Decentralized validator
+// ════════════════════════════════════════════════════════════════════════════════
+// 🌐 PERMISSIONLESS PUBLIC RPC ENDPOINTS - CORS-friendly, no rate limits
+// Priority: Omnia > Ankr > Cloudflare > Foundation RPCs
+// ════════════════════════════════════════════════════════════════════════════════
+const DECENTRALIZED_RPC_ENDPOINTS: Record<string, string[]> = {
+  // Ethereum - Multiple permissionless endpoints with CORS support
+  'ETH': [
+    'https://endpoints.omniatech.io/v1/eth/mainnet/public',  // Omnia - permissionless
+    'https://rpc.ankr.com/eth',                               // Ankr public - CORS enabled
+    'https://cloudflare-eth.com',                             // Cloudflare - always works
+    'https://eth.drpc.org',                                   // dRPC - decentralized
+    'https://ethereum-rpc.publicnode.com',                    // PublicNode fallback
+  ],
+  // Solana - Foundation + public endpoints
+  'SOL': [
+    'https://api.mainnet-beta.solana.com',                   // Solana Foundation
+    'https://rpc.ankr.com/solana',                           // Ankr public
+    'https://solana.drpc.org',                               // dRPC
+  ],
+  // Avalanche - Foundation + public
+  'AVAX': [
+    'https://rpc.ankr.com/avalanche',                        // Ankr - CORS enabled
+    'https://endpoints.omniatech.io/v1/avax/mainnet/public', // Omnia
+    'https://api.avax.network/ext/bc/C/rpc',                 // Avalanche Foundation
+  ],
+  // Polygon - Multiple permissionless
+  'MATIC': [
+    'https://rpc.ankr.com/polygon',                          // Ankr
+    'https://endpoints.omniatech.io/v1/matic/mainnet/public', // Omnia
+    'https://polygon-rpc.com',                                // Polygon public
+    'https://polygon.drpc.org',                               // dRPC
+  ],
+  // Arbitrum - Foundation + public
+  'ARB': [
+    'https://rpc.ankr.com/arbitrum',                         // Ankr
+    'https://endpoints.omniatech.io/v1/arbitrum/one/public', // Omnia
+    'https://arb1.arbitrum.io/rpc',                          // Arbitrum Foundation
+  ],
+  // Optimism - Foundation + public
+  'OP': [
+    'https://rpc.ankr.com/optimism',                         // Ankr
+    'https://endpoints.omniatech.io/v1/op/mainnet/public',   // Omnia
+    'https://mainnet.optimism.io',                           // Optimism Foundation
+  ],
+  // BNB Chain - Multiple public
+  'BNB': [
+    'https://rpc.ankr.com/bsc',                              // Ankr
+    'https://endpoints.omniatech.io/v1/bsc/mainnet/public',  // Omnia
+    'https://bsc-dataseed.bnbchain.org',                     // BNB Chain public
+  ],
+  // Fantom - Public RPCs
+  'FTM': [
+    'https://rpc.ankr.com/fantom',                           // Ankr
+    'https://endpoints.omniatech.io/v1/fantom/mainnet/public', // Omnia
+    'https://rpc.ftm.tools',                                 // Fantom public
+  ],
+  // Base - Coinbase L2
+  'BASE': [
+    'https://rpc.ankr.com/base',                             // Ankr
+    'https://mainnet.base.org',                              // Base Foundation
+  ],
+  // NEAR - Foundation
+  'NEAR': [
+    'https://rpc.mainnet.near.org',                          // NEAR Foundation
+  ],
+  // Cosmos - Decentralized validators
+  'ATOM': [
+    'https://cosmos-rpc.polkachu.com',                       // Polkachu validator
+    'https://rpc.cosmos.network',                            // Cosmos Hub
+  ],
 };
+
+// Helper to get first working RPC endpoint
+async function getWorkingRpc(chain: string): Promise<string | null> {
+  const endpoints = DECENTRALIZED_RPC_ENDPOINTS[chain];
+  if (!endpoints?.length) return null;
+  
+  // Try endpoints in order, return first that responds
+  for (const endpoint of endpoints) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeout);
+      if (response.ok) return endpoint;
+    } catch {
+      continue; // Try next endpoint
+    }
+  }
+  
+  return endpoints[0]; // Fallback to first
+}
 
 // Official blockchain explorers/APIs (decentralized or foundation-run)
 const OFFICIAL_BLOCKCHAIN_APIS: Record<string, string> = {
@@ -129,18 +214,25 @@ async function cachedFetch<T>(url: string, fallback: T, options?: RequestInit): 
   }
 }
 
-// JSON-RPC helper for decentralized nodes
-async function jsonRpc<T>(endpoint: string, method: string, params: any[] = []): Promise<T | null> {
-  try {
-    const response = await cachedFetch<any>(endpoint, null, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
-    });
-    return response?.result ?? null;
-  } catch {
-    return null;
+// JSON-RPC helper for decentralized nodes - supports array of endpoints with fallback
+async function jsonRpc<T>(endpoints: string | string[], method: string, params: any[] = []): Promise<T | null> {
+  const endpointList = Array.isArray(endpoints) ? endpoints : [endpoints];
+  
+  for (const endpoint of endpointList) {
+    try {
+      const response = await cachedFetch<any>(endpoint, null, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+      });
+      if (response?.result !== undefined) {
+        return response.result as T;
+      }
+    } catch {
+      continue; // Try next endpoint
+    }
   }
+  return null;
 }
 
 export function useOnChainData(crypto: string, price: number, change: number, cryptoInfo?: CryptoInfo) {
