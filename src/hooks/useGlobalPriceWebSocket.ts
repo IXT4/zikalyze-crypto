@@ -1,0 +1,296 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// 📡 useGlobalPriceWebSocket — Shared WebSocket for All Dashboard Components
+// ═══════════════════════════════════════════════════════════════════════════════
+// Single WebSocket connection that streams prices to all components
+// Supports batch updates for 100+ symbols with sub-second latency
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+
+export interface WebSocketPriceData {
+  symbol: string;
+  price: number;
+  source: string;
+  timestamp: number;
+}
+
+interface WebSocketState {
+  connected: boolean;
+  connecting: boolean;
+  error: string | null;
+  lastUpdate: number;
+  ticksPerSecond: number;
+  subscribedCount: number;
+}
+
+const WEBSOCKET_URL = `wss://eqtzrftndyninwasclfd.functions.supabase.co/functions/v1/price-stream`;
+const RECONNECT_DELAY = 3000;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const PING_INTERVAL = 30000;
+
+// Singleton pattern for shared WebSocket connection
+let globalSocket: WebSocket | null = null;
+let globalListeners = new Set<(prices: Map<string, WebSocketPriceData>) => void>();
+let globalPrices = new Map<string, WebSocketPriceData>();
+let globalState: WebSocketState = {
+  connected: false,
+  connecting: false,
+  error: null,
+  lastUpdate: 0,
+  ticksPerSecond: 0,
+  subscribedCount: 0,
+};
+let reconnectAttempts = 0;
+let reconnectTimeout: NodeJS.Timeout | null = null;
+let pingInterval: NodeJS.Timeout | null = null;
+let tickWindow: number[] = [];
+let subscribedSymbols: string[] = [];
+
+function notifyListeners() {
+  globalListeners.forEach(listener => listener(new Map(globalPrices)));
+}
+
+function updateTickRate() {
+  const now = Date.now();
+  tickWindow = tickWindow.filter(t => now - t < 1000);
+  globalState = { ...globalState, ticksPerSecond: tickWindow.length };
+}
+
+function connect() {
+  if (globalSocket?.readyState === WebSocket.OPEN) return;
+  if (globalSocket?.readyState === WebSocket.CONNECTING) return;
+  
+  globalState = { ...globalState, connecting: true, error: null };
+  
+  try {
+    globalSocket = new WebSocket(WEBSOCKET_URL);
+    
+    globalSocket.onopen = () => {
+      console.log("[GlobalWS] Connected to price stream");
+      reconnectAttempts = 0;
+      
+      globalState = { 
+        ...globalState, 
+        connected: true, 
+        connecting: false,
+        error: null 
+      };
+      
+      // Subscribe to all symbols if we have any
+      if (subscribedSymbols.length > 0) {
+        globalSocket?.send(JSON.stringify({
+          type: "subscribe",
+          symbols: subscribedSymbols,
+        }));
+      }
+      
+      // Start ping interval
+      pingInterval = setInterval(() => {
+        if (globalSocket?.readyState === WebSocket.OPEN) {
+          globalSocket.send(JSON.stringify({ type: "ping" }));
+        }
+      }, PING_INTERVAL);
+    };
+    
+    globalSocket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === "price") {
+          tickWindow.push(Date.now());
+          updateTickRate();
+          
+          const update: WebSocketPriceData = {
+            symbol: data.symbol,
+            price: data.price,
+            source: data.source || "WebSocket",
+            timestamp: data.timestamp || Date.now(),
+          };
+          
+          globalPrices.set(data.symbol, update);
+          globalState = { ...globalState, lastUpdate: Date.now() };
+          notifyListeners();
+          
+        } else if (data.type === "prices" && Array.isArray(data.updates)) {
+          // Batch update
+          tickWindow.push(Date.now());
+          updateTickRate();
+          
+          data.updates.forEach((update: any) => {
+            const priceData: WebSocketPriceData = {
+              symbol: update.symbol,
+              price: update.price,
+              source: update.source || "WebSocket",
+              timestamp: data.timestamp || Date.now(),
+            };
+            globalPrices.set(update.symbol, priceData);
+          });
+          
+          globalState = { 
+            ...globalState, 
+            lastUpdate: Date.now(),
+            subscribedCount: globalPrices.size,
+          };
+          notifyListeners();
+          
+        } else if (data.type === "connected") {
+          console.log("[GlobalWS] Server confirmed connection:", data.totalSymbols, "symbols available");
+        } else if (data.type === "subscribed") {
+          console.log("[GlobalWS] Subscribed to:", data.count, "symbols");
+          globalState = { ...globalState, subscribedCount: data.count };
+        }
+      } catch (err) {
+        console.error("[GlobalWS] Error parsing message:", err);
+      }
+    };
+    
+    globalSocket.onclose = (event) => {
+      console.log("[GlobalWS] Disconnected:", event.code, event.reason);
+      
+      globalState = { 
+        ...globalState, 
+        connected: false, 
+        connecting: false 
+      };
+      
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+      }
+      
+      // Attempt reconnection if we still have listeners
+      if (globalListeners.size > 0 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttempts++;
+        const delay = RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1);
+        console.log(`[GlobalWS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
+        
+        reconnectTimeout = setTimeout(() => {
+          connect();
+        }, delay);
+      }
+    };
+    
+    globalSocket.onerror = (error) => {
+      console.error("[GlobalWS] Error:", error);
+      globalState = { 
+        ...globalState, 
+        error: "WebSocket connection error",
+        connecting: false 
+      };
+    };
+  } catch (err) {
+    console.error("[GlobalWS] Failed to create WebSocket:", err);
+    globalState = { 
+      ...globalState, 
+      error: "Failed to connect",
+      connecting: false 
+    };
+  }
+}
+
+function disconnect() {
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  if (pingInterval) {
+    clearInterval(pingInterval);
+    pingInterval = null;
+  }
+  if (globalSocket) {
+    globalSocket.close();
+    globalSocket = null;
+  }
+  globalState = {
+    connected: false,
+    connecting: false,
+    error: null,
+    lastUpdate: 0,
+    ticksPerSecond: 0,
+    subscribedCount: 0,
+  };
+}
+
+function subscribe(symbols: string[]) {
+  // Merge with existing subscriptions
+  const uniqueSymbols = [...new Set([...subscribedSymbols, ...symbols.map(s => s.toUpperCase())])];
+  subscribedSymbols = uniqueSymbols;
+  
+  if (globalSocket?.readyState === WebSocket.OPEN) {
+    globalSocket.send(JSON.stringify({
+      type: "subscribe",
+      symbols: subscribedSymbols,
+    }));
+  }
+}
+
+// Compute tick rate every 250ms
+setInterval(updateTickRate, 250);
+
+export function useGlobalPriceWebSocket(symbols: string[] = []) {
+  const [state, setState] = useState<WebSocketState>(globalState);
+  const [prices, setPrices] = useState<Map<string, WebSocketPriceData>>(new Map(globalPrices));
+  const symbolsRef = useRef<string[]>(symbols);
+  
+  // Update symbols ref
+  useEffect(() => {
+    symbolsRef.current = symbols;
+  }, [symbols]);
+  
+  // Register listener and connect
+  useEffect(() => {
+    const listener = (newPrices: Map<string, WebSocketPriceData>) => {
+      setPrices(newPrices);
+      setState({ ...globalState });
+    };
+    
+    globalListeners.add(listener);
+    
+    // Subscribe to requested symbols
+    if (symbols.length > 0) {
+      subscribe(symbols);
+    }
+    
+    // Connect if not already connected
+    if (!globalSocket || globalSocket.readyState === WebSocket.CLOSED) {
+      connect();
+    }
+    
+    // Initial state sync
+    setPrices(new Map(globalPrices));
+    setState({ ...globalState });
+    
+    return () => {
+      globalListeners.delete(listener);
+      
+      // Disconnect if no more listeners
+      if (globalListeners.size === 0) {
+        disconnect();
+      }
+    };
+  }, []);
+  
+  // Subscribe to new symbols when they change
+  useEffect(() => {
+    if (symbols.length > 0) {
+      subscribe(symbols);
+    }
+  }, [symbols.join(",")]);
+  
+  const getPrice = useCallback((symbol: string): WebSocketPriceData | null => {
+    return prices.get(symbol.toUpperCase()) || null;
+  }, [prices]);
+  
+  const getAllPrices = useCallback((): WebSocketPriceData[] => {
+    return Array.from(prices.values());
+  }, [prices]);
+  
+  return {
+    ...state,
+    prices,
+    getPrice,
+    getAllPrices,
+    subscribe: useCallback((newSymbols: string[]) => subscribe(newSymbols), []),
+    reconnect: useCallback(() => connect(), []),
+  };
+}
