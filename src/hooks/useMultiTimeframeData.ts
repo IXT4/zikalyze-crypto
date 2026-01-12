@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📊 useMultiTimeframeData — Multi-Timeframe Chart Analysis (15m, 1h, 4h, Daily)
+// 📊 useMultiTimeframeData — Decentralized Multi-Timeframe Analysis (15m, 1h, 4h, 1d)
 // ═══════════════════════════════════════════════════════════════════════════════
-// Fetches historical OHLCV via edge function proxy for multi-timeframe analysis
-// Note: Real-time prices use decentralized oracles; this is for historical candles only
+// Uses 100% decentralized oracle ticks (Pyth, DIA, Redstone, API3) as primary
+// Falls back to CryptoCompare for historical bootstrap only
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useDecentralizedOHLC, OHLCCandle, CandleInterval } from './useDecentralizedOHLC';
 import { safeFetch } from '@/lib/fetchWithRetry';
 
 export type Timeframe = '15m' | '1h' | '4h' | '1d';
@@ -56,204 +56,172 @@ export interface MultiTimeframeData {
   lastUpdated: number;
 }
 
-// Binance symbol mapping (PRIMARY - most reliable)
-const BINANCE_SYMBOL_MAP: Record<string, string> = {
-  BTC: 'BTCUSDT', ETH: 'ETHUSDT', SOL: 'SOLUSDT', XRP: 'XRPUSDT', DOGE: 'DOGEUSDT',
-  BNB: 'BNBUSDT', ADA: 'ADAUSDT', AVAX: 'AVAXUSDT', DOT: 'DOTUSDT',
-  MATIC: 'MATICUSDT', LINK: 'LINKUSDT', UNI: 'UNIUSDT', ATOM: 'ATOMUSDT',
-  LTC: 'LTCUSDT', BCH: 'BCHUSDT', NEAR: 'NEARUSDT', APT: 'APTUSDT',
-  FIL: 'FILUSDT', ARB: 'ARBUSDT', OP: 'OPUSDT', INJ: 'INJUSDT',
-  SUI: 'SUIUSDT', TIA: 'TIAUSDT', SEI: 'SEIUSDT', PEPE: 'PEPEUSDT', SHIB: 'SHIBUSDT',
-  TON: 'TONUSDT', KAS: 'KASUSDT', TAO: 'TAOUSDT', RENDER: 'RENDERUSDT',
-  TRX: 'TRXUSDT', XLM: 'XLMUSDT', HBAR: 'HBARUSDT', VET: 'VETUSDT',
-  ALGO: 'ALGOUSDT', ICP: 'ICPUSDT', FTM: 'FTMUSDT', ETC: 'ETCUSDT',
-  AAVE: 'AAVEUSDT', MKR: 'MKRUSDT', GRT: 'GRTUSDT', IMX: 'IMXUSDT',
-  RUNE: 'RUNEUSDT', STX: 'STXUSDT', MINA: 'MINAUSDT', FLOW: 'FLOWUSDT',
-  XTZ: 'XTZUSDT', EOS: 'EOSUSDT', NEO: 'NEOUSDT', THETA: 'THETAUSDT',
-  EGLD: 'EGLDUSDT', ROSE: 'ROSEUSDT', ZEC: 'ZECUSDT', KAVA: 'KAVAUSDT',
-  CFX: 'CFXUSDT', QNT: 'QNTUSDT', WLD: 'WLDUSDT', JUP: 'JUPUSDT',
-};
-
-// Binance interval mapping
-const BINANCE_INTERVALS: Record<Timeframe, string> = {
+// Timeframe to CandleInterval mapping
+const TIMEFRAME_TO_INTERVAL: Record<Timeframe, CandleInterval> = {
   '15m': '15m',
   '1h': '1h',
   '4h': '4h',
   '1d': '1d',
 };
 
-// CryptoCompare interval mapping (RELIABLE OHLCV fallback)
+// Minimum candles needed per timeframe
+const MIN_CANDLES: Record<Timeframe, number> = {
+  '15m': 10,
+  '1h': 10,
+  '4h': 6,
+  '1d': 5,
+};
+
+// CryptoCompare endpoints for bootstrap
 const CRYPTOCOMPARE_ENDPOINTS: Record<Timeframe, { endpoint: string; limit: number }> = {
-  '15m': { endpoint: 'histominute', limit: 48 },  // 48 minutes, will aggregate to 15m
+  '15m': { endpoint: 'histominute', limit: 240 },  // 4 hours of 1m data to aggregate
   '1h': { endpoint: 'histohour', limit: 24 },
-  '4h': { endpoint: 'histohour', limit: 96 },     // 96 hours, will aggregate to 4h
+  '4h': { endpoint: 'histohour', limit: 48 },      // 48 hours to aggregate into 4h
   '1d': { endpoint: 'histoday', limit: 30 },
 };
 
-// Timeframe configs
-const TIMEFRAME_CONFIG: Record<Timeframe, { duration: number; candleCount: number }> = {
-  '15m': { duration: 12 * 60 * 60 * 1000, candleCount: 48 }, // 12 hours
-  '1h': { duration: 24 * 60 * 60 * 1000, candleCount: 24 }, // 24 hours
-  '4h': { duration: 4 * 24 * 60 * 60 * 1000, candleCount: 24 }, // 4 days
-  '1d': { duration: 30 * 24 * 60 * 60 * 1000, candleCount: 30 }, // 30 days
-};
+// Convert OHLC candle to CandleData
+const convertCandle = (candle: OHLCCandle): CandleData => ({
+  timestamp: candle.timestamp,
+  open: candle.open,
+  high: candle.high,
+  low: candle.low,
+  close: candle.close,
+  volume: candle.volume,
+});
 
-// Calculate EMA
-const calculateEMA = (prices: number[], period: number): number => {
-  if (prices.length === 0) return 0;
-  if (prices.length < period) return prices[prices.length - 1];
-  
-  const multiplier = 2 / (period + 1);
-  let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  
-  for (let i = period; i < prices.length; i++) {
-    ema = (prices[i] - ema) * multiplier + ema;
+// Technical analysis functions
+const calculateEMA = (closes: number[], period: number): number => {
+  if (closes.length < period) return closes[closes.length - 1] || 0;
+  const k = 2 / (period + 1);
+  let ema = closes.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < closes.length; i++) {
+    ema = closes[i] * k + ema * (1 - k);
   }
-  
   return ema;
 };
 
-// Calculate RSI
-const calculateRSI = (prices: number[], period: number = 14): number => {
-  if (prices.length < period + 1) return 50;
-  
-  let gains = 0;
-  let losses = 0;
-  
-  for (let i = 1; i <= period; i++) {
-    const change = prices[i] - prices[i - 1];
-    if (change > 0) gains += change;
-    else losses -= change;
+const calculateRSI = (closes: number[], period: number = 14): number => {
+  if (closes.length < period + 1) return 50;
+  const changes = [];
+  for (let i = 1; i < closes.length; i++) {
+    changes.push(closes[i] - closes[i - 1]);
   }
-  
-  if (losses === 0) return 100;
-  const rs = (gains / period) / (losses / period);
+  const recentChanges = changes.slice(-period);
+  let gains = 0, losses = 0;
+  for (const change of recentChanges) {
+    if (change > 0) gains += change;
+    else losses += Math.abs(change);
+  }
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
   return 100 - (100 / (1 + rs));
 };
 
-// Detect swing structure
-const detectSwingPoints = (candles: CandleData[]): { higherHighs: boolean; higherLows: boolean; lowerHighs: boolean; lowerLows: boolean } => {
-  if (candles.length < 10) {
-    return { higherHighs: false, higherLows: false, lowerHighs: false, lowerLows: false };
-  }
-  
-  const highs = candles.map(c => c.high);
-  const lows = candles.map(c => c.low);
-  
-  const quarterLen = Math.floor(candles.length / 4);
-  const recentHighs = highs.slice(-quarterLen * 2);
-  const olderHighs = highs.slice(0, quarterLen * 2);
-  const recentLows = lows.slice(-quarterLen * 2);
-  const olderLows = lows.slice(0, quarterLen * 2);
-  
-  const recentMaxHigh = Math.max(...recentHighs);
-  const olderMaxHigh = Math.max(...olderHighs);
-  const recentMinLow = Math.min(...recentLows);
-  const olderMinLow = Math.min(...olderLows);
-  
-  return {
-    higherHighs: recentMaxHigh > olderMaxHigh * 1.002,
-    higherLows: recentMinLow > olderMinLow * 1.002,
-    lowerHighs: recentMaxHigh < olderMaxHigh * 0.998,
-    lowerLows: recentMinLow < olderMinLow * 0.998,
-  };
-};
-
-// Analyze trend
 const analyzeTrend = (candles: CandleData[]): 'BULLISH' | 'BEARISH' | 'NEUTRAL' => {
-  if (candles.length < 5) return 'NEUTRAL';
-  
+  if (candles.length < 3) return 'NEUTRAL';
   const closes = candles.map(c => c.close);
-  const firstPrice = closes[0];
-  const lastPrice = closes[closes.length - 1];
-  const changePercent = ((lastPrice - firstPrice) / firstPrice) * 100;
-  
-  const ema9 = calculateEMA(closes, 9);
-  const ema21 = calculateEMA(closes, 21);
-  const swings = detectSwingPoints(candles);
-  
-  if (changePercent >= 3 && ema9 > ema21 && swings.higherHighs) return 'BULLISH';
-  if (changePercent <= -3 && ema9 < ema21 && swings.lowerLows) return 'BEARISH';
-  if (changePercent >= 1 && ema9 > ema21) return 'BULLISH';
-  if (changePercent <= -1 && ema9 < ema21) return 'BEARISH';
-  if (changePercent > 0.5) return 'BULLISH';
-  if (changePercent < -0.5) return 'BEARISH';
-  
+  const firstHalf = closes.slice(0, Math.floor(closes.length / 2));
+  const secondHalf = closes.slice(Math.floor(closes.length / 2));
+  const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+  const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+  const change = (secondAvg - firstAvg) / firstAvg;
+  if (change > 0.01) return 'BULLISH';
+  if (change < -0.01) return 'BEARISH';
   return 'NEUTRAL';
 };
 
-// Calculate trend strength
 const calculateTrendStrength = (candles: CandleData[]): number => {
   if (candles.length < 5) return 50;
-  
   const closes = candles.map(c => c.close);
-  const changePercent = Math.abs(((closes[closes.length - 1] - closes[0]) / closes[0]) * 100);
-  
-  const ema9 = calculateEMA(closes, 9);
-  const ema21 = calculateEMA(closes, 21);
-  const emaDiff = Math.abs((ema9 - ema21) / ema21) * 100;
-  
-  const swings = detectSwingPoints(candles);
-  const swingScore = (swings.higherHighs ? 10 : 0) + (swings.higherLows ? 10 : 0) +
-                     (swings.lowerHighs ? 10 : 0) + (swings.lowerLows ? 10 : 0);
-  
-  let strength = 50;
-  strength += Math.min(25, changePercent * 5);
-  strength += Math.min(15, emaDiff * 10);
-  strength += swingScore * 0.5;
-  
-  return Math.min(98, Math.max(35, strength));
+  const first = closes[0];
+  const last = closes[closes.length - 1];
+  const change = Math.abs((last - first) / first) * 100;
+  let consistency = 0;
+  const direction = last > first ? 1 : -1;
+  for (let i = 1; i < closes.length; i++) {
+    const moveDir = closes[i] > closes[i - 1] ? 1 : -1;
+    if (moveDir === direction) consistency++;
+  }
+  const consistencyRatio = consistency / (closes.length - 1);
+  return Math.min(100, Math.round(change * 2 + consistencyRatio * 50));
 };
 
-// Volume trend
+const detectSwingPoints = (candles: CandleData[]) => {
+  if (candles.length < 5) {
+    return { higherHighs: false, higherLows: false, lowerHighs: false, lowerLows: false };
+  }
+  const highs = candles.map(c => c.high);
+  const lows = candles.map(c => c.low);
+  const swingHighs: number[] = [];
+  const swingLows: number[] = [];
+  
+  for (let i = 2; i < candles.length - 2; i++) {
+    if (highs[i] > highs[i - 1] && highs[i] > highs[i - 2] && 
+        highs[i] > highs[i + 1] && highs[i] > highs[i + 2]) {
+      swingHighs.push(highs[i]);
+    }
+    if (lows[i] < lows[i - 1] && lows[i] < lows[i - 2] && 
+        lows[i] < lows[i + 1] && lows[i] < lows[i + 2]) {
+      swingLows.push(lows[i]);
+    }
+  }
+  
+  let higherHighs = false, lowerHighs = false, higherLows = false, lowerLows = false;
+  
+  if (swingHighs.length >= 2) {
+    const lastTwo = swingHighs.slice(-2);
+    higherHighs = lastTwo[1] > lastTwo[0];
+    lowerHighs = lastTwo[1] < lastTwo[0];
+  }
+  if (swingLows.length >= 2) {
+    const lastTwo = swingLows.slice(-2);
+    higherLows = lastTwo[1] > lastTwo[0];
+    lowerLows = lastTwo[1] < lastTwo[0];
+  }
+  
+  return { higherHighs, higherLows, lowerHighs, lowerLows };
+};
+
 const analyzeVolumeTrend = (candles: CandleData[]): 'INCREASING' | 'DECREASING' | 'STABLE' => {
   if (candles.length < 6) return 'STABLE';
-  
   const recentVol = candles.slice(-3).reduce((sum, c) => sum + c.volume, 0) / 3;
   const olderVol = candles.slice(0, 3).reduce((sum, c) => sum + c.volume, 0) / 3;
-  
   if (recentVol > olderVol * 1.2) return 'INCREASING';
   if (recentVol < olderVol * 0.8) return 'DECREASING';
   return 'STABLE';
 };
 
-// Price velocity
 const calculatePriceVelocity = (candles: CandleData[]): number => {
   if (candles.length < 2) return 0;
-  
   const closes = candles.map(c => c.close);
   const recent = closes.slice(-5);
   if (recent.length < 2) return 0;
-  
   let totalChange = 0;
   for (let i = 1; i < recent.length; i++) {
     totalChange += ((recent[i] - recent[i - 1]) / recent[i - 1]) * 100;
   }
-  
   return totalChange / (recent.length - 1);
 };
 
-// Find support/resistance
 const findSupportResistance = (candles: CandleData[]): { support: number; resistance: number } => {
-  if (candles.length === 0) return { support: 0, resistance: 0 };
-  
+  if (candles.length < 3) return { support: 0, resistance: 0 };
   const highs = candles.map(c => c.high);
   const lows = candles.map(c => c.low);
-  
   return {
     support: Math.min(...lows),
     resistance: Math.max(...highs),
   };
 };
 
-// Group hourly candles into 4h
-const groupInto4hCandles = (hourlyCandles: CandleData[]): CandleData[] => {
+// Group 1m candles into 15m
+const groupInto15mCandles = (candles: CandleData[]): CandleData[] => {
   const grouped: CandleData[] = [];
-  
-  for (let i = 0; i < hourlyCandles.length; i += 4) {
-    const chunk = hourlyCandles.slice(i, i + 4);
+  for (let i = 0; i < candles.length; i += 15) {
+    const chunk = candles.slice(i, i + 15);
     if (chunk.length === 0) continue;
-    
     grouped.push({
       timestamp: chunk[0].timestamp,
       open: chunk[0].open,
@@ -263,80 +231,63 @@ const groupInto4hCandles = (hourlyCandles: CandleData[]): CandleData[] => {
       volume: chunk.reduce((sum, c) => sum + c.volume, 0),
     });
   }
-  
+  return grouped;
+};
+
+// Group 1h candles into 4h
+const groupInto4hCandles = (candles: CandleData[]): CandleData[] => {
+  const grouped: CandleData[] = [];
+  for (let i = 0; i < candles.length; i += 4) {
+    const chunk = candles.slice(i, i + 4);
+    if (chunk.length === 0) continue;
+    grouped.push({
+      timestamp: chunk[0].timestamp,
+      open: chunk[0].open,
+      high: Math.max(...chunk.map(c => c.high)),
+      low: Math.min(...chunk.map(c => c.low)),
+      close: chunk[chunk.length - 1].close,
+      volume: chunk.reduce((sum, c) => sum + c.volume, 0),
+    });
+  }
   return grouped;
 };
 
 export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
   const [data, setData] = useState<MultiTimeframeData>({
-    '15m': null,
-    '1h': null,
-    '4h': null,
-    '1d': null,
+    '15m': null, '1h': null, '4h': null, '1d': null,
     confluence: {
       overallBias: 'NEUTRAL',
-      strength: 50,
+      strength: 0,
       alignedTimeframes: 0,
       conflictingTimeframes: 0,
-      recommendation: 'Gathering data...',
+      recommendation: 'Building decentralized data...',
     },
     isLoading: true,
     lastUpdated: 0,
   });
   
   const mountedRef = useRef(true);
-  const refreshIntervalRef = useRef<number | null>(null);
+  const bootstrapAttemptedRef = useRef<Set<Timeframe>>(new Set());
   
-  // Fetch from Edge Function (PRIMARY - bypasses CORS, uses Binance/Bybit/OKX)
-  const fetchFromEdgeFunction = useCallback(async (
-    symbol: string,
-    timeframe: Timeframe
-  ): Promise<CandleData[] | null> => {
+  // 🌐 PRIMARY: Decentralized OHLC from oracle ticks
+  const ohlc = useDecentralizedOHLC(symbol);
+  
+  // Bootstrap from CryptoCompare for a specific timeframe
+  const fetchBootstrapData = useCallback(async (timeframe: Timeframe): Promise<CandleData[] | null> => {
+    if (bootstrapAttemptedRef.current.has(timeframe)) return null;
+    bootstrapAttemptedRef.current.add(timeframe);
+    
     try {
-      const config = TIMEFRAME_CONFIG[timeframe];
-      const interval = BINANCE_INTERVALS[timeframe];
-      
-      const { data, error } = await supabase.functions.invoke('crypto-candles', {
-        body: { symbol, interval, limit: config.candleCount }
-      });
-      
-      if (error) {
-        console.log(`[MTF] Edge function error for ${symbol}:`, error);
-        return null;
-      }
-      
-      if (data?.candles && Array.isArray(data.candles) && data.candles.length >= 5) {
-        console.log(`[MTF] ${timeframe} loaded from ${data.source}: ${data.candles.length} candles`);
-        return data.candles;
-      }
-      
-      return null;
-    } catch (e) {
-      console.log(`[MTF] Edge function failed for ${symbol}:`, e);
-      return null;
-    }
-  }, []);
-
-  // Fetch from CryptoCompare API (RELIABLE - proper OHLCV data)
-  const fetchFromCryptoCompare = useCallback(async (
-    symbol: string,
-    timeframe: Timeframe
-  ): Promise<CandleData[] | null> => {
-    try {
-      const cryptoCompareSymbol = symbol.toUpperCase();
       const config = CRYPTOCOMPARE_ENDPOINTS[timeframe];
-      
       const response = await safeFetch(
-        `https://min-api.cryptocompare.com/data/v2/${config.endpoint}?fsym=${cryptoCompareSymbol}&tsym=USD&limit=${config.limit}`,
-        { timeoutMs: 12000, maxRetries: 3 }
+        `https://min-api.cryptocompare.com/data/v2/${config.endpoint}?fsym=${symbol.toUpperCase()}&tsym=USD&limit=${config.limit}`,
+        { timeoutMs: 12000, maxRetries: 2 }
       );
       
       if (!response?.ok) return null;
       
       const result = await response.json();
-      if (result.Response !== 'Success' || !result.Data?.Data || result.Data.Data.length < 5) {
-        return null;
-      }
+      if (result.Response !== 'Success' || !result.Data?.Data) return null;
       
       let candles: CandleData[] = result.Data.Data.map((point: any) => ({
         timestamp: point.time * 1000,
@@ -347,207 +298,154 @@ export function useMultiTimeframeData(symbol: string): MultiTimeframeData {
         volume: point.volumeto,
       }));
       
-      // Aggregate for 15m (from 1m data) and 4h (from 1h data)
+      // Aggregate for 15m and 4h
       if (timeframe === '15m') {
-        candles = groupCandles(candles, 15);
+        candles = groupInto15mCandles(candles);
       } else if (timeframe === '4h') {
         candles = groupInto4hCandles(candles);
       }
       
-      return candles.slice(-TIMEFRAME_CONFIG[timeframe].candleCount);
+      return candles.slice(-30);
     } catch {
       return null;
     }
-  }, []);
-
-  // Group candles by period
-  const groupCandles = (candles: CandleData[], periodSize: number): CandleData[] => {
-    const grouped: CandleData[] = [];
-    for (let i = 0; i < candles.length; i += periodSize) {
-      const chunk = candles.slice(i, i + periodSize);
-      if (chunk.length === 0) continue;
-      grouped.push({
-        timestamp: chunk[0].timestamp,
-        open: chunk[0].open,
-        high: Math.max(...chunk.map(c => c.high)),
-        low: Math.min(...chunk.map(c => c.low)),
-        close: chunk[chunk.length - 1].close,
-        volume: chunk.reduce((sum, c) => sum + c.volume, 0),
-      });
-    }
-    return grouped;
-  };
-
-  // Main fetch function with fallback chain
-  const fetchTimeframe = useCallback(async (
-    symbol: string,
-    timeframe: Timeframe
+  }, [symbol]);
+  
+  // Analyze a single timeframe
+  const analyzeTimeframe = useCallback(async (
+    timeframe: Timeframe,
+    decentralizedCandles: OHLCCandle[]
   ): Promise<TimeframeAnalysis | null> => {
-    try {
-      let candles: CandleData[] | null = null;
-      
-      // 1. Try Edge Function first (bypasses CORS, uses Binance/Bybit/OKX)
-      candles = await fetchFromEdgeFunction(symbol, timeframe);
-      
-      // 2. Fallback to CryptoCompare (reliable OHLCV data)
-      if (!candles || candles.length < 5) {
-        candles = await fetchFromCryptoCompare(symbol, timeframe);
-        if (candles && candles.length >= 5) {
-          console.log(`[MTF] ${timeframe} loaded from CryptoCompare fallback: ${candles.length} candles`);
-        }
+    let candles: CandleData[] = [];
+    
+    // Use decentralized data if available
+    if (decentralizedCandles.length >= MIN_CANDLES[timeframe]) {
+      candles = decentralizedCandles.map(convertCandle);
+    } else if (!bootstrapAttemptedRef.current.has(timeframe)) {
+      // Bootstrap from CryptoCompare
+      const bootstrapCandles = await fetchBootstrapData(timeframe);
+      if (bootstrapCandles && bootstrapCandles.length >= MIN_CANDLES[timeframe]) {
+        candles = bootstrapCandles;
+        console.log(`[MTF] ${timeframe} bootstrapped: ${candles.length} candles`);
       }
-      
-      // 3. No data available
-      if (!candles || candles.length < 5) {
-        console.log(`[MTF] ${timeframe} no data available for ${symbol}`);
-        return null;
-      }
-      
-      const closes = candles.map(c => c.close);
-      const swings = detectSwingPoints(candles);
-      const { support, resistance } = findSupportResistance(candles);
-      
-      return {
-        timeframe,
-        candles,
-        trend: analyzeTrend(candles),
-        trendStrength: calculateTrendStrength(candles),
-        higherHighs: swings.higherHighs,
-        higherLows: swings.higherLows,
-        lowerHighs: swings.lowerHighs,
-        lowerLows: swings.lowerLows,
-        ema9: calculateEMA(closes, 9),
-        ema21: calculateEMA(closes, 21),
-        rsi: calculateRSI(closes, 14),
-        volumeTrend: analyzeVolumeTrend(candles),
-        priceVelocity: calculatePriceVelocity(candles),
-        support,
-        resistance,
-        lastUpdated: Date.now(),
-        isLive: true,
-      };
-    } catch (e) {
-      console.log(`[MTF] ${timeframe} fetch error for ${symbol}:`, e);
-      return null;
-    }
-  }, [fetchFromEdgeFunction, fetchFromCryptoCompare]);
-
-  const calculateConfluence = (analyses: Record<Timeframe, TimeframeAnalysis | null>) => {
-    const valid = Object.values(analyses).filter(a => a !== null) as TimeframeAnalysis[];
-    
-    if (valid.length === 0) {
-      return {
-        overallBias: 'NEUTRAL' as const,
-        strength: 50,
-        alignedTimeframes: 0,
-        conflictingTimeframes: 0,
-        recommendation: 'No chart data available - using price-based analysis',
-      };
     }
     
-    if (valid.length < 2) {
-      return {
-        overallBias: valid[0]?.trend || 'NEUTRAL' as const,
-        strength: Math.round(valid[0]?.trendStrength || 50),
-        alignedTimeframes: 1,
-        conflictingTimeframes: 0,
-        recommendation: 'Limited data - analysis based on ' + (valid[0]?.timeframe || 'partial') + ' only',
-      };
-    }
+    if (candles.length < MIN_CANDLES[timeframe]) return null;
     
-    // Weight higher timeframes more
-    const weights: Record<Timeframe, number> = { '1d': 4, '4h': 3, '1h': 2, '15m': 1 };
-    
-    let bullishScore = 0;
-    let bearishScore = 0;
-    let totalWeight = 0;
-    
-    valid.forEach(a => {
-      const weight = weights[a.timeframe];
-      totalWeight += weight;
-      
-      if (a.trend === 'BULLISH') bullishScore += weight * (a.trendStrength / 100);
-      else if (a.trend === 'BEARISH') bearishScore += weight * (a.trendStrength / 100);
-    });
-    
-    const netScore = (bullishScore - bearishScore) / totalWeight;
-    const strength = Math.abs(netScore) * 100;
-    
-    const bullish = valid.filter(a => a.trend === 'BULLISH').length;
-    const bearish = valid.filter(a => a.trend === 'BEARISH').length;
-    const aligned = Math.max(bullish, bearish);
-    const conflicting = Math.min(bullish, bearish);
-    
-    let overallBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-    if (netScore > 0.2) overallBias = 'BULLISH';
-    else if (netScore < -0.2) overallBias = 'BEARISH';
-    else overallBias = 'NEUTRAL';
-    
-    let recommendation = '';
-    if (aligned === valid.length && valid.length >= 3) {
-      recommendation = `Strong ${overallBias.toLowerCase()} confluence across ${aligned} timeframes`;
-    } else if (conflicting >= 2) {
-      recommendation = `Mixed signals: ${bullish} bullish, ${bearish} bearish timeframes`;
-    } else if (overallBias === 'NEUTRAL') {
-      recommendation = 'No clear directional bias - wait for alignment';
-    } else {
-      recommendation = `Moderate ${overallBias.toLowerCase()} bias - confirm on lower TFs`;
-    }
+    const closes = candles.map(c => c.close);
+    const swings = detectSwingPoints(candles);
+    const sr = findSupportResistance(candles);
     
     return {
-      overallBias,
-      strength: Math.min(95, Math.max(30, strength)),
-      alignedTimeframes: aligned,
-      conflictingTimeframes: conflicting,
-      recommendation,
+      timeframe,
+      candles,
+      trend: analyzeTrend(candles),
+      trendStrength: calculateTrendStrength(candles),
+      higherHighs: swings.higherHighs,
+      higherLows: swings.higherLows,
+      lowerHighs: swings.lowerHighs,
+      lowerLows: swings.lowerLows,
+      ema9: calculateEMA(closes, 9),
+      ema21: calculateEMA(closes, 21),
+      rsi: calculateRSI(closes, 14),
+      volumeTrend: analyzeVolumeTrend(candles),
+      priceVelocity: calculatePriceVelocity(candles),
+      support: sr.support,
+      resistance: sr.resistance,
+      lastUpdated: Date.now(),
+      isLive: ohlc.isLive,
     };
-  };
+  }, [ohlc.isLive, fetchBootstrapData]);
   
-  const fetchAllTimeframes = useCallback(async () => {
-    const upperSymbol = symbol.toUpperCase();
+  // Calculate confluence across timeframes
+  const calculateConfluence = useCallback((analyses: (TimeframeAnalysis | null)[]) => {
+    const validAnalyses = analyses.filter(Boolean) as TimeframeAnalysis[];
     
-    // Fetch all timeframes in parallel using the new multi-source fetcher
-    const [tf15m, tf1h, tf4h, tf1d] = await Promise.all([
-      fetchTimeframe(upperSymbol, '15m'),
-      fetchTimeframe(upperSymbol, '1h'),
-      fetchTimeframe(upperSymbol, '4h'),
-      fetchTimeframe(upperSymbol, '1d'),
-    ]);
+    if (validAnalyses.length === 0) {
+      return {
+        overallBias: 'NEUTRAL' as const,
+        strength: 0,
+        alignedTimeframes: 0,
+        conflictingTimeframes: 0,
+        recommendation: 'Building decentralized data...',
+      };
+    }
     
+    let bullish = 0, bearish = 0, neutral = 0;
+    
+    for (const analysis of validAnalyses) {
+      if (analysis.trend === 'BULLISH') bullish++;
+      else if (analysis.trend === 'BEARISH') bearish++;
+      else neutral++;
+    }
+    
+    const total = validAnalyses.length;
+    let overallBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+    let recommendation = '';
+    
+    if (bullish > bearish && bullish > neutral) {
+      overallBias = 'BULLISH';
+      recommendation = bullish === total 
+        ? '🚀 Strong bullish confluence - all timeframes aligned'
+        : `📈 Bullish bias (${bullish}/${total} timeframes)`;
+    } else if (bearish > bullish && bearish > neutral) {
+      overallBias = 'BEARISH';
+      recommendation = bearish === total
+        ? '🔻 Strong bearish confluence - all timeframes aligned'
+        : `📉 Bearish bias (${bearish}/${total} timeframes)`;
+    } else {
+      recommendation = '⚖️ Mixed signals - exercise caution';
+    }
+    
+    const alignedTimeframes = Math.max(bullish, bearish, neutral);
+    const conflictingTimeframes = total - alignedTimeframes;
+    const strength = Math.round((alignedTimeframes / total) * 100);
+    
+    return { overallBias, strength, alignedTimeframes, conflictingTimeframes, recommendation };
+  }, []);
+  
+  // Update analysis when OHLC data changes
+  useEffect(() => {
     if (!mountedRef.current) return;
     
-    const analyses = { '15m': tf15m, '1h': tf1h, '4h': tf4h, '1d': tf1d };
-    const confluence = calculateConfluence(analyses);
+    const updateAnalysis = async () => {
+      const timeframes: Timeframe[] = ['15m', '1h', '4h', '1d'];
+      
+      const analyses = await Promise.all(
+        timeframes.map(tf => 
+          analyzeTimeframe(tf, ohlc.getCandles(TIMEFRAME_TO_INTERVAL[tf]))
+        )
+      );
+      
+      const confluence = calculateConfluence(analyses);
+      
+      setData({
+        '15m': analyses[0],
+        '1h': analyses[1],
+        '4h': analyses[2],
+        '1d': analyses[3],
+        confluence,
+        isLoading: false,
+        lastUpdated: Date.now(),
+      });
+    };
     
-    setData({
-      ...analyses,
-      confluence,
-      isLoading: false,
-      lastUpdated: Date.now(),
-    });
-    
-    const successCount = [tf15m, tf1h, tf4h, tf1d].filter(Boolean).length;
-    console.log(`[MTF] ${symbol} loaded ${successCount}/4 timeframes: 15m=${tf15m?.trend || 'N/A'}, 1h=${tf1h?.trend || 'N/A'}, 4h=${tf4h?.trend || 'N/A'}, 1d=${tf1d?.trend || 'N/A'}`);
-  }, [symbol, fetchTimeframe]);
+    updateAnalysis();
+  }, [ohlc.candles, ohlc.currentCandles, analyzeTimeframe, calculateConfluence, ohlc.getCandles]);
   
+  // Reset bootstrap flags when symbol changes
+  useEffect(() => {
+    bootstrapAttemptedRef.current = new Set();
+    setData(prev => ({ ...prev, isLoading: true }));
+  }, [symbol]);
+  
+  // Cleanup
   useEffect(() => {
     mountedRef.current = true;
-    setData(prev => ({ ...prev, isLoading: true }));
-    
-    fetchAllTimeframes();
-    
-    // Refresh every 2 minutes
-    refreshIntervalRef.current = window.setInterval(fetchAllTimeframes, 120000);
-    
     return () => {
       mountedRef.current = false;
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-      }
     };
-  }, [symbol, fetchAllTimeframes]);
+  }, []);
   
   return data;
 }
-
-export default useMultiTimeframeData;
