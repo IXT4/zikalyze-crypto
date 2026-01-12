@@ -447,8 +447,8 @@ async function fetchDeFiLlama(symbols: string[]): Promise<void> {
       subscribedCount: globalPrices.size,
     };
     notifyListeners();
-  } catch (err) {
-    console.error("[PriceWS] DeFiLlama error:", err);
+  } catch {
+    // Silently handle DeFiLlama errors - this is a fallback
   }
 }
 
@@ -583,17 +583,18 @@ function connectBinance(symbols: string[]) {
       notifyListeners();
     };
 
-    binanceSocket.onerror = () => {
+    binanceSocket.onerror = (error) => {
+      console.warn("[PriceWS] Binance WebSocket error - switching to fallback");
       globalState = {
         ...globalState,
-        error: "Binance WebSocket error",
+        error: null, // Don't show error to user, we have fallbacks
         connecting: false,
       };
       // Will trigger onclose which handles fallback
     };
   } catch (err) {
-    console.error("[PriceWS] Failed to create Binance WebSocket:", err);
-    // Fall back to Pyth
+    console.warn("[PriceWS] Failed to create Binance WebSocket, using Pyth fallback");
+    // Fall back to Pyth silently
     connectPyth();
   }
 }
@@ -691,16 +692,35 @@ function connectPyth() {
     };
 
     pythSocket.onerror = () => {
+      console.warn("[PriceWS] Pyth WebSocket error - using REST fallback");
       globalState = {
         ...globalState,
-        error: "Pyth WebSocket error",
+        error: null, // Don't show error, we have REST fallback
       };
+      // Trigger immediate REST fallback
+      fetchPythREST(subscribedSymbols);
+      fetchDeFiLlama(subscribedSymbols);
     };
   } catch (err) {
-    console.error("[PriceWS] Failed to create Pyth WebSocket:", err);
+    console.warn("[PriceWS] Failed to create Pyth WebSocket, using REST fallback");
     // Use REST fallbacks only
     fetchPythREST(subscribedSymbols);
     fetchDeFiLlama(subscribedSymbols);
+    
+    // Set up polling fallback
+    if (fallbackInterval) clearInterval(fallbackInterval);
+    fallbackInterval = setInterval(() => {
+      fetchPythREST(subscribedSymbols);
+      fetchDeFiLlama(subscribedSymbols);
+    }, FALLBACK_POLL_INTERVAL);
+    
+    globalState = {
+      ...globalState,
+      connected: true, // Mark as connected via REST
+      connecting: false,
+      primarySource: "DeFiLlama",
+    };
+    notifyListeners();
   }
 }
 
