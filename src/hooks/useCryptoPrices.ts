@@ -14,6 +14,7 @@ import {
   getTokenImageUrl,
   type TokenMetadata 
 } from "@/lib/decentralizedMetadata";
+import { safeFetch } from "@/lib/fetchWithRetry";
 
 export interface CryptoPrice {
   id: string;
@@ -31,6 +32,44 @@ export interface CryptoPrice {
   lastUpdate?: number;
   source?: string;
 }
+
+// DeFiLlama token mappings (decentralized price API)
+const DEFI_LLAMA_TOKENS: Record<string, string> = {
+  BTC: "coingecko:bitcoin",
+  ETH: "coingecko:ethereum",
+  BNB: "coingecko:binancecoin",
+  SOL: "coingecko:solana",
+  XRP: "coingecko:ripple",
+  ADA: "coingecko:cardano",
+  DOGE: "coingecko:dogecoin",
+  AVAX: "coingecko:avalanche-2",
+  DOT: "coingecko:polkadot",
+  LINK: "coingecko:chainlink",
+  TON: "coingecko:the-open-network",
+  MATIC: "coingecko:matic-network",
+  LTC: "coingecko:litecoin",
+  ATOM: "coingecko:cosmos",
+  UNI: "coingecko:uniswap",
+  NEAR: "coingecko:near",
+  APT: "coingecko:aptos",
+  ARB: "coingecko:arbitrum",
+  OP: "coingecko:optimism",
+  FIL: "coingecko:filecoin",
+  KAS: "coingecko:kaspa",
+  FTM: "coingecko:fantom",
+  SUI: "coingecko:sui",
+  INJ: "coingecko:injective-protocol",
+  RNDR: "coingecko:render-token",
+  GRT: "coingecko:the-graph",
+  AAVE: "coingecko:aave",
+  MKR: "coingecko:maker",
+  ALGO: "coingecko:algorand",
+  TRX: "coingecko:tron",
+  XLM: "coingecko:stellar",
+  VET: "coingecko:vechain",
+  HBAR: "coingecko:hedera-hashgraph",
+  STX: "coingecko:blockstack",
+};
 
 // Circulating supply estimates (decentralized - from blockchain data)
 const CIRCULATING_SUPPLY: Record<string, number> = {
@@ -94,6 +133,46 @@ const buildInitialPrices = (): CryptoPrice[] => {
 // ZK-encrypted cache keys
 const LIVE_PRICES_CACHE_KEY = "zk_live_prices_v2";
 const PRICE_HISTORY_KEY = "zk_price_history_v1";
+const DEFI_LLAMA_24H_CACHE_KEY = "zk_defillama_24h_v1";
+
+// Fetch 24h data from DeFiLlama (decentralized aggregator)
+const fetchDefiLlama24hData = async (): Promise<Map<string, { change24h: number; price24hAgo: number }>> => {
+  const result = new Map<string, { change24h: number; price24hAgo: number }>();
+  
+  try {
+    // Build comma-separated token list
+    const tokens = Object.values(DEFI_LLAMA_TOKENS).join(",");
+    const url = `https://coins.llama.fi/prices/current/${tokens}?searchWidth=24h`;
+    
+    const response = await safeFetch(url);
+    if (!response) return result;
+    const data = await response.json();
+    if (!data?.coins) return result;
+    
+    // Also fetch historical (24h ago) prices
+    const timestamp24hAgo = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
+    const histUrl = `https://coins.llama.fi/prices/historical/${timestamp24hAgo}/${tokens}`;
+    const histResponse = await safeFetch(histUrl);
+    const histData = histResponse ? await histResponse.json() : null;
+    
+    Object.entries(DEFI_LLAMA_TOKENS).forEach(([symbol, llamaKey]) => {
+      const current = data.coins?.[llamaKey];
+      const historical = histData?.coins?.[llamaKey];
+      
+      if (current?.price && historical?.price) {
+        const change24h = ((current.price - historical.price) / historical.price) * 100;
+        result.set(symbol.toLowerCase(), { 
+          change24h, 
+          price24hAgo: historical.price 
+        });
+      }
+    });
+  } catch (e) {
+    console.warn("[Prices] DeFiLlama 24h fetch failed:", e);
+  }
+  
+  return result;
+};
 
 export const useCryptoPrices = () => {
   // Initialize with decentralized token registry
@@ -117,12 +196,15 @@ export const useCryptoPrices = () => {
   const oracleUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const priceHistoryRef = useRef<Map<string, { price: number; timestamp: number }[]>>(new Map());
   const lastPriceSaveRef = useRef<number>(0);
+  const defiLlama24hRef = useRef<Map<string, { change24h: number; price24hAgo: number }>>(new Map());
+  const lastDefiLlamaFetchRef = useRef<number>(0);
   
   // Balanced throttle for smooth real-time updates
   const UPDATE_THROTTLE_MS = 100;
   const PRICE_SAVE_THROTTLE_MS = 5000;
+  const DEFI_LLAMA_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
-  // Load ZK-encrypted cached prices on mount
+  // Load ZK-encrypted cached prices and fetch DeFiLlama 24h data on mount
   useEffect(() => {
     const loadCachedPrices = async () => {
       try {
@@ -152,6 +234,30 @@ export const useCryptoPrices = () => {
             });
           }
         }
+        
+        // Load cached DeFiLlama 24h data
+        const llama24hCache = await zkStorage.getItem(DEFI_LLAMA_24H_CACHE_KEY);
+        if (llama24hCache) {
+          const parsed = JSON.parse(llama24hCache);
+          if (parsed.data && Date.now() - parsed.timestamp < DEFI_LLAMA_REFRESH_MS) {
+            Object.entries(parsed.data).forEach(([symbol, data]) => {
+              defiLlama24hRef.current.set(symbol, data as { change24h: number; price24hAgo: number });
+            });
+            console.log(`[Prices] ✓ Restored ${defiLlama24hRef.current.size} DeFiLlama 24h entries`);
+          }
+        }
+        
+        // Fetch fresh DeFiLlama data
+        const fresh24h = await fetchDefiLlama24hData();
+        if (fresh24h.size > 0) {
+          defiLlama24hRef.current = fresh24h;
+          lastDefiLlamaFetchRef.current = Date.now();
+          await zkStorage.setItem(DEFI_LLAMA_24H_CACHE_KEY, JSON.stringify({
+            timestamp: Date.now(),
+            data: Object.fromEntries(fresh24h),
+          }));
+          console.log(`[Prices] ✓ Fetched ${fresh24h.size} DeFiLlama 24h percentages`);
+        }
       } catch (e) {
         console.warn("[Prices] Failed to load ZK cache:", e);
       } finally {
@@ -161,6 +267,17 @@ export const useCryptoPrices = () => {
     };
     
     loadCachedPrices();
+    
+    // Refresh DeFiLlama data every 5 minutes
+    const interval = setInterval(async () => {
+      const fresh24h = await fetchDefiLlama24hData();
+      if (fresh24h.size > 0) {
+        defiLlama24hRef.current = fresh24h;
+        lastDefiLlamaFetchRef.current = Date.now();
+      }
+    }, DEFI_LLAMA_REFRESH_MS);
+    
+    return () => clearInterval(interval);
   }, []);
 
   // Save prices to ZK-encrypted storage (throttled)
@@ -194,27 +311,42 @@ export const useCryptoPrices = () => {
     }
   }, []);
 
-  // Calculate 24h change from local price history
-  const calculate24hChange = useCallback((symbol: string, currentPrice: number): number => {
-    const history = priceHistoryRef.current.get(symbol.toLowerCase()) || [];
-    const now = Date.now();
-    const cutoff = now - 24 * 60 * 60 * 1000;
+  // Calculate 24h change - PRIORITY: DeFiLlama > Local History > Existing
+  const calculate24hChange = useCallback((symbol: string, currentPrice: number, existingChange: number): number => {
+    const lowerSymbol = symbol.toLowerCase();
     
-    // Find the oldest price within 24h window
-    const oldPrices = history.filter(h => h.timestamp > cutoff && h.timestamp < now - 23 * 60 * 60 * 1000);
-    if (oldPrices.length > 0) {
-      const oldPrice = oldPrices[0].price;
-      if (oldPrice > 0) {
-        return ((currentPrice - oldPrice) / oldPrice) * 100;
+    // PRIORITY 1: Use DeFiLlama 24h data (decentralized aggregator)
+    const llamaData = defiLlama24hRef.current.get(lowerSymbol);
+    if (llamaData && llamaData.price24hAgo > 0) {
+      const change = ((currentPrice - llamaData.price24hAgo) / llamaData.price24hAgo) * 100;
+      // Validate: reasonable crypto range (-99% to +1000%)
+      if (change > -99 && change < 1000) {
+        return change;
       }
     }
     
-    // Fallback: use oldest available price
-    if (history.length > 0) {
-      const oldestPrice = history[0].price;
-      if (oldestPrice > 0 && Math.abs(currentPrice - oldestPrice) / oldestPrice > 0.001) {
-        return ((currentPrice - oldestPrice) / oldestPrice) * 100;
+    // PRIORITY 2: Use local price history
+    const history = priceHistoryRef.current.get(lowerSymbol) || [];
+    if (history.length > 10) {
+      const now = Date.now();
+      const cutoff = now - 24 * 60 * 60 * 1000;
+      
+      // Find oldest entry from ~24h ago
+      const oldEntries = history.filter(h => h.timestamp > cutoff && h.timestamp < now - 20 * 60 * 60 * 1000);
+      if (oldEntries.length > 0) {
+        const oldPrice = oldEntries[0].price;
+        if (oldPrice > 0) {
+          const change = ((currentPrice - oldPrice) / oldPrice) * 100;
+          if (change > -99 && change < 1000) {
+            return change;
+          }
+        }
       }
+    }
+    
+    // PRIORITY 3: Keep existing change if valid
+    if (existingChange !== 0 && existingChange > -99 && existingChange < 1000) {
+      return existingChange;
     }
     
     return 0;
@@ -273,8 +405,8 @@ export const useCryptoPrices = () => {
             // Add to price history for 24h calculations
             addToHistory(symbol, oracleData.price);
             
-            // Calculate 24h change from local history
-            const change24h = calculate24hChange(symbol, oracleData.price);
+            // Calculate 24h change from DeFiLlama or local history
+            const change24h = calculate24hChange(symbol, oracleData.price, existing.price_change_percentage_24h);
             
             // Update high/low if price breaks range
             const newHigh24h = existing.high_24h > 0 
