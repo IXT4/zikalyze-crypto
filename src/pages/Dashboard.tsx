@@ -125,22 +125,6 @@ const Dashboard = () => {
             connectedExchanges={connectedExchanges}
           />
 
-          {/* Time Filter */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 sm:gap-2 custom-scrollbar">
-            {["1s", "5s", "1m", "5m", "15m", "1h"].map((time) => (
-              <button
-                key={time}
-                className={`rounded-lg px-2.5 py-1 text-xs whitespace-nowrap transition-all sm:px-3 sm:text-sm ${
-                  time === "1m"
-                    ? "bg-primary text-primary-foreground glow-cyan"
-                    : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80"
-                }`}
-              >
-                {time}
-              </button>
-            ))}
-          </div>
-
           {/* Live On-Chain Data */}
           <ErrorBoundary componentName="On-Chain Metrics" fallback={<MinimalErrorFallback />}>
             <Suspense fallback={<MetricsSkeleton />}>

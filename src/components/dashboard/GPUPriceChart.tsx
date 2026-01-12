@@ -2,12 +2,12 @@
 // ⚡ GPUPriceChart — Real-Time Live Streaming GPU-Accelerated Price Chart
 // ═══════════════════════════════════════════════════════════════════════════════
 // Uses WebGPU/WebGL2/Canvas2D for 60+ FPS smooth rendering
-// Features: Live streaming, glow effects, flash animations, cubic spline interpolation
+// Features: Live streaming, timeframe selection, glow effects, flash animations
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useRef, useEffect, useState, useCallback, memo } from "react";
-import { Zap, Cpu, Activity, Radio, TrendingUp, TrendingDown } from "lucide-react";
-import { useDecentralizedChartData } from "@/hooks/useDecentralizedChartData";
+import { Zap, Cpu, Activity, Radio, TrendingUp, TrendingDown, Clock } from "lucide-react";
+import { useDecentralizedChartData, type ChartTimeframe, TIMEFRAME_CONFIG } from "@/hooks/useDecentralizedChartData";
 import { createGPUChartManager, type GPUChartInstance } from "@/lib/gpu/gpu-chart-manager";
 import type { ChartDataPoint, RenderBackend } from "@/lib/gpu/webgpu-chart-renderer";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,8 @@ interface GPUPriceChartProps {
   showControls?: boolean;
   className?: string;
 }
+
+const TIMEFRAMES: ChartTimeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
 
 const BackendBadge = memo(({ backend }: { backend: RenderBackend }) => {
   const labels: Record<RenderBackend, { label: string; color: string; icon: string }> = {
@@ -62,6 +64,32 @@ const LiveStreamBadge = memo(({ isStreaming, tickRate }: { isStreaming: boolean;
 
 LiveStreamBadge.displayName = "LiveStreamBadge";
 
+interface TimeframeSelectorProps {
+  selected: ChartTimeframe;
+  onSelect: (tf: ChartTimeframe) => void;
+}
+
+const TimeframeSelector = memo(({ selected, onSelect }: TimeframeSelectorProps) => (
+  <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+    {TIMEFRAMES.map((tf) => (
+      <button
+        key={tf}
+        onClick={() => onSelect(tf)}
+        className={cn(
+          "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
+          selected === tf
+            ? "bg-primary text-primary-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground hover:bg-muted"
+        )}
+      >
+        {tf}
+      </button>
+    ))}
+  </div>
+));
+
+TimeframeSelector.displayName = "TimeframeSelector";
+
 const GPUPriceChart = ({
   crypto,
   change24h,
@@ -75,8 +103,8 @@ const GPUPriceChart = ({
   const [backend, setBackend] = useState<RenderBackend | null>(null);
   const [dimensions, setDimensions] = useState({ width: 400, height });
   const [tickRate, setTickRate] = useState(0);
+  const [timeframe, setTimeframe] = useState<ChartTimeframe>("1m");
   const lastPriceRef = useRef<number>(0);
-  const tickCountRef = useRef(0);
   const tickWindowRef = useRef<number[]>([]);
   const { formatPrice } = useCurrency();
   
@@ -88,7 +116,9 @@ const GPUPriceChart = ({
     currentSource,
     oracleStatus,
     dataPointCount,
-  } = useDecentralizedChartData(crypto);
+    timeframeConfig,
+    rawTickCount,
+  } = useDecentralizedChartData(crypto, timeframe);
   
   const displayChange = change24h ?? priceChange;
   const isPositive = displayChange >= 0;
@@ -109,7 +139,6 @@ const GPUPriceChart = ({
   useEffect(() => {
     if (currentPrice !== lastPriceRef.current && currentPrice > 0) {
       tickWindowRef.current.push(Date.now());
-      tickCountRef.current++;
       
       // Trigger flash on significant price movement
       if (lastPriceRef.current > 0) {
@@ -177,8 +206,8 @@ const GPUPriceChart = ({
     if (!chartManagerRef.current || chartData.length < 2) return;
     
     const now = Date.now();
-    const gpuData: ChartDataPoint[] = chartData.map((point, idx) => ({
-      timestamp: now - (chartData.length - idx - 1) * 1000,
+    const gpuData: ChartDataPoint[] = chartData.map((point) => ({
+      timestamp: point.timestamp || now - (chartData.length - chartData.indexOf(point) - 1) * 1000,
       price: point.price,
     }));
     
@@ -256,21 +285,28 @@ const GPUPriceChart = ({
         </div>
         
         {/* Current Price Display */}
-        <div className="mt-2 flex items-baseline gap-2">
-          <span className={cn(
-            "text-2xl sm:text-3xl font-bold tabular-nums",
-            isPositive ? "text-success" : "text-destructive"
-          )}>
-            {formatPrice(currentPrice)}
-          </span>
-          <span className="text-xs text-muted-foreground">24h</span>
+        <div className="mt-2 flex items-center justify-between">
+          <div className="flex items-baseline gap-2">
+            <span className={cn(
+              "text-2xl sm:text-3xl font-bold tabular-nums",
+              isPositive ? "text-success" : "text-destructive"
+            )}>
+              {formatPrice(currentPrice)}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {change24h !== undefined ? "24h" : timeframeConfig.label}
+            </span>
+          </div>
+          
+          {/* Timeframe Selector */}
+          <TimeframeSelector selected={timeframe} onSelect={setTimeframe} />
         </div>
       </div>
       
       {/* Chart Container */}
       <div 
         ref={containerRef} 
-        className="relative px-2 pb-4"
+        className="relative px-2 pb-4 mt-4"
         style={{ height }}
       >
         <canvas
@@ -289,11 +325,15 @@ const GPUPriceChart = ({
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <Activity className="h-3.5 w-3.5" />
-            <span>{chartData.length} pts</span>
+            <span>{dataPointCount} candles</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5" />
+            <span>{rawTickCount} ticks</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Zap className="h-3.5 w-3.5 text-amber-400" />
-            <span>{tickRate} ticks/s</span>
+            <span>{tickRate}/s</span>
           </div>
         </div>
         
