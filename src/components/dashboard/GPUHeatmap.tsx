@@ -3,13 +3,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // Displays all 100 cryptocurrencies in a color-coded grid
 // Green = positive 24h change, Red = negative change
-// Intensity correlates with magnitude of price movement
+// Uses CoinMarketCap WebSocket for verified metadata & images
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Grid3X3, TrendingUp, TrendingDown, Maximize2, Minimize2 } from "lucide-react";
+import { Grid3X3, TrendingUp, TrendingDown, Maximize2, Minimize2, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCurrency } from "@/hooks/useCurrency";
 import {
@@ -18,6 +18,7 @@ import {
   type HeatmapAnimator,
 } from "@/lib/gpu/gpu-heatmap-renderer";
 import type { CryptoPrice } from "@/hooks/useCryptoPrices";
+import { useCoinMarketCapWebSocket, getCMCImageBySymbol } from "@/hooks/useCoinMarketCapWebSocket";
 
 interface GPUHeatmapProps {
   prices: CryptoPrice[];
@@ -41,6 +42,9 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const { formatPrice, symbol: currencySymbol } = useCurrency();
   
+  // CoinMarketCap WebSocket for verified metadata & images
+  const { connected: cmcConnected, getImageUrl: getCMCImage } = useCoinMarketCapWebSocket();
+  
   // Format large numbers (market cap, volume)
   const formatLargeNumber = useCallback((value: number): string => {
     if (value >= 1_000_000_000_000) return `${currencySymbol}${(value / 1_000_000_000_000).toFixed(2)}T`;
@@ -50,23 +54,28 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
     return `${currencySymbol}${value.toFixed(2)}`;
   }, [currencySymbol]);
   
-  // Convert prices to heatmap cells
+  // Convert prices to heatmap cells with CMC verified images
   const convertToHeatmapCells = useCallback((prices: CryptoPrice[]): HeatmapCell[] => {
     return prices
       .filter((p) => p.current_price > 0)
       .sort((a, b) => a.market_cap_rank - b.market_cap_rank)
       .slice(0, 100)
-      .map((price) => ({
-        symbol: price.symbol.toUpperCase(),
-        name: price.name,
-        price: price.current_price,
-        change24h: price.price_change_percentage_24h || 0,
-        marketCap: price.market_cap,
-        volume24h: price.total_volume || 0,
-        rank: price.market_cap_rank,
-        image: price.image,
-      }));
-  }, []);
+      .map((price) => {
+        const symbol = price.symbol.toUpperCase();
+        // Use CMC image if available, fallback to price.image
+        const cmcImage = getCMCImage(symbol, 64);
+        return {
+          symbol,
+          name: price.name,
+          price: price.current_price,
+          change24h: price.price_change_percentage_24h || 0,
+          marketCap: price.market_cap,
+          volume24h: price.total_volume || 0,
+          rank: price.market_cap_rank,
+          image: cmcImage || price.image,
+        };
+      });
+  }, [getCMCImage]);
   
   // Calculate market stats
   useEffect(() => {
@@ -217,6 +226,12 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
           <Badge variant="outline" className="text-xs bg-primary/10 border-primary/30">
             Top 100
           </Badge>
+          {cmcConnected && (
+            <Badge variant="outline" className="text-xs bg-success/10 border-success/30 text-success flex items-center gap-1">
+              <CheckCircle className="h-3 w-3" />
+              CMC
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-3 text-xs">
@@ -277,14 +292,14 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
             >
               <div className="bg-popover/95 backdrop-blur-md border border-border rounded-lg shadow-xl p-3 min-w-[180px]">
                 <div className="flex items-center gap-2 mb-2">
-                  {tooltip.cell.image && (
-                    <img 
-                      src={tooltip.cell.image} 
-                      alt={tooltip.cell.symbol}
-                      className="w-6 h-6 rounded-full"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                  )}
+                  <img 
+                    src={getCMCImage(tooltip.cell.symbol, 64) || tooltip.cell.image || `https://api.dicebear.com/7.x/identicon/svg?seed=${tooltip.cell.symbol}`} 
+                    alt={tooltip.cell.symbol}
+                    className="w-6 h-6 rounded-full bg-muted"
+                    onError={(e) => { 
+                      e.currentTarget.src = `https://api.dicebear.com/7.x/identicon/svg?seed=${tooltip.cell.symbol}&backgroundColor=0d1117`;
+                    }}
+                  />
                   <span className="font-bold text-foreground">{tooltip.cell.symbol}</span>
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                     #{tooltip.cell.rank}

@@ -127,25 +127,52 @@ const calculateGridDimensions = (count: number, width: number, height: number): 
   return { cols, rows };
 };
 
-// Multi-layer fallback URLs for crypto icons
+// CoinMarketCap verified ID mapping for image URLs
+const CMC_ID_MAP: Record<string, number> = {
+  BTC: 1, ETH: 1027, BNB: 1839, SOL: 5426, XRP: 52,
+  ADA: 2010, DOGE: 74, TRX: 1958, AVAX: 5805, TON: 11419,
+  LINK: 1975, DOT: 6636, MATIC: 3890, LTC: 2, BCH: 1831,
+  SHIB: 5994, DAI: 4943, ATOM: 3794, UNI: 7083, XLM: 512,
+  ETC: 1321, XMR: 328, ICP: 8916, NEAR: 6535, FIL: 2280,
+  APT: 21794, HBAR: 4642, ARB: 11841, VET: 3077, OP: 11840,
+  MKR: 1518, CRO: 3635, KAS: 20396, AAVE: 7278, GRT: 6719,
+  RNDR: 5690, INJ: 7226, ALGO: 4030, STX: 4847, FTM: 3513,
+  SUI: 20947, THETA: 2416, RUNE: 4157, LDO: 8000, SAND: 6210,
+  MANA: 1966, AXS: 6783, FET: 3773, EGLD: 6892, FLOW: 4558,
+  EOS: 1765, CHZ: 4066, CAKE: 7186, XTZ: 2011, KAVA: 4846,
+  NEO: 1376, IOTA: 1720, GALA: 7080, SNX: 2586, ZEC: 1437,
+  KCS: 2087, CFX: 7334, MINA: 8646, WOO: 7501, ROSE: 7653,
+  ZIL: 2469, DYDX: 11156, COMP: 5692, ENJ: 2130, FXS: 6953,
+  GMX: 11857, RPL: 2943, CRV: 6538, DASH: 131, ONE: 3945,
+  BAT: 1697, QTUM: 1684, CELO: 5567, ZRX: 1896, OCEAN: 3911,
+  AUDIO: 7455, ANKR: 3783, ICX: 2099, IOTX: 2777, STORJ: 1772,
+  SKL: 5691, ONT: 2566, JST: 5488, LUNC: 4172, GLMR: 6836,
+  KDA: 5647, RVN: 2577, SC: 1042, WAVES: 1274, XEM: 873,
+  BTT: 16086, LUNA: 20314, AR: 5632, AGIX: 2424, WLD: 13502,
+};
+
+// Multi-layer fallback URLs for crypto icons with CMC priority
 const getIconUrls = (symbol: string, primaryUrl?: string): string[] => {
   const upper = symbol.toUpperCase();
   const lower = symbol.toLowerCase();
   const urls: string[] = [];
   
-  // Primary URL from CryptoPrice data
+  // PRIORITY 1: CoinMarketCap verified images (most reliable)
+  const cmcId = CMC_ID_MAP[upper];
+  if (cmcId) {
+    urls.push(`https://s2.coinmarketcap.com/static/img/coins/64x64/${cmcId}.png`);
+  }
+  
+  // PRIORITY 2: Primary URL from CryptoPrice data
   if (primaryUrl) urls.push(primaryUrl);
   
-  // Web3Icons CDN (2700+ tokens)
+  // PRIORITY 3: Web3Icons CDN (2700+ tokens)
   urls.push(`https://cdn.jsdelivr.net/npm/@web3icons/core@latest/svgs/tokens/branded/${upper}.svg`);
   
-  // Spothq cryptocurrency-icons (400+ tokens)
+  // PRIORITY 4: Spothq cryptocurrency-icons (400+ tokens)
   urls.push(`https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/color/${lower}.svg`);
   
-  // CoinGecko CDN
-  urls.push(`https://assets.coingecko.com/coins/images/1/small/${lower}.png`);
-  
-  // DiceBear deterministic fallback
+  // PRIORITY 5: DiceBear deterministic fallback
   urls.push(`https://api.dicebear.com/7.x/identicon/svg?seed=${upper}&backgroundColor=0d1117`);
   
   return urls;

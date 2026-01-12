@@ -1,12 +1,17 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🪙 CryptoIcon — Web3Icons CDN with Multi-Layer Fallback (2700+ tokens)
+// 🪙 CryptoIcon — CoinMarketCap + Web3Icons CDN with Multi-Layer Fallback
 // ═══════════════════════════════════════════════════════════════════════════════
-// Primary: @web3icons (2700+ tokens) → Fallback: spothq → Final: DiceBear avatar
+// Primary: CoinMarketCap (verified) → Web3Icons (2700+) → Spothq → DiceBear
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { getTokenImageUrl, getSpothqFallbackUrl, getFallbackIconUrl } from "@/lib/decentralizedMetadata";
+import { 
+  getTokenImageUrl, 
+  getSpothqFallbackUrl, 
+  getFallbackIconUrl,
+  getCMCImageUrl 
+} from "@/lib/decentralizedMetadata";
 
 interface CryptoIconProps {
   symbol: string;
@@ -28,18 +33,25 @@ export const CryptoIcon = ({
   className,
   showFallback = true,
 }: CryptoIconProps) => {
-  const [fallbackLevel, setFallbackLevel] = useState(0); // 0=web3icons, 1=spothq, 2=dicebear
+  // 0=CMC, 1=web3icons, 2=spothq, 3=dicebear
+  const [fallbackLevel, setFallbackLevel] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const attemptedRef = useRef<Set<string>>(new Set());
   
-  // Multi-layer URL selection
+  // Multi-layer URL selection with CoinMarketCap priority
   const getImageUrl = useCallback(() => {
     switch (fallbackLevel) {
       case 0:
-        return getTokenImageUrl(symbol); // @web3icons (2700+ tokens)
+        // CoinMarketCap verified (primary)
+        const cmcUrl = getCMCImageUrl(symbol);
+        if (cmcUrl) return cmcUrl;
+        // If no CMC ID, skip to web3icons
+        return getTokenImageUrl(symbol);
       case 1:
-        return getSpothqFallbackUrl(symbol); // spothq (400+ tokens)
+        return getTokenImageUrl(symbol); // @web3icons (2700+ tokens)
       case 2:
+        return getSpothqFallbackUrl(symbol); // spothq (400+ tokens)
+      case 3:
       default:
         return getFallbackIconUrl(symbol); // DiceBear avatar
     }
@@ -54,7 +66,7 @@ export const CryptoIcon = ({
     const currentUrl = getImageUrl();
     if (attemptedRef.current.has(currentUrl)) {
       // Already tried this URL, move to next fallback
-      if (fallbackLevel < 2) {
+      if (fallbackLevel < 3) {
         setFallbackLevel(prev => prev + 1);
       } else {
         setIsLoading(false);
@@ -65,7 +77,7 @@ export const CryptoIcon = ({
     attemptedRef.current.add(currentUrl);
     
     // Try next fallback level
-    if (fallbackLevel < 2) {
+    if (fallbackLevel < 3) {
       setFallbackLevel(prev => prev + 1);
     } else {
       setIsLoading(false);
@@ -100,6 +112,7 @@ export const CryptoIcon = ({
         onError={handleError}
         onLoad={handleLoad}
         loading="lazy"
+        crossOrigin="anonymous"
       />
     </div>
   );
