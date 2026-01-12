@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 💹 LivePrice — Binance Futures Style Rolling Price Animation
+// 💹 LivePrice — Smooth Tick-by-Tick Real-Time Price Animation
 // ═══════════════════════════════════════════════════════════════════════════════
-// Digits visibly roll up/down when price changes for real-time feedback
+// Professional animated price transitions with flash effects
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useRef, memo, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useCurrency } from "@/hooks/useCurrency";
 
@@ -13,141 +13,136 @@ interface LivePriceProps {
   className?: string;
 }
 
-// Single digit that rolls up or down
-const RollingDigit = memo(({ 
-  char, 
-  prevChar,
-  direction,
-  shouldAnimate
-}: { 
-  char: string;
-  prevChar: string;
-  direction: "up" | "down" | "none";
-  shouldAnimate: boolean;
-}) => {
-  const isNumber = /\d/.test(char);
-  
-  // Non-numeric characters don't animate
-  if (!isNumber) {
-    return <span className="inline-block">{char}</span>;
-  }
-
-  return (
-    <span 
-      className="inline-block relative overflow-hidden"
-      style={{ height: '1.2em', lineHeight: '1.2em' }}
-    >
-      <span
-        className={cn(
-          "inline-block",
-          shouldAnimate && direction === "up" && "animate-roll-up",
-          shouldAnimate && direction === "down" && "animate-roll-down",
-        )}
-      >
-        {char}
-      </span>
-    </span>
-  );
-});
-
-RollingDigit.displayName = "RollingDigit";
-
-// Hook for tracking price changes and animation state
-const usePriceRoller = (value: number) => {
-  const [displayValue, setDisplayValue] = useState(value);
-  const [direction, setDirection] = useState<"up" | "down" | "none">("none");
-  const [shouldAnimate, setShouldAnimate] = useState(false);
-  const [colorClass, setColorClass] = useState<string | null>(null);
-  const prevValueRef = useRef(value);
-  const prevFormattedRef = useRef("");
-  const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const colorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isFirstRender = useRef(true);
+// Smooth number animation hook with stable transitions
+const useAnimatedPrice = (targetValue: number, duration: number = 200) => {
+  const [displayValue, setDisplayValue] = useState(targetValue);
+  const animationRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const startValueRef = useRef<number>(targetValue);
+  const targetValueRef = useRef<number>(targetValue);
+  const lastTargetRef = useRef<number>(targetValue);
 
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
+    // Only animate if value changed significantly (0.001% threshold prevents jitter)
+    const priceDiff = Math.abs(targetValue - lastTargetRef.current) / (lastTargetRef.current || 1);
+    if (priceDiff < 0.00001) return;
+    
+    lastTargetRef.current = targetValue;
+    targetValueRef.current = targetValue;
+  }, [targetValue]);
+
+  const animate = useCallback((timestamp: number) => {
+    if (!startTimeRef.current) startTimeRef.current = timestamp;
+    
+    const elapsed = timestamp - startTimeRef.current;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Smooth ease-out cubic for professional feel
+    const easeOut = 1 - Math.pow(1 - progress, 3);
+    
+    const currentValue = startValueRef.current + 
+      (targetValueRef.current - startValueRef.current) * easeOut;
+    
+    setDisplayValue(currentValue);
+    
+    if (progress < 1) {
+      animationRef.current = requestAnimationFrame(animate);
+    }
+  }, [duration]);
+
+  useEffect(() => {
+    // Skip animation for initial render or invalid values
+    if (targetValue <= 0) return;
+    
+    // Only start new animation if target changed
+    if (Math.abs(targetValue - startValueRef.current) < 0.00001 * startValueRef.current) return;
+    
+    // Start animation from current display value
+    startValueRef.current = displayValue;
+    startTimeRef.current = 0;
+    
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    
+    animationRef.current = requestAnimationFrame(animate);
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [targetValue, animate]);
+
+  return displayValue;
+};
+
+// HIGHLY VISIBLE flash effect - triggers on every price tick
+const useFlashEffect = (value: number) => {
+  const [flashClass, setFlashClass] = useState<string | null>(null);
+  const prevValueRef = useRef<number>(0);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitializedRef = useRef(false);
+
+  useEffect(() => {
+    // Skip first render
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
       prevValueRef.current = value;
-      setDisplayValue(value);
       return;
     }
 
-    if (!value || value <= 0 || value === prevValueRef.current) return;
-
-    const newDirection = value > prevValueRef.current ? "up" : "down";
+    // Skip invalid values
+    if (!value || value <= 0) return;
     
-    // Clear existing timeouts
-    if (animationTimeoutRef.current) {
-      clearTimeout(animationTimeoutRef.current);
+    // Skip if same value
+    if (value === prevValueRef.current) return;
+
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      setFlashClass(null);
     }
-    if (colorTimeoutRef.current) {
-      clearTimeout(colorTimeoutRef.current);
-    }
 
-    // Reset animation first
-    setShouldAnimate(false);
-    
-    // Then trigger new animation
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setDirection(newDirection);
-        setShouldAnimate(true);
-        setDisplayValue(value);
-        setColorClass(newDirection === "up" ? "text-green-400" : "text-red-400");
-      });
-    });
+    // Apply flash immediately with a tiny delay for re-trigger
+    setTimeout(() => {
+      if (value > prevValueRef.current) {
+        setFlashClass("price-flash-up");
+      } else {
+        setFlashClass("price-flash-down");
+      }
+    }, 10);
 
-    // Reset animation flag
-    animationTimeoutRef.current = setTimeout(() => {
-      setShouldAnimate(false);
-    }, 300);
-
-    // Keep color longer for visibility
-    colorTimeoutRef.current = setTimeout(() => {
-      setColorClass(null);
-    }, 1000);
+    // Keep flash visible for 700ms
+    timeoutRef.current = setTimeout(() => {
+      setFlashClass(null);
+    }, 700);
 
     prevValueRef.current = value;
 
     return () => {
-      if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
-      if (colorTimeoutRef.current) clearTimeout(colorTimeoutRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [value]);
 
-  return { displayValue, direction, shouldAnimate, colorClass, prevFormatted: prevFormattedRef };
+  return flashClass;
 };
 
 export const LivePrice = ({ value, className }: LivePriceProps) => {
   const { formatPrice } = useCurrency();
-  const { displayValue, direction, shouldAnimate, colorClass, prevFormatted } = usePriceRoller(value);
-  
-  const formatted = useMemo(() => formatPrice(displayValue), [formatPrice, displayValue]);
-  const chars = formatted.split("");
-  const prevChars = prevFormatted.current.split("");
-  
-  // Update prev formatted after render
-  useEffect(() => {
-    prevFormatted.current = formatted;
-  }, [formatted, prevFormatted]);
+  const animatedValue = useAnimatedPrice(value, 200);
+  const flashClass = useFlashEffect(value);
 
   return (
     <span
       className={cn(
-        "inline-flex tabular-nums font-semibold transition-colors duration-300",
-        colorClass || "text-foreground",
+        "price-display tabular-nums font-semibold inline-block transition-colors duration-150",
+        flashClass,
+        !flashClass && "text-foreground",
         className
       )}
     >
-      {chars.map((char, i) => (
-        <RollingDigit
-          key={i}
-          char={char}
-          prevChar={prevChars[i] || char}
-          direction={direction}
-          shouldAnimate={shouldAnimate && char !== prevChars[i]}
-        />
-      ))}
+      {formatPrice(animatedValue)}
     </span>
   );
 };
@@ -161,33 +156,19 @@ export const LivePriceCompact = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const { displayValue, direction, shouldAnimate, colorClass, prevFormatted } = usePriceRoller(value);
-  
-  const formatted = useMemo(() => formatPrice(displayValue), [formatPrice, displayValue]);
-  const chars = formatted.split("");
-  const prevChars = prevFormatted.current.split("");
-  
-  useEffect(() => {
-    prevFormatted.current = formatted;
-  }, [formatted, prevFormatted]);
+  const animatedValue = useAnimatedPrice(value, 180);
+  const flashClass = useFlashEffect(value);
 
   return (
     <span
       className={cn(
-        "inline-flex tabular-nums text-sm font-medium transition-colors duration-300",
-        colorClass || "text-foreground",
+        "price-display inline-block tabular-nums text-sm font-medium px-1 rounded transition-colors duration-150",
+        flashClass,
+        !flashClass && "text-foreground bg-transparent",
         className
       )}
     >
-      {chars.map((char, i) => (
-        <RollingDigit
-          key={i}
-          char={char}
-          prevChar={prevChars[i] || char}
-          direction={direction}
-          shouldAnimate={shouldAnimate && char !== prevChars[i]}
-        />
-      ))}
+      {formatPrice(animatedValue)}
     </span>
   );
 };
@@ -201,33 +182,19 @@ export const LivePriceLarge = ({
   className?: string;
 }) => {
   const { formatPrice } = useCurrency();
-  const { displayValue, direction, shouldAnimate, colorClass, prevFormatted } = usePriceRoller(value);
-  
-  const formatted = useMemo(() => formatPrice(displayValue), [formatPrice, displayValue]);
-  const chars = formatted.split("");
-  const prevChars = prevFormatted.current.split("");
-  
-  useEffect(() => {
-    prevFormatted.current = formatted;
-  }, [formatted, prevFormatted]);
+  const animatedValue = useAnimatedPrice(value, 250);
+  const flashClass = useFlashEffect(value);
 
   return (
     <span
       className={cn(
-        "inline-flex tabular-nums text-lg font-bold transition-colors duration-300",
-        colorClass || "text-foreground",
+        "price-display tabular-nums text-lg font-bold inline-block transition-colors duration-150",
+        flashClass,
+        !flashClass && "text-foreground",
         className
       )}
     >
-      {chars.map((char, i) => (
-        <RollingDigit
-          key={i}
-          char={char}
-          prevChar={prevChars[i] || char}
-          direction={direction}
-          shouldAnimate={shouldAnimate && char !== prevChars[i]}
-        />
-      ))}
+      {formatPrice(animatedValue)}
     </span>
   );
 };
