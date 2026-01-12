@@ -274,19 +274,10 @@ const GPUPriceChart = ({
     return () => clearInterval(interval);
   }, []);
   
-  // Track price updates
+  // Track price updates for tick rate display (no aggressive flash)
   useEffect(() => {
     if (currentPrice !== lastPriceRef.current && currentPrice > 0) {
       tickWindowRef.current.push(Date.now());
-      
-      // Trigger flash on significant price movement
-      if (lastPriceRef.current > 0) {
-        const pctChange = Math.abs((currentPrice - lastPriceRef.current) / lastPriceRef.current * 100);
-        if (pctChange > 0.05 && chartManagerRef.current) {
-          chartManagerRef.current.triggerFlash(currentPrice > lastPriceRef.current ? "up" : "down");
-        }
-      }
-      
       lastPriceRef.current = currentPrice;
     }
   }, [currentPrice]);
