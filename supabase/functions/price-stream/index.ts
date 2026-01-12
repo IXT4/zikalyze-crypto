@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📡 Real-Time Price WebSocket Stream — Full Top 100 Support
+// 📡 Real-Time Price WebSocket Stream — CoinMarketCap-Style Updates
 // ═══════════════════════════════════════════════════════════════════════════════
-// Streams live cryptocurrency prices from Pyth Network via WebSocket
-// Supports 100+ symbols with sub-second updates for all dashboard components
+// Streams live cryptocurrency prices from multiple sources with 600ms updates
+// Sources: Pyth Network (primary), CoinGecko (secondary), DeFiLlama (fallback)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -22,12 +22,12 @@ interface BatchPriceUpdate {
     symbol: string;
     price: number;
     source: string;
+    change?: number;
   }>;
   timestamp: number;
 }
 
-// VERIFIED Pyth Network price feed IDs (use real, working feeds only)
-// Note: For symbols not available on Pyth, we stream via DeFiLlama as a secondary decentralized source.
+// VERIFIED Pyth Network price feed IDs
 const PYTH_PRICE_FEEDS: Record<string, string> = {
   BTC: "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
   ETH: "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
@@ -71,7 +71,126 @@ const PYTH_PRICE_FEEDS: Record<string, string> = {
   DAI: "0xb0948a5e5313200c632b51bb5ca32f6de0d36e9950a942d19751e833f70dabfd",
 };
 
-// DeFiLlama mappings for broader top-100 coverage (used when a symbol isn't on Pyth)
+// CoinGecko ID mappings for high-quality market data
+const COINGECKO_IDS: Record<string, string> = {
+  BTC: "bitcoin",
+  ETH: "ethereum",
+  BNB: "binancecoin",
+  SOL: "solana",
+  XRP: "ripple",
+  ADA: "cardano",
+  DOGE: "dogecoin",
+  TRX: "tron",
+  AVAX: "avalanche-2",
+  TON: "the-open-network",
+  LINK: "chainlink",
+  DOT: "polkadot",
+  MATIC: "matic-network",
+  LTC: "litecoin",
+  BCH: "bitcoin-cash",
+  SHIB: "shiba-inu",
+  DAI: "dai",
+  ATOM: "cosmos",
+  UNI: "uniswap",
+  XLM: "stellar",
+  ETC: "ethereum-classic",
+  XMR: "monero",
+  ICP: "internet-computer",
+  NEAR: "near",
+  FIL: "filecoin",
+  APT: "aptos",
+  HBAR: "hedera-hashgraph",
+  ARB: "arbitrum",
+  VET: "vechain",
+  OP: "optimism",
+  MKR: "maker",
+  CRO: "crypto-com-chain",
+  KAS: "kaspa",
+  AAVE: "aave",
+  GRT: "the-graph",
+  RNDR: "render-token",
+  INJ: "injective-protocol",
+  ALGO: "algorand",
+  STX: "blockstack",
+  FTM: "fantom",
+  SUI: "sui",
+  THETA: "theta-token",
+  RUNE: "thorchain",
+  LDO: "lido-dao",
+  SAND: "the-sandbox",
+  MANA: "decentraland",
+  AXS: "axie-infinity",
+  FET: "fetch-ai",
+  EGLD: "elrond-erd-2",
+  FLOW: "flow",
+  EOS: "eos",
+  CHZ: "chiliz",
+  CAKE: "pancakeswap-token",
+  XTZ: "tezos",
+  KAVA: "kava",
+  NEO: "neo",
+  IOTA: "iota",
+  GALA: "gala",
+  SNX: "havven",
+  ZEC: "zcash",
+  KCS: "kucoin-shares",
+  CFX: "conflux-token",
+  MINA: "mina-protocol",
+  WOO: "woo-network",
+  ROSE: "oasis-network",
+  ZIL: "zilliqa",
+  DYDX: "dydx",
+  COMP: "compound-governance-token",
+  ENJ: "enjincoin",
+  FXS: "frax-share",
+  GMX: "gmx",
+  RPL: "rocket-pool",
+  CRV: "curve-dao-token",
+  DASH: "dash",
+  ONE: "harmony",
+  BAT: "basic-attention-token",
+  QTUM: "qtum",
+  CELO: "celo",
+  ZRX: "0x",
+  OCEAN: "ocean-protocol",
+  AUDIO: "audius",
+  ANKR: "ankr",
+  ICX: "icon",
+  IOTX: "iotex",
+  STORJ: "storj",
+  SKL: "skale",
+  ONT: "ontology",
+  JST: "just",
+  LUNC: "terra-luna",
+  GLMR: "moonbeam",
+  KDA: "kadena",
+  RVN: "ravencoin",
+  SC: "siacoin",
+  WAVES: "waves",
+  XEM: "nem",
+  BTT: "bittorrent",
+  LUNA: "terra-luna-2",
+  AR: "arweave",
+  AGIX: "singularitynet",
+  WLD: "worldcoin-wld",
+  PEPE: "pepe",
+  FLOKI: "floki",
+  BONK: "bonk",
+  WIF: "dogwifcoin",
+  ORDI: "ordinals",
+  SEI: "sei-network",
+  TIA: "celestia",
+  JUP: "jupiter-exchange-solana",
+  PYTH: "pyth-network",
+  JTO: "jito-governance-token",
+  STRK: "starknet",
+  BLUR: "blur",
+  IMX: "immutable-x",
+  PENDLE: "pendle",
+  ENS: "ethereum-name-service",
+};
+
+// DeFiLlama mappings for fallback coverage
 const DEFILLAMA_TOKENS: Record<string, string> = {
   BTC: "coingecko:bitcoin",
   ETH: "coingecko:ethereum",
@@ -173,9 +292,24 @@ const DEFILLAMA_TOKENS: Record<string, string> = {
   AR: "coingecko:arweave",
   AGIX: "coingecko:singularitynet",
   WLD: "coingecko:worldcoin-wld",
+  PEPE: "coingecko:pepe",
+  FLOKI: "coingecko:floki",
+  BONK: "coingecko:bonk",
+  WIF: "coingecko:dogwifcoin",
+  ORDI: "coingecko:ordinals",
+  SEI: "coingecko:sei-network",
+  TIA: "coingecko:celestia",
+  JUP: "coingecko:jupiter-exchange-solana",
+  PYTH: "coingecko:pyth-network",
+  JTO: "coingecko:jito-governance-token",
+  STRK: "coingecko:starknet",
+  BLUR: "coingecko:blur",
+  IMX: "coingecko:immutable-x",
+  PENDLE: "coingecko:pendle",
+  ENS: "coingecko:ethereum-name-service",
 };
 
-// Batch fetch prices from Pyth for efficiency
+// Batch fetch prices from Pyth for efficiency (fastest, sub-second oracle data)
 async function fetchPythPricesBatch(symbols: string[]): Promise<Map<string, { price: number; source: string }>> {
   const result = new Map<string, { price: number; source: string }>();
 
@@ -223,7 +357,68 @@ async function fetchPythPricesBatch(symbols: string[]): Promise<Map<string, { pr
   return result;
 }
 
-// Batch fetch prices from DeFiLlama (broad coverage)
+// Fetch prices from CoinGecko (high-quality market data with 24h changes)
+async function fetchCoinGeckoPricesBatch(symbols: string[]): Promise<Map<string, { price: number; source: string; change24h?: number }>> {
+  const result = new Map<string, { price: number; source: string; change24h?: number }>();
+
+  const geckoIds = symbols
+    .map((s) => COINGECKO_IDS[s])
+    .filter(Boolean);
+
+  if (geckoIds.length === 0) return result;
+
+  try {
+    // Batch up to 50 at a time for CoinGecko
+    const batchSize = 50;
+    const batches: string[][] = [];
+    
+    for (let i = 0; i < geckoIds.length; i += batchSize) {
+      batches.push(geckoIds.slice(i, i + batchSize));
+    }
+
+    for (const batch of batches) {
+      const idsParam = batch.join(",");
+      const response = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${idsParam}&vs_currencies=usd&include_24hr_change=true`,
+        { 
+          headers: { 
+            Accept: "application/json",
+            "User-Agent": "Zikalyze/1.0"
+          } 
+        }
+      );
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      
+      // Build reverse map
+      const idToSymbol = new Map<string, string>();
+      Object.entries(COINGECKO_IDS).forEach(([symbol, id]) => idToSymbol.set(id, symbol));
+
+      Object.entries(data).forEach(([id, value]: [string, any]) => {
+        const symbol = idToSymbol.get(id);
+        const price = Number(value?.usd);
+        const change24h = Number(value?.usd_24h_change);
+        
+        if (!symbol) return;
+        if (!Number.isFinite(price) || price <= 0) return;
+        
+        result.set(symbol, { 
+          price, 
+          source: "CoinGecko",
+          change24h: Number.isFinite(change24h) ? change24h : undefined
+        });
+      });
+    }
+  } catch (err) {
+    console.error("[PriceStream] CoinGecko batch fetch error:", err);
+  }
+
+  return result;
+}
+
+// Batch fetch prices from DeFiLlama (fallback for broad coverage)
 async function fetchDefiLlamaPricesBatch(symbols: string[]): Promise<Map<string, { price: number; source: string }>> {
   const result = new Map<string, { price: number; source: string }>();
 
@@ -284,7 +479,8 @@ serve(async (req) => {
     return new Response(JSON.stringify({ 
       error: "Expected WebSocket connection",
       hint: "Connect using ws:// or wss:// protocol",
-      availableSymbols: Object.keys(PYTH_PRICE_FEEDS).length,
+      availableSymbols: Object.keys(COINGECKO_IDS).length,
+      sources: ["Pyth", "CoinGecko", "DeFiLlama"]
     }), { 
       status: 400,
       headers: { 
@@ -296,21 +492,29 @@ serve(async (req) => {
 
   const { socket, response } = Deno.upgradeWebSocket(req);
 
-  // Default subscriptions: ALL top-100 symbols for maximum coverage
-  const allSymbols = [...new Set([...Object.keys(PYTH_PRICE_FEEDS), ...Object.keys(DEFILLAMA_TOKENS)])];
+  // All supported symbols from all sources
+  const allSymbols = [...new Set([
+    ...Object.keys(PYTH_PRICE_FEEDS), 
+    ...Object.keys(COINGECKO_IDS),
+    ...Object.keys(DEFILLAMA_TOKENS)
+  ])];
+  
   let subscribedSymbols: string[] = allSymbols.slice(0, 100);
   let streamInterval: number | null = null;
   let isConnected = true;
+  let fetchCycle = 0;
 
-  // Last prices for calculating realistic micro-movements
+  // Last prices for change detection
   const lastPrices = new Map<string, number>();
+  // Cache for 24h changes from CoinGecko
+  const cached24hChanges = new Map<string, number>();
   
   const startStreaming = () => {
     if (streamInterval) {
       clearInterval(streamInterval);
     }
 
-    // Stream prices every 200ms for ultra-responsive CoinMarketCap-like feel
+    // Stream prices every 600ms for CoinMarketCap-like responsiveness
     streamInterval = setInterval(async () => {
       if (!isConnected || socket.readyState !== WebSocket.OPEN) {
         if (streamInterval) clearInterval(streamInterval);
@@ -318,36 +522,70 @@ serve(async (req) => {
       }
 
       try {
-        // Partition symbols: Pyth-supported vs DeFiLlama-only
+        fetchCycle++;
+        
+        // Partition symbols by source availability
         const pythSymbols = subscribedSymbols.filter((s) => PYTH_PRICE_FEEDS[s]);
+        const geckoSymbols = subscribedSymbols.filter((s) => COINGECKO_IDS[s]);
         const llamaSymbols = subscribedSymbols.filter((s) => DEFILLAMA_TOKENS[s]);
 
-        // Fetch in parallel
-        const [pythPrices, llamaPrices] = await Promise.all([
+        // Fetch from all sources in parallel
+        // CoinGecko less frequently (every 5th cycle = 3s) to avoid rate limits
+        const fetchPromises: Promise<Map<string, { price: number; source: string; change24h?: number }>>[] = [
           fetchPythPricesBatch(pythSymbols),
           fetchDefiLlamaPricesBatch(llamaSymbols),
-        ]);
+        ];
+        
+        // Add CoinGecko every 5th cycle (3 seconds) to respect rate limits
+        if (fetchCycle % 5 === 0) {
+          fetchPromises.push(fetchCoinGeckoPricesBatch(geckoSymbols));
+        }
 
-        // Merge: Pyth takes priority, DeFiLlama fills gaps
-        const merged = new Map<string, { price: number; source: string }>();
+        const results = await Promise.all(fetchPromises);
+        
+        const pythPrices = results[0];
+        const llamaPrices = results[1];
+        const geckoPrices = results[2] || new Map();
+
+        // Merge: Priority order - Pyth (fastest) > CoinGecko (accurate) > DeFiLlama (fallback)
+        const merged = new Map<string, { price: number; source: string; change24h?: number }>();
+        
+        // Start with DeFiLlama as base
         llamaPrices.forEach((data, symbol) => merged.set(symbol, data));
-        pythPrices.forEach((data, symbol) => merged.set(symbol, data)); // Pyth overwrites
+        
+        // CoinGecko overwrites with better quality + 24h change data
+        geckoPrices.forEach((data, symbol) => {
+          merged.set(symbol, data);
+          // Cache 24h changes for use with other sources
+          if (data.change24h !== undefined) {
+            cached24hChanges.set(symbol, data.change24h);
+          }
+        });
+        
+        // Pyth overwrites with fastest oracle data
+        pythPrices.forEach((data, symbol) => {
+          const existing = merged.get(symbol);
+          merged.set(symbol, {
+            ...data,
+            // Preserve 24h change from CoinGecko if available
+            change24h: cached24hChanges.get(symbol)
+          });
+        });
 
-        // Stream ALL price updates - even tiny movements for smooth rolling digits
-        const updates: Array<{ symbol: string; price: number; source: string; change?: number }> = [];
+        // Build updates array
+        const updates: Array<{ symbol: string; price: number; source: string; change?: number; change24h?: number }> = [];
         
         merged.forEach((data, symbol) => {
           const lastPrice = lastPrices.get(symbol);
           
-          // Calculate price change percentage for this update
+          // Calculate instant price change
           let priceChange = 0;
           if (lastPrice && lastPrice > 0) {
             priceChange = ((data.price - lastPrice) / lastPrice) * 100;
           }
           
-          // Stream ANY price change - even micro-movements (for rolling digit animation)
-          // Only skip if EXACTLY the same price (within floating point precision)
-          if (lastPrice && data.price === lastPrice) {
+          // Only skip if exactly the same price
+          if (lastPrice && Math.abs(data.price - lastPrice) < 0.0000001) {
             return;
           }
           
@@ -357,10 +595,11 @@ serve(async (req) => {
             price: data.price,
             source: data.source,
             change: priceChange,
+            change24h: data.change24h || cached24hChanges.get(symbol),
           });
         });
 
-        // Send batch update if we have any changes
+        // Send batch update
         if (updates.length > 0 && isConnected && socket.readyState === WebSocket.OPEN) {
           const batchUpdate: BatchPriceUpdate = {
             type: "prices",
@@ -375,24 +614,26 @@ serve(async (req) => {
           console.error("[PriceStream] Error:", err);
         }
       }
-    }, 200); // Ultra-fast 200ms polling for real-time feel
+    }, 600); // 600ms updates for CoinMarketCap-like feel
   };
 
   socket.onopen = () => {
-    console.log("[PriceStream] Client connected");
+    console.log("[PriceStream] Client connected - Multi-source streaming");
 
-    // Send initial connection confirmation (all 100 symbols)
+    // Send initial connection confirmation
     socket.send(
       JSON.stringify({
         type: "connected",
         message: "Price stream connected",
         availableSymbols: allSymbols,
         totalSymbols: allSymbols.length,
+        sources: ["Pyth", "CoinGecko", "DeFiLlama"],
+        updateInterval: 600,
         timestamp: Date.now(),
       })
     );
 
-    // Start streaming ALL symbols immediately (no waiting for subscribe)
+    // Start streaming immediately
     startStreaming();
   };
 
@@ -401,10 +642,9 @@ serve(async (req) => {
       const message = JSON.parse(event.data);
 
       if (message.type === "subscribe" && Array.isArray(message.symbols)) {
-        // Client can optionally narrow subscription, but we still support full range
         const requested = message.symbols
           .map((s: string) => s.toUpperCase())
-          .filter((s: string) => PYTH_PRICE_FEEDS[s] || DEFILLAMA_TOKENS[s])
+          .filter((s: string) => PYTH_PRICE_FEEDS[s] || COINGECKO_IDS[s] || DEFILLAMA_TOKENS[s])
           .slice(0, 100);
 
         subscribedSymbols = requested.length > 0 ? requested : allSymbols.slice(0, 100);
@@ -416,6 +656,7 @@ serve(async (req) => {
             type: "subscribed",
             symbols: subscribedSymbols,
             count: subscribedSymbols.length,
+            sources: ["Pyth", "CoinGecko", "DeFiLlama"],
             timestamp: Date.now(),
           })
         );
