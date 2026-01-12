@@ -199,30 +199,42 @@ const calculatePriceVelocity = (candles: CandleData[]): number => {
 
 export function useChartTrendData(symbol: string): ChartTrendData | null {
   const [data, setData] = useState<ChartTrendData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const mountedRef = useRef(true);
+  const lastProcessedRef = useRef<string>("");
   
   // 🌐 100% DECENTRALIZED: OHLC from oracle ticks only
   const ohlc = useDecentralizedOHLC(symbol);
   
-  // Get 1h candles for trend analysis
-  const decentralizedCandles = ohlc.getCandles('1h');
-  const hasDecentralizedData = decentralizedCandles.length >= 3;
+  // Use stable values for dependency tracking
+  const ticksReceived = ohlc.ticksReceived;
+  const isLive = ohlc.isLive;
+  const primarySource = ohlc.primarySource;
   
-  // Process candles and update data
+  // Process candles with throttling to prevent infinite loops
   useEffect(() => {
     if (!mountedRef.current) return;
     
-    // Use decentralized data only
+    // Get candles inside effect to avoid dependency issues
+    const decentralizedCandles = ohlc.getCandles('1h');
+    const hasDecentralizedData = decentralizedCandles.length >= 3;
+    
     if (!hasDecentralizedData) {
       // Still building data from oracle ticks
-      setData(null);
-      setIsLoading(true);
+      if (data !== null) {
+        setData(null);
+      }
       return;
     }
     
+    // Create a signature to check if data actually changed
+    const signature = `${symbol}-${decentralizedCandles.length}-${decentralizedCandles[decentralizedCandles.length - 1]?.close || 0}-${ticksReceived}`;
+    if (signature === lastProcessedRef.current) {
+      return; // No meaningful change
+    }
+    lastProcessedRef.current = signature;
+    
     const candles = decentralizedCandles.map(convertCandle);
-    const source = `Oracle (${ohlc.primarySource})`;
+    const source = `Oracle (${primarySource})`;
     
     const closes = candles.map(c => c.close);
     const swings = detectSwingPoints(candles);
@@ -241,16 +253,14 @@ export function useChartTrendData(symbol: string): ChartTrendData | null {
       volumeTrend: analyzeVolumeTrend(candles),
       priceVelocity: calculatePriceVelocity(candles),
       lastUpdated: Date.now(),
-      isLive: ohlc.isLive,
+      isLive,
       source,
     });
-    
-    setIsLoading(false);
-  }, [decentralizedCandles, hasDecentralizedData, ohlc.isLive, ohlc.primarySource]);
+  }, [symbol, ticksReceived, isLive, primarySource, ohlc]);
   
   // Reset when symbol changes
   useEffect(() => {
-    setIsLoading(true);
+    lastProcessedRef.current = "";
     setData(null);
   }, [symbol]);
   
