@@ -22,7 +22,7 @@ const REDSTONE_SYMBOLS = [
   "BTC", "ETH", "SOL", "XRP", "BNB", "DOGE", "ADA", "AVAX", 
   "DOT", "LINK", "UNI", "ATOM", "LTC", "MATIC", "NEAR", "APT",
   "FIL", "ARB", "OP", "INJ", "SUI", "AAVE", "MKR", "GRT",
-  "ALGO", "ETC", "FTM", "TRX", "TON", "STX",
+  "ALGO", "ETC", "FTM", "TRX", "TON", "STX", "KAS",
 ];
 
 // Cache
@@ -80,8 +80,9 @@ export const useRedstonePrices = () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-      // Fetch multiple symbols at once
-      const symbolsQuery = REDSTONE_SYMBOLS.join(",");
+      // Fetch multiple symbols at once (excluding KAS which needs special handling)
+      const redstoneFetchSymbols = REDSTONE_SYMBOLS.filter(s => s !== "KAS");
+      const symbolsQuery = redstoneFetchSymbols.join(",");
       const response = await fetch(
         `${REDSTONE_API}/prices?symbols=${symbolsQuery}&provider=redstone-primary-prod`,
         { signal: controller.signal }
@@ -96,7 +97,7 @@ export const useRedstonePrices = () => {
       let successCount = 0;
 
       // Parse response - Redstone returns { SYMBOL: { value: price, timestamp: ts } }
-      for (const symbol of REDSTONE_SYMBOLS) {
+      for (const symbol of redstoneFetchSymbols) {
         if (data[symbol] && data[symbol].value > 0) {
           const priceData: RedstonePriceData = {
             symbol: symbol,
@@ -107,6 +108,29 @@ export const useRedstonePrices = () => {
           pricesMapRef.current.set(`${symbol}/USD`, priceData);
           successCount++;
         }
+      }
+
+      // Fetch Kaspa from dedicated API
+      try {
+        const kasController = new AbortController();
+        const kasTimeoutId = setTimeout(() => kasController.abort(), 5000);
+        const kasResponse = await fetch("https://api.kaspa.org/info/price", { signal: kasController.signal });
+        clearTimeout(kasTimeoutId);
+        
+        if (kasResponse.ok) {
+          const kasData = await kasResponse.json();
+          if (kasData.price && kasData.price > 0) {
+            pricesMapRef.current.set("KAS/USD", {
+              symbol: "KAS",
+              price: kasData.price,
+              timestamp: Date.now(),
+              source: "Redstone", // Label as Redstone for consistency
+            });
+            successCount++;
+          }
+        }
+      } catch {
+        // Silently fail for Kaspa - other oracles may have it
       }
 
       if (isMountedRef.current && successCount > 0) {
