@@ -386,7 +386,7 @@ const GPUPriceChart = ({
   return (
     <div className={cn(
       "rounded-2xl border border-border bg-card overflow-hidden transition-shadow duration-500",
-      isLive && tickRate > 0 && "animate-live-glow",
+      isLive && tickRate > 0 && (isPositive ? "animate-live-glow-bullish" : "animate-live-glow-bearish"),
       className
     )}>
       {/* Header */}
