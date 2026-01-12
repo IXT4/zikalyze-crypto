@@ -168,6 +168,8 @@ const CryptoTicker = ({
           
           // Determine if this price is from an oracle
           const isOraclePrice = source?.includes("Oracle") || source === "Pyth" || source === "Chainlink";
+          // Kaspa may not always be covered by oracle feeds; still show the live tick dot when the overall stream is live
+          const showTickDot = !!isLive && (isOraclePrice || crypto.symbol === "KAS");
           
           return (
             <button
@@ -182,8 +184,8 @@ const CryptoTicker = ({
                 flash === "down" && "animate-price-flash-down"
               )}
             >
-              {/* Oracle indicator dot */}
-              {isOraclePrice && (
+              {/* Live tick dot */}
+              {showTickDot && (
                 <div className="absolute top-1 right-1">
                   <div className="h-1.5 w-1.5 rounded-full bg-chart-cyan animate-pulse" />
                 </div>
