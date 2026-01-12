@@ -35,10 +35,10 @@ export const LivePrice = ({ value, className }: LivePriceProps) => {
     setDisplayValue(value);
     prevValueRef.current = value;
 
-    // Quick flash fade - 400ms for natural feel
+    // Match CSS animation duration - 800ms
     flashTimeoutRef.current = setTimeout(() => {
       setFlash(null);
-    }, 400);
+    }, 800);
 
     return () => {
       if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
@@ -48,9 +48,9 @@ export const LivePrice = ({ value, className }: LivePriceProps) => {
   return (
     <span
       className={cn(
-        "tabular-nums font-semibold transition-colors duration-150",
-        flash === "up" && "text-success",
-        flash === "down" && "text-destructive",
+        "tabular-nums font-semibold inline-block",
+        flash === "up" && "price-flash-up",
+        flash === "down" && "price-flash-down",
         !flash && "text-foreground",
         className
       )}
@@ -87,10 +87,10 @@ export const LivePriceCompact = ({
     setDisplayValue(value);
     prevValueRef.current = value;
 
-    // Slightly longer flash for table visibility
+    // Match CSS animation duration - 800ms
     flashTimeoutRef.current = setTimeout(() => {
       setFlash(null);
-    }, 500);
+    }, 800);
 
     return () => {
       if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
@@ -100,9 +100,9 @@ export const LivePriceCompact = ({
   return (
     <span
       className={cn(
-        "inline-block tabular-nums text-sm font-medium px-1 rounded transition-all duration-150",
-        flash === "up" && "text-success bg-success/10",
-        flash === "down" && "text-destructive bg-destructive/10",
+        "inline-block tabular-nums text-sm font-medium px-1 rounded",
+        flash === "up" && "price-flash-up",
+        flash === "down" && "price-flash-down",
         !flash && "text-foreground bg-transparent",
         className
       )}
@@ -139,9 +139,10 @@ export const LivePriceLarge = ({
     setDisplayValue(value);
     prevValueRef.current = value;
 
+    // Match CSS animation duration - 800ms
     flashTimeoutRef.current = setTimeout(() => {
       setFlash(null);
-    }, 450);
+    }, 800);
 
     return () => {
       if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
@@ -151,9 +152,9 @@ export const LivePriceLarge = ({
   return (
     <span
       className={cn(
-        "tabular-nums text-lg font-bold transition-colors duration-150",
-        flash === "up" && "text-success",
-        flash === "down" && "text-destructive",
+        "tabular-nums text-lg font-bold inline-block",
+        flash === "up" && "price-flash-up",
+        flash === "down" && "price-flash-down",
         !flash && "text-foreground",
         className
       )}

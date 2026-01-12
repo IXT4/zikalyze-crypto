@@ -56,7 +56,51 @@ All colors MUST be HSL.
     --sidebar-border: 222 47% 15%;
     --sidebar-ring: 168 76% 73%;
   }
+}
 
+/* Price Flash Animations */
+@keyframes flashGreen {
+  0% { 
+    color: white; 
+    background: hsla(142, 76%, 46%, 0.4);
+    transform: scale(1);
+  }
+  50% { 
+    background: hsla(142, 76%, 46%, 0.8);
+    transform: scale(1.05);
+  }
+  100% { 
+    background: transparent; 
+    color: hsl(142, 76%, 46%);
+    transform: scale(1);
+  }
+}
+
+@keyframes flashRed {
+  0% { 
+    color: white; 
+    background: hsla(0, 72%, 51%, 0.4);
+    transform: scale(1);
+  }
+  50% { 
+    background: hsla(0, 72%, 51%, 0.8);
+    transform: scale(1.05);
+  }
+  100% { 
+    background: transparent; 
+    color: hsl(0, 72%, 51%);
+    transform: scale(1);
+  }
+}
+
+.price-flash-up {
+  animation: flashGreen 0.8s ease-out;
+  border-radius: 0.25rem;
+}
+
+.price-flash-down {
+  animation: flashRed 0.8s ease-out;
+  border-radius: 0.25rem;
 }
 
 @layer base {
