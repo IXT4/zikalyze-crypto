@@ -21,12 +21,12 @@ const cryptoMeta = [
 
 interface OracleStatus {
   isLive: boolean;
-  primarySource: "Pyth" | "DIA" | "Redstone" | "none";
+  primarySource: "Pyth" | "WebSocket" | "none";
   pythConnected: boolean;
   diaConnected?: boolean;
   redstoneConnected?: boolean;
   // Legacy compatibility
-  chainlinkConnected: boolean;
+  chainlinkConnected?: boolean;
 }
 
 interface CryptoTickerProps {

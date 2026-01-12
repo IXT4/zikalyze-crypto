@@ -558,8 +558,7 @@ export const useCryptoPrices = () => {
           const isSignificant = priceDiff > 0.0001;
         
           if (isSignificant) {
-            const oracleSource = oracleData.source === "Pyth" ? "Pyth Oracle" : 
-                                 oracleData.source === "DIA" ? "DIA Oracle" : "Redstone Oracle";
+            const oracleSource = oracleData.source === "Pyth" ? "Pyth Oracle" : "WebSocket";
             
             // Add to price history for 24h calculations
             addToHistory(symbol, oracleData.price);
