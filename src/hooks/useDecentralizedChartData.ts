@@ -2,11 +2,13 @@
 // 🔮 useDecentralizedChartData — 100% Decentralized Oracle-Only Chart Streaming
 // ═══════════════════════════════════════════════════════════════════════════════
 // Builds charts exclusively from Pyth, DIA, and Redstone oracle ticks
-// Zero centralized exchange or API dependencies
+// Supports multiple timeframe aggregations (1m, 5m, 15m, 1h, 4h, 1d)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useOraclePrices, OraclePriceData } from "./useOraclePrices";
+
+export type ChartTimeframe = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
 
 export interface ChartDataPoint {
   time: string;
@@ -14,66 +16,228 @@ export interface ChartDataPoint {
   volume: number;
   positive: boolean;
   source: "Pyth" | "DIA" | "Redstone";
+  timestamp: number;
+  open?: number;
+  high?: number;
+  low?: number;
+  close?: number;
 }
 
-// LocalStorage persistence for chart data
-const CHART_CACHE_PREFIX = "zikalyze_dchart_v1_";
-const CHART_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+interface RawTick {
+  price: number;
+  timestamp: number;
+  source: "Pyth" | "DIA" | "Redstone";
+}
 
-interface CachedChartData {
-  points: ChartDataPoint[];
+// Timeframe configuration
+const TIMEFRAME_CONFIG: Record<ChartTimeframe, { 
+  intervalMs: number; 
+  maxPoints: number; 
+  label: string;
+  throttleMs: number;
+}> = {
+  "1m": { intervalMs: 60 * 1000, maxPoints: 60, label: "1 Min", throttleMs: 200 },
+  "5m": { intervalMs: 5 * 60 * 1000, maxPoints: 60, label: "5 Min", throttleMs: 500 },
+  "15m": { intervalMs: 15 * 60 * 1000, maxPoints: 48, label: "15 Min", throttleMs: 1000 },
+  "1h": { intervalMs: 60 * 60 * 1000, maxPoints: 24, label: "1 Hour", throttleMs: 2000 },
+  "4h": { intervalMs: 4 * 60 * 60 * 1000, maxPoints: 42, label: "4 Hour", throttleMs: 5000 },
+  "1d": { intervalMs: 24 * 60 * 60 * 1000, maxPoints: 30, label: "1 Day", throttleMs: 10000 },
+};
+
+// LocalStorage persistence for raw tick data
+const TICK_CACHE_PREFIX = "zikalyze_ticks_v2_";
+const TICK_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+interface CachedTickData {
+  ticks: RawTick[];
   timestamp: number;
 }
 
-const loadCachedChart = (symbol: string): ChartDataPoint[] => {
+const loadCachedTicks = (symbol: string): RawTick[] => {
   try {
-    const cached = localStorage.getItem(`${CHART_CACHE_PREFIX}${symbol}`);
+    const cached = localStorage.getItem(`${TICK_CACHE_PREFIX}${symbol}`);
     if (!cached) return [];
-    const data: CachedChartData = JSON.parse(cached);
-    if (Date.now() - data.timestamp > CHART_CACHE_TTL) {
-      localStorage.removeItem(`${CHART_CACHE_PREFIX}${symbol}`);
+    const data: CachedTickData = JSON.parse(cached);
+    if (Date.now() - data.timestamp > TICK_CACHE_TTL) {
+      localStorage.removeItem(`${TICK_CACHE_PREFIX}${symbol}`);
       return [];
     }
-    return data.points;
+    // Filter out old ticks (keep last 24h)
+    const cutoff = Date.now() - TICK_CACHE_TTL;
+    return data.ticks.filter(t => t.timestamp > cutoff);
   } catch {
     return [];
   }
 };
 
-const saveCachedChart = (symbol: string, points: ChartDataPoint[]) => {
+const saveCachedTicks = (symbol: string, ticks: RawTick[]) => {
   try {
-    const data: CachedChartData = { points: points.slice(-100), timestamp: Date.now() };
-    localStorage.setItem(`${CHART_CACHE_PREFIX}${symbol}`, JSON.stringify(data));
+    // Keep last 24 hours of ticks, max 5000 entries
+    const cutoff = Date.now() - TICK_CACHE_TTL;
+    const filteredTicks = ticks.filter(t => t.timestamp > cutoff).slice(-5000);
+    const data: CachedTickData = { ticks: filteredTicks, timestamp: Date.now() };
+    localStorage.setItem(`${TICK_CACHE_PREFIX}${symbol}`, JSON.stringify(data));
   } catch { }
 };
 
-const formatTime = (date: Date): string => {
-  return date.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+const formatTimeForTimeframe = (timestamp: number, timeframe: ChartTimeframe): string => {
+  const date = new Date(timestamp);
+  
+  switch (timeframe) {
+    case "1m":
+    case "5m":
+      return date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      });
+    case "15m":
+    case "1h":
+      return date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+    case "4h":
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        hour12: false,
+      });
+    case "1d":
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+  }
 };
 
-export const useDecentralizedChartData = (crypto: string) => {
-  const symbol = crypto.toUpperCase();
+// Aggregate raw ticks into OHLC candles for a given timeframe
+const aggregateToTimeframe = (
+  ticks: RawTick[],
+  timeframe: ChartTimeframe
+): ChartDataPoint[] => {
+  const config = TIMEFRAME_CONFIG[timeframe];
+  if (ticks.length === 0) return [];
   
-  const [chartData, setChartData] = useState<ChartDataPoint[]>(() => loadCachedChart(symbol));
+  const now = Date.now();
+  const intervalMs = config.intervalMs;
+  
+  // Group ticks by time interval
+  const buckets = new Map<number, RawTick[]>();
+  
+  for (const tick of ticks) {
+    const bucketKey = Math.floor(tick.timestamp / intervalMs) * intervalMs;
+    if (!buckets.has(bucketKey)) {
+      buckets.set(bucketKey, []);
+    }
+    buckets.get(bucketKey)!.push(tick);
+  }
+  
+  // Convert buckets to chart data points
+  const sortedKeys = Array.from(buckets.keys()).sort((a, b) => a - b);
+  const recentKeys = sortedKeys.slice(-config.maxPoints);
+  
+  const result: ChartDataPoint[] = [];
+  let prevClose = 0;
+  
+  for (const key of recentKeys) {
+    const bucketTicks = buckets.get(key)!;
+    const prices = bucketTicks.map(t => t.price);
+    
+    const open = prices[0];
+    const close = prices[prices.length - 1];
+    const high = Math.max(...prices);
+    const low = Math.min(...prices);
+    
+    result.push({
+      time: formatTimeForTimeframe(key, timeframe),
+      timestamp: key,
+      price: close,
+      open,
+      high,
+      low,
+      close,
+      volume: bucketTicks.length, // Use tick count as proxy for volume
+      positive: close >= (prevClose || open),
+      source: bucketTicks[bucketTicks.length - 1].source,
+    });
+    
+    prevClose = close;
+  }
+  
+  return result;
+};
+
+export const useDecentralizedChartData = (
+  crypto: string,
+  timeframe: ChartTimeframe = "1m"
+) => {
+  const symbol = crypto.toUpperCase();
+  const config = TIMEFRAME_CONFIG[timeframe];
+  
+  // Store raw ticks for aggregation
+  const rawTicksRef = useRef<RawTick[]>(loadCachedTicks(symbol));
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [priceChange, setPriceChange] = useState<number>(0);
   const [isBuilding, setIsBuilding] = useState(true);
   const [currentSource, setCurrentSource] = useState<"Pyth" | "DIA" | "Redstone" | null>(null);
   
-  const chartDataRef = useRef<ChartDataPoint[]>([]);
   const lastPriceRef = useRef<number | null>(null);
   const lastUpdateRef = useRef<number>(0);
   const mountedRef = useRef(true);
   const lastSaveRef = useRef<number>(0);
+  const lastAggregationRef = useRef<number>(0);
   
   // Connect to unified oracle prices
   const oracle = useOraclePrices([]);
   
-  // Process oracle price updates into chart data points
+  // Load cached ticks on mount/symbol change
+  useEffect(() => {
+    mountedRef.current = true;
+    rawTicksRef.current = loadCachedTicks(symbol);
+    
+    // Initial aggregation from cache
+    if (rawTicksRef.current.length > 0) {
+      const aggregated = aggregateToTimeframe(rawTicksRef.current, timeframe);
+      setChartData(aggregated);
+      setIsBuilding(aggregated.length < 3);
+      
+      if (aggregated.length > 1) {
+        const firstPrice = aggregated[0].price;
+        const lastPrice = aggregated[aggregated.length - 1].price;
+        const change = ((lastPrice - firstPrice) / firstPrice) * 100;
+        setPriceChange(change);
+        lastPriceRef.current = lastPrice;
+      }
+    }
+    
+    return () => {
+      mountedRef.current = false;
+      if (rawTicksRef.current.length > 0) {
+        saveCachedTicks(symbol, rawTicksRef.current);
+      }
+    };
+  }, [symbol]);
+  
+  // Re-aggregate when timeframe changes
+  useEffect(() => {
+    if (rawTicksRef.current.length > 0) {
+      const aggregated = aggregateToTimeframe(rawTicksRef.current, timeframe);
+      setChartData(aggregated);
+      
+      if (aggregated.length > 1) {
+        const firstPrice = aggregated[0].price;
+        const lastPrice = aggregated[aggregated.length - 1].price;
+        const change = ((lastPrice - firstPrice) / firstPrice) * 100;
+        setPriceChange(change);
+      }
+    }
+  }, [timeframe]);
+  
+  // Process oracle price updates into raw ticks
   useEffect(() => {
     if (!mountedRef.current) return;
     
@@ -84,75 +248,51 @@ export const useDecentralizedChartData = (crypto: string) => {
     const newPrice = oraclePrice.price;
     const source = oraclePrice.source;
     
-    // Throttle updates to 300ms for smoother chart responsiveness
-    if (now - lastUpdateRef.current < 300) return;
+    // Throttle based on timeframe
+    if (now - lastUpdateRef.current < config.throttleMs) return;
     
-    // Only add if price changed meaningfully (avoid duplicates)
+    // Only add if price changed meaningfully
     if (lastPriceRef.current !== null) {
       const priceDiff = Math.abs(newPrice - lastPriceRef.current) / lastPriceRef.current;
-      if (priceDiff < 0.0001) return; // 0.01% threshold - more responsive
+      if (priceDiff < 0.0001) return; // 0.01% threshold
     }
     
     lastUpdateRef.current = now;
-    const prevPrice = lastPriceRef.current;
     lastPriceRef.current = newPrice;
     
-    const newPoint: ChartDataPoint = {
-      time: formatTime(new Date(now)),
+    // Add new tick
+    const newTick: RawTick = {
       price: newPrice,
-      volume: 0, // Oracles don't provide volume
-      positive: prevPrice !== null ? newPrice >= prevPrice : true,
+      timestamp: now,
       source,
     };
     
-    // Keep last 100 data points for better chart history
-    chartDataRef.current = [...chartDataRef.current.slice(-99), newPoint];
-    
-    setChartData([...chartDataRef.current]);
+    rawTicksRef.current = [...rawTicksRef.current, newTick];
     setCurrentSource(source);
-    setIsBuilding(chartDataRef.current.length < 3);
     
-    // Calculate price change from first to last
-    if (chartDataRef.current.length > 1) {
-      const firstPrice = chartDataRef.current[0].price;
-      const change = ((newPrice - firstPrice) / firstPrice) * 100;
-      setPriceChange(change);
-    }
-    
-    // Save to cache every 15 seconds for better persistence
-    if (now - lastSaveRef.current > 15000) {
-      saveCachedChart(symbol, chartDataRef.current);
-      lastSaveRef.current = now;
-    }
-  }, [oracle.prices, symbol, oracle.getPrice]);
-  
-  // Load cached data on mount
-  useEffect(() => {
-    mountedRef.current = true;
-    
-    const cached = loadCachedChart(symbol);
-    if (cached.length > 0) {
-      chartDataRef.current = cached;
-      setChartData(cached);
-      setIsBuilding(cached.length < 5);
+    // Re-aggregate periodically based on timeframe
+    const aggregationInterval = Math.min(config.throttleMs * 2, 2000);
+    if (now - lastAggregationRef.current > aggregationInterval) {
+      lastAggregationRef.current = now;
       
-      if (cached.length > 1) {
-        const firstPrice = cached[0].price;
-        const lastPrice = cached[cached.length - 1].price;
+      const aggregated = aggregateToTimeframe(rawTicksRef.current, timeframe);
+      setChartData(aggregated);
+      setIsBuilding(aggregated.length < 3);
+      
+      if (aggregated.length > 1) {
+        const firstPrice = aggregated[0].price;
+        const lastPrice = aggregated[aggregated.length - 1].price;
         const change = ((lastPrice - firstPrice) / firstPrice) * 100;
         setPriceChange(change);
-        lastPriceRef.current = lastPrice;
       }
     }
     
-    return () => {
-      mountedRef.current = false;
-      // Save on unmount
-      if (chartDataRef.current.length > 0) {
-        saveCachedChart(symbol, chartDataRef.current);
-      }
-    };
-  }, [symbol]);
+    // Save to cache periodically
+    if (now - lastSaveRef.current > 30000) {
+      saveCachedTicks(symbol, rawTicksRef.current);
+      lastSaveRef.current = now;
+    }
+  }, [oracle.prices, symbol, oracle.getPrice, timeframe, config.throttleMs]);
 
   return {
     chartData,
@@ -167,5 +307,9 @@ export const useDecentralizedChartData = (crypto: string) => {
       primarySource: oracle.primarySource,
     },
     dataPointCount: chartData.length,
+    timeframeConfig: config,
+    rawTickCount: rawTicksRef.current.length,
   };
 };
+
+export { TIMEFRAME_CONFIG };
