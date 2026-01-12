@@ -36,14 +36,14 @@ const DEVIATION_THRESHOLDS = {
 const ALERT_COOLDOWN_MS = 60 * 1000; // 1 minute
 
 // Get symbols that exist in both oracles - limit to top assets to reduce API calls
-const getCommonSymbols = (): string[] => {
+const COMMON_SYMBOLS: string[] = (() => {
   const pythSymbols = Object.keys(PYTH_FEED_IDS).map(s => s.replace("/USD", ""));
   const chainlinkSymbols = Object.keys(CHAINLINK_FEEDS_ETH).map(s => s.replace("/USD", ""));
   
   // Only monitor top assets that exist in both oracles
   const prioritySymbols = ["BTC", "ETH", "SOL", "LINK", "AAVE", "UNI", "AVAX", "ATOM", "DOT", "LTC"];
   return prioritySymbols.filter(s => pythSymbols.includes(s) && chainlinkSymbols.includes(s));
-};
+})();
 
 export const useOracleCrossValidation = (
   enabled: boolean = true,
@@ -58,14 +58,13 @@ export const useOracleCrossValidation = (
     alertsTriggered: 0,
   });
 
-  const commonSymbols = getCommonSymbols();
   const alertCooldownRef = useRef<Map<string, number>>(new Map());
   const alertsTriggeredRef = useRef(0);
   const isMountedRef = useRef(true);
 
   // Connect to both oracles for common symbols
-  const pyth = usePythPrices(enabled ? commonSymbols : []);
-  const chainlink = useChainlinkPrices(enabled ? commonSymbols : []);
+  const pyth = usePythPrices(enabled ? COMMON_SYMBOLS : []);
+  const chainlink = useChainlinkPrices(enabled ? COMMON_SYMBOLS : []);
 
   const getSeverity = useCallback((deviationPercent: number): OracleDeviation["severity"] => {
     const absDeviation = Math.abs(deviationPercent);
@@ -135,7 +134,7 @@ export const useOracleCrossValidation = (
     const deviations: OracleDeviation[] = [];
     const now = Date.now();
 
-    commonSymbols.forEach(symbol => {
+    COMMON_SYMBOLS.forEach(symbol => {
       const pythData = pyth.getPrice(symbol);
       const chainlinkData = chainlink.getPrice(symbol);
 
@@ -165,16 +164,16 @@ export const useOracleCrossValidation = (
     // Sort by absolute deviation (highest first)
     deviations.sort((a, b) => Math.abs(b.deviationPercent) - Math.abs(a.deviationPercent));
 
-    setState(prev => ({
+    setState({
       deviations,
       highestDeviation: deviations[0] || null,
       isMonitoring: pyth.isConnected || chainlink.isConnected,
       lastCheck: now,
       symbolsMonitored: deviations.length,
       alertsTriggered: alertsTriggeredRef.current,
-    }));
-
-  }, [enabled, pyth.prices, chainlink.prices, pyth.isConnected, chainlink.isConnected, commonSymbols, pyth, chainlink, getSeverity, shouldAlert, triggerAlert]);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, pyth.isConnected, chainlink.isConnected]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -199,7 +198,7 @@ export const useOracleCrossValidation = (
     getDeviationsAbove,
     getDeviation,
     thresholds: DEVIATION_THRESHOLDS,
-    commonSymbols,
+    commonSymbols: COMMON_SYMBOLS,
   };
 };
 
