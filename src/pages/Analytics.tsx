@@ -9,7 +9,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import AnalyticsChart from "@/components/dashboard/AnalyticsChart";
 import PredictiveChart from "@/components/dashboard/PredictiveChart";
 import DonutChart from "@/components/dashboard/DonutChart";
-import VolumeChart from "@/components/dashboard/VolumeChart";
+import DecentralizedVolumeChart from "@/components/dashboard/DecentralizedVolumeChart";
 import { cn } from "@/lib/utils";
 
 const Analytics = () => {
@@ -139,7 +139,7 @@ const Analytics = () => {
 
           <div className="grid gap-6 lg:grid-cols-2">
             <PredictiveChart />
-            <VolumeChart crypto="BTC" coinGeckoId="bitcoin" />
+            <DecentralizedVolumeChart crypto="BTC" />
           </div>
 
           {/* Top Gainers & Losers */}
