@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Grid3X3, TrendingUp, TrendingDown, Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useCurrency } from "@/hooks/useCurrency";
 import {
   createHeatmapAnimator,
   type HeatmapCell,
@@ -24,12 +25,30 @@ interface GPUHeatmapProps {
   onSelectCrypto?: (symbol: string) => void;
 }
 
+interface TooltipData {
+  cell: HeatmapCell;
+  x: number;
+  y: number;
+}
+
 const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animatorRef = useRef<HeatmapAnimator | null>(null);
+  const cellsRef = useRef<HeatmapCell[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [stats, setStats] = useState({ gainers: 0, losers: 0, unchanged: 0 });
+  const [tooltip, setTooltip] = useState<TooltipData | null>(null);
+  const { formatPrice, symbol: currencySymbol } = useCurrency();
+  
+  // Format large numbers (market cap, volume)
+  const formatLargeNumber = useCallback((value: number): string => {
+    if (value >= 1_000_000_000_000) return `${currencySymbol}${(value / 1_000_000_000_000).toFixed(2)}T`;
+    if (value >= 1_000_000_000) return `${currencySymbol}${(value / 1_000_000_000).toFixed(2)}B`;
+    if (value >= 1_000_000) return `${currencySymbol}${(value / 1_000_000).toFixed(2)}M`;
+    if (value >= 1_000) return `${currencySymbol}${(value / 1_000).toFixed(2)}K`;
+    return `${currencySymbol}${value.toFixed(2)}`;
+  }, [currencySymbol]);
   
   // Convert prices to heatmap cells
   const convertToHeatmapCells = useCallback((prices: CryptoPrice[]): HeatmapCell[] => {
@@ -102,35 +121,83 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
   useEffect(() => {
     if (animatorRef.current && prices.length > 0) {
       const cells = convertToHeatmapCells(prices);
+      cellsRef.current = cells;
       animatorRef.current.updateData(cells);
     }
   }, [prices, convertToHeatmapCells]);
   
-  // Handle canvas click for crypto selection
-  const handleCanvasClick = useCallback(
-    (event: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!onSelectCrypto || !canvasRef.current || !containerRef.current) return;
-      
+  // Calculate which cell is at a given position
+  const getCellAtPosition = useCallback(
+    (clientX: number, clientY: number): HeatmapCell | null => {
       const canvas = canvasRef.current;
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
+      if (!canvas || cellsRef.current.length === 0) return null;
       
-      const validPrices = prices.filter((p) => p.current_price > 0).slice(0, 100);
-      const cols = Math.ceil(Math.sqrt(validPrices.length * (rect.width / rect.height)));
+      const rect = canvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      
+      const cells = cellsRef.current;
+      const aspectRatio = rect.width / rect.height;
+      const cols = Math.ceil(Math.sqrt(cells.length * aspectRatio));
+      const rows = Math.ceil(cells.length / cols);
       const cellWidth = rect.width / cols;
-      const cellHeight = rect.height / Math.ceil(validPrices.length / cols);
+      const cellHeight = rect.height / rows;
       
       const col = Math.floor(x / cellWidth);
       const row = Math.floor(y / cellHeight);
       const index = row * cols + col;
       
-      if (index >= 0 && index < validPrices.length) {
-        onSelectCrypto(validPrices[index].symbol.toUpperCase());
+      if (index >= 0 && index < cells.length) {
+        return cells[index];
+      }
+      return null;
+    },
+    []
+  );
+  
+  // Handle mouse move for tooltip
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      const cell = getCellAtPosition(event.clientX, event.clientY);
+      if (cell) {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect();
+          setTooltip({
+            cell,
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+          });
+        }
+      } else {
+        setTooltip(null);
       }
     },
-    [prices, onSelectCrypto]
+    [getCellAtPosition]
   );
+  
+  // Handle mouse leave
+  const handleMouseLeave = useCallback(() => {
+    setTooltip(null);
+  }, []);
+  
+  // Handle canvas click for crypto selection
+  const handleCanvasClick = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!onSelectCrypto) return;
+      const cell = getCellAtPosition(event.clientX, event.clientY);
+      if (cell) {
+        onSelectCrypto(cell.symbol);
+      }
+    },
+    [getCellAtPosition, onSelectCrypto]
+  );
+  
+  // Format change with sign
+  const formatChange = (change: number): string => {
+    const sign = change >= 0 ? "+" : "";
+    return `${sign}${change.toFixed(2)}%`;
+  };
   
   return (
     <Card className="border-border bg-card/95 backdrop-blur-sm overflow-hidden">
@@ -174,7 +241,7 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
           style={{ minHeight: isExpanded ? 500 : 300 }}
         >
           {loading && prices.length === 0 ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/80">
+            <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
               <div className="flex flex-col items-center gap-2">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 <span className="text-sm text-muted-foreground">Loading market data...</span>
@@ -184,9 +251,48 @@ const GPUHeatmap = ({ prices, loading = false, onSelectCrypto }: GPUHeatmapProps
           <canvas
             ref={canvasRef}
             onClick={handleCanvasClick}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
             className="w-full cursor-pointer transition-opacity duration-300"
             style={{ opacity: loading && prices.length === 0 ? 0.3 : 1 }}
           />
+          
+          {/* Tooltip */}
+          {tooltip && (
+            <div
+              className="absolute z-20 pointer-events-none"
+              style={{
+                left: Math.min(tooltip.x + 10, (containerRef.current?.offsetWidth || 300) - 180),
+                top: Math.max(tooltip.y - 100, 10),
+              }}
+            >
+              <div className="bg-popover/95 backdrop-blur-md border border-border rounded-lg shadow-xl p-3 min-w-[160px]">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-bold text-foreground">{tooltip.cell.symbol}</span>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                    #{tooltip.cell.rank}
+                  </Badge>
+                </div>
+                <div className="text-sm text-muted-foreground mb-1">{tooltip.cell.name}</div>
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Price:</span>
+                    <span className="font-medium text-foreground">{formatPrice(tooltip.cell.price)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">24h:</span>
+                    <span className={`font-medium ${tooltip.cell.change24h >= 0 ? "text-success" : "text-destructive"}`}>
+                      {formatChange(tooltip.cell.change24h)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">MCap:</span>
+                    <span className="font-medium text-foreground">{formatLargeNumber(tooltip.cell.marketCap)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         <div className="mt-3 flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground">
           <div className="flex items-center gap-4">
