@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { CryptoPrice } from "@/hooks/useCryptoPrices";
-import { useCurrency } from "@/hooks/useCurrency";
 import { Circle, Zap, Link2 } from "lucide-react";
 import { PriceChange } from "./PriceChange";
+import { AnimatedPrice } from "./AnimatedPrice";
 
 const cryptoMeta = [
   { symbol: "BTC", name: "Bitcoin", color: "text-warning" },
@@ -51,7 +51,6 @@ const CryptoTicker = ({
   isLive,
   connectedExchanges = []
 }: CryptoTickerProps) => {
-  const { formatPrice } = useCurrency();
   
   // Track previous prices for flash animation
   const prevPricesRef = useRef<Map<string, number>>(new Map());
@@ -194,14 +193,14 @@ const CryptoTicker = ({
                   animated={!!flash}
                 />
               </div>
-              <span 
+              <AnimatedPrice 
+                value={price}
                 className={cn(
-                  "text-lg font-semibold transition-colors rounded px-1",
+                  "text-lg font-semibold",
                   flash === "up" ? "text-success" : flash === "down" ? "text-destructive" : "text-foreground"
                 )}
-              >
-                {loading ? "..." : formatPrice(price)}
-              </span>
+                showFlash={false}
+              />
             </button>
           );
         })}
