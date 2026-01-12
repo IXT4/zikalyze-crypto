@@ -16,7 +16,7 @@ export interface ChartDataPoint {
   price: number;
   volume: number;
   positive: boolean;
-  source: "Pyth" | "DIA" | "Redstone" | "WebSocket";
+  source: "Pyth" | "WebSocket" | "CoinGecko" | "DeFiLlama";
   timestamp: number;
   open?: number;
   high?: number;
@@ -27,7 +27,7 @@ export interface ChartDataPoint {
 interface RawTick {
   price: number;
   timestamp: number;
-  source: "Pyth" | "DIA" | "Redstone" | "WebSocket";
+  source: "Pyth" | "WebSocket" | "CoinGecko" | "DeFiLlama";
 }
 
 // Timeframe configuration
@@ -184,7 +184,7 @@ export const useDecentralizedChartData = (
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [priceChange, setPriceChange] = useState<number>(0);
   const [isBuilding, setIsBuilding] = useState(true);
-  const [currentSource, setCurrentSource] = useState<"Pyth" | "DIA" | "Redstone" | "WebSocket" | null>(null);
+  const [currentSource, setCurrentSource] = useState<"Pyth" | "WebSocket" | "CoinGecko" | "DeFiLlama" | null>(null);
   
   const lastPriceRef = useRef<number | null>(null);
   const lastUpdateRef = useRef<number>(0);

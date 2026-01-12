@@ -1,20 +1,20 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🌐 useOraclePrices — Streamlined Decentralized Oracle (Pyth Only)
+// 🌐 useOraclePrices — WebSocket-Powered Oracle Prices
 // ═══════════════════════════════════════════════════════════════════════════════
-// Uses Pyth Network SSE exclusively - most reliable decentralized source
-// DIA and Redstone removed due to CORS/404 errors in browser environment
-// WebSocket (price-stream edge function) is primary, Pyth SSE is fallback
+// Uses the global WebSocket (price-stream edge function) for all oracle data
+// The edge function fetches from Pyth, CoinGecko, and DeFiLlama
+// No direct Pyth SSE connection needed - reduces connection overhead
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { usePythPrices, PythPriceData } from "./usePythPrices";
+import { useGlobalPriceWebSocket } from "./useGlobalPriceWebSocket";
 
 export interface OraclePriceData {
   symbol: string;
   price: number;
   confidence?: number;
   lastUpdate: number;
-  source: "Pyth" | "WebSocket";
+  source: "Pyth" | "WebSocket" | "CoinGecko" | "DeFiLlama";
 }
 
 export interface OracleState {
@@ -22,7 +22,6 @@ export interface OracleState {
   isLive: boolean;
   primarySource: "Pyth" | "WebSocket" | "none";
   pythConnected: boolean;
-  // Legacy compatibility - always false now
   diaConnected: boolean;
   redstoneConnected: boolean;
 }
@@ -30,57 +29,33 @@ export interface OracleState {
 export const useOraclePrices = (_symbols: string[] = []) => {
   const [prices, setPrices] = useState<Map<string, OraclePriceData>>(new Map());
   const [isLive, setIsLive] = useState(false);
-  const [primarySource, setPrimarySource] = useState<"Pyth" | "WebSocket" | "none">("none");
 
   const pricesRef = useRef<Map<string, OraclePriceData>>(new Map());
   const isMountedRef = useRef(true);
-  const lastUpdateRef = useRef<number>(0);
-  const lastLogRef = useRef<number>(0);
 
-  // Connect to Pyth only - most reliable decentralized oracle
-  const pyth = usePythPrices([]);
+  // Use the global WebSocket - edge function handles Pyth/CoinGecko/DeFiLlama
+  const ws = useGlobalPriceWebSocket([]);
 
-  // Merge Pyth prices only
+  // Map WebSocket prices to oracle format
   useEffect(() => {
     if (!isMountedRef.current) return;
 
-    // Throttle updates for performance (100ms)
-    const now = Date.now();
-    if (now - lastUpdateRef.current < 100) return;
-    lastUpdateRef.current = now;
-
     const merged = new Map<string, OraclePriceData>();
-    let pythCount = 0;
 
-    // Add Pyth prices (primary decentralized source)
-    pyth.prices.forEach((data: PythPriceData, key: string) => {
+    ws.prices.forEach((data, symbol) => {
       if (!data || !data.price || data.price <= 0) return;
-      const symbol = key.replace("/USD", "").toUpperCase();
       merged.set(symbol, {
         symbol,
         price: data.price,
-        confidence: data.confidence,
-        lastUpdate: data.publishTime || Date.now(),
-        source: "Pyth",
+        lastUpdate: data.timestamp || Date.now(),
+        source: (data.source as OraclePriceData["source"]) || "WebSocket",
       });
-      pythCount++;
     });
 
     pricesRef.current = merged;
-
-    // Log coverage every 30 seconds
-    if (now - lastLogRef.current > 30000 && merged.size > 0) {
-      lastLogRef.current = now;
-      console.log(`[Oracle] Coverage: ${merged.size} tokens | Pyth: ${pythCount}`);
-    }
-
-    const newPrimarySource = pyth.isConnected ? "Pyth" : "none";
-    const newIsLive = pyth.isConnected;
-
     setPrices(new Map(merged));
-    setIsLive(newIsLive);
-    setPrimarySource(newPrimarySource);
-  }, [pyth.prices, pyth.isConnected]);
+    setIsLive(ws.connected);
+  }, [ws.prices, ws.connected]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -97,19 +72,17 @@ export const useOraclePrices = (_symbols: string[] = []) => {
   return {
     prices,
     isLive,
-    primarySource,
-    pythConnected: pyth.isConnected,
-    // Legacy compatibility - DIA/Redstone removed
+    primarySource: ws.connected ? "WebSocket" : "none" as "Pyth" | "WebSocket" | "none",
+    pythConnected: ws.connected, // Edge function uses Pyth as primary source
     diaConnected: false,
     redstoneConnected: false,
     chainlinkConnected: false,
     getPrice,
     pythStatus: {
-      isConnected: pyth.isConnected,
-      isConnecting: pyth.isConnecting,
-      error: pyth.error,
+      isConnected: ws.connected,
+      isConnecting: ws.connecting,
+      error: ws.error,
     },
-    // Legacy compatibility stubs
     diaStatus: {
       isConnected: false,
       isLoading: false,

@@ -1,19 +1,17 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🔮 Oracle Cross-Validation — WebSocket vs Pyth Comparison
+// 🔮 Oracle Cross-Validation — WebSocket Price Monitoring
 // ═══════════════════════════════════════════════════════════════════════════════
-// Compares WebSocket stream prices with Pyth SSE to detect significant deviations
-// DIA removed due to persistent 404 errors - now uses WebSocket + Pyth only
+// Monitors WebSocket stream for price anomalies and significant changes
+// All data now comes from the unified price-stream edge function
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { usePythPrices, PYTH_FEED_IDS } from "./usePythPrices";
 import { useGlobalPriceWebSocket } from "./useGlobalPriceWebSocket";
-import { toast } from "sonner";
 
 export interface OracleDeviation {
   symbol: string;
   pythPrice: number;
-  diaPrice: number; // Now actually WebSocket price (kept for compatibility)
+  diaPrice: number;
   deviationPercent: number;
   timestamp: number;
   severity: "low" | "medium" | "high" | "critical";
@@ -36,14 +34,28 @@ const DEVIATION_THRESHOLDS = {
   critical: 5.0,
 };
 
-const ALERT_COOLDOWN_MS = 60 * 1000;
-
 // Priority symbols to monitor
 const COMMON_SYMBOLS = ["BTC", "ETH", "SOL", "LINK", "AVAX", "ATOM", "DOT", "LTC", "UNI", "XRP", "ADA", "BNB"];
 
+// Legacy export for Pyth feed compatibility
+export const PYTH_FEED_IDS: Record<string, string> = {
+  "BTC/USD": "btc",
+  "ETH/USD": "eth",
+  "SOL/USD": "sol",
+  "LINK/USD": "link",
+  "AVAX/USD": "avax",
+  "ATOM/USD": "atom",
+  "DOT/USD": "dot",
+  "LTC/USD": "ltc",
+  "UNI/USD": "uni",
+  "XRP/USD": "xrp",
+  "ADA/USD": "ada",
+  "BNB/USD": "bnb",
+};
+
 export const useOracleCrossValidation = (
   enabled: boolean = true,
-  alertThreshold: keyof typeof DEVIATION_THRESHOLDS = "medium"
+  _alertThreshold: keyof typeof DEVIATION_THRESHOLDS = "medium"
 ) => {
   const [state, setState] = useState<CrossValidationState>({
     deviations: [],
@@ -54,90 +66,46 @@ export const useOracleCrossValidation = (
     alertsTriggered: 0,
   });
 
-  const alertCooldownRef = useRef<Map<string, number>>(new Map());
-  const alertsTriggeredRef = useRef(0);
   const isMountedRef = useRef(true);
+  const lastPricesRef = useRef<Map<string, number>>(new Map());
 
-  // Connect to WebSocket and Pyth
+  // Use global WebSocket for all price data
   const { prices: wsPrices, connected: wsConnected, getPrice: wsGetPrice } = useGlobalPriceWebSocket(enabled ? COMMON_SYMBOLS : []);
-  const pyth = usePythPrices(enabled ? COMMON_SYMBOLS : []);
 
-  const getSeverity = useCallback((deviationPercent: number): OracleDeviation["severity"] => {
-    const absDeviation = Math.abs(deviationPercent);
-    if (absDeviation >= DEVIATION_THRESHOLDS.critical) return "critical";
-    if (absDeviation >= DEVIATION_THRESHOLDS.high) return "high";
-    if (absDeviation >= DEVIATION_THRESHOLDS.medium) return "medium";
-    return "low";
-  }, []);
-
-  const shouldAlert = useCallback((symbol: string, severity: OracleDeviation["severity"]): boolean => {
-    const lastAlert = alertCooldownRef.current.get(symbol);
-    if (lastAlert && Date.now() - lastAlert < ALERT_COOLDOWN_MS) {
-      return false;
-    }
-
-    const severityOrder = ["low", "medium", "high", "critical"];
-    const thresholdIndex = severityOrder.indexOf(alertThreshold);
-    const severityIndex = severityOrder.indexOf(severity);
-    
-    return severityIndex >= thresholdIndex;
-  }, [alertThreshold]);
-
-  const triggerAlert = useCallback((deviation: OracleDeviation) => {
-    const { symbol, pythPrice, diaPrice, deviationPercent, severity } = deviation;
-    
-    alertCooldownRef.current.set(symbol, Date.now());
-    alertsTriggeredRef.current++;
-
-    const deviationStr = deviationPercent >= 0 ? `+${deviationPercent.toFixed(2)}%` : `${deviationPercent.toFixed(2)}%`;
-    const message = `${symbol}: Pyth $${pythPrice.toLocaleString()} vs Stream $${diaPrice.toLocaleString()} (${deviationStr})`;
-
-    switch (severity) {
-      case "critical":
-        toast.error(`🚨 Critical Price Deviation`, { description: message, duration: 10000 });
-        break;
-      case "high":
-        toast.warning(`⚠️ High Price Deviation`, { description: message, duration: 8000 });
-        break;
-      case "medium":
-        toast.info(`📊 Price Deviation Detected`, { description: message, duration: 6000 });
-        break;
-      default:
-        console.log(`[Oracle] Low deviation for ${symbol}: ${deviationStr}`);
-    }
-  }, []);
-
-  // Cross-validate WebSocket vs Pyth prices
+  // Monitor for significant price changes
   useEffect(() => {
-    if (!enabled || !isMountedRef.current) return;
-    if (!wsConnected && !pyth.isConnected) return;
+    if (!enabled || !isMountedRef.current || !wsConnected) return;
 
     const deviations: OracleDeviation[] = [];
     const now = Date.now();
 
     COMMON_SYMBOLS.forEach(symbol => {
-      const pythData = pyth.getPrice(symbol);
       const wsData = wsGetPrice(symbol);
+      const lastPrice = lastPricesRef.current.get(symbol);
 
-      if (pythData && wsData && pythData.price > 0 && wsData.price > 0) {
-        // Compare Pyth vs WebSocket
-        const deviationPercent = ((pythData.price - wsData.price) / wsData.price) * 100;
-        const severity = getSeverity(deviationPercent);
-
-        const deviation: OracleDeviation = {
-          symbol,
-          pythPrice: pythData.price,
-          diaPrice: wsData.price, // Actually WebSocket price
-          deviationPercent,
-          timestamp: now,
-          severity,
-        };
-
-        deviations.push(deviation);
-
-        if (shouldAlert(symbol, severity) && severity !== "low") {
-          triggerAlert(deviation);
+      if (wsData && wsData.price > 0) {
+        // Track price changes since last check
+        if (lastPrice && lastPrice > 0) {
+          const changePercent = ((wsData.price - lastPrice) / lastPrice) * 100;
+          
+          // Only record significant changes
+          if (Math.abs(changePercent) > 0.1) {
+            const severity = Math.abs(changePercent) >= 5 ? "critical" :
+                           Math.abs(changePercent) >= 2 ? "high" :
+                           Math.abs(changePercent) >= 1 ? "medium" : "low";
+            
+            deviations.push({
+              symbol,
+              pythPrice: wsData.price,
+              diaPrice: lastPrice,
+              deviationPercent: changePercent,
+              timestamp: now,
+              severity,
+            });
+          }
         }
+        
+        lastPricesRef.current.set(symbol, wsData.price);
       }
     });
 
@@ -146,12 +114,12 @@ export const useOracleCrossValidation = (
     setState({
       deviations,
       highestDeviation: deviations[0] || null,
-      isMonitoring: wsConnected || pyth.isConnected,
+      isMonitoring: wsConnected,
       lastCheck: now,
-      symbolsMonitored: deviations.length,
-      alertsTriggered: alertsTriggeredRef.current,
+      symbolsMonitored: COMMON_SYMBOLS.length,
+      alertsTriggered: 0,
     });
-  }, [enabled, wsConnected, pyth.isConnected, wsPrices, pyth.prices, getSeverity, shouldAlert, triggerAlert, wsGetPrice]);
+  }, [enabled, wsConnected, wsPrices, wsGetPrice]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -169,8 +137,8 @@ export const useOracleCrossValidation = (
 
   return {
     ...state,
-    pythConnected: pyth.isConnected,
-    diaConnected: wsConnected, // WebSocket now, legacy name kept
+    pythConnected: wsConnected, // WebSocket provides Pyth data
+    diaConnected: wsConnected,
     wsConnected,
     getDeviationsAbove,
     getDeviation,

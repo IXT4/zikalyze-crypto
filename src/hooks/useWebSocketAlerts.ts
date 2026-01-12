@@ -1,14 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🔔 useWebSocketAlerts — Real-Time Price Alert Detection via WebSocket
 // ═══════════════════════════════════════════════════════════════════════════════
-// Monitors WebSocket price stream for user-defined alert thresholds
-// Triggers notifications instantly when prices cross thresholds
+// Monitors the global WebSocket price stream for user-defined alert thresholds
+// Uses the singleton useGlobalPriceWebSocket for efficiency
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useEffect, useRef, useCallback } from "react";
 import { usePriceAlerts } from "./usePriceAlerts";
-import { usePriceWebSocket, WebSocketPriceUpdate } from "./usePriceWebSocket";
-import { toast } from "sonner";
+import { useGlobalPriceWebSocket, WebSocketPriceData } from "./useGlobalPriceWebSocket";
 
 interface AlertCheckResult {
   triggered: boolean;
@@ -21,7 +20,7 @@ interface AlertCheckResult {
 
 export function useWebSocketAlerts(enabledSymbols: string[] = []) {
   const { alerts, checkAlerts: checkDatabaseAlerts } = usePriceAlerts();
-  const ws = usePriceWebSocket(enabledSymbols);
+  const ws = useGlobalPriceWebSocket(enabledSymbols);
   
   const lastCheckRef = useRef<Map<string, number>>(new Map());
   const alertsCheckedRef = useRef<Set<string>>(new Set());
@@ -29,7 +28,7 @@ export function useWebSocketAlerts(enabledSymbols: string[] = []) {
   
   // Convert WebSocket prices to the format expected by checkAlerts
   const convertPricesToCheckFormat = useCallback((
-    prices: Map<string, WebSocketPriceUpdate>
+    prices: Map<string, WebSocketPriceData>
   ): { symbol: string; current_price: number; price_change_percentage_24h?: number; total_volume?: number }[] => {
     const result: { symbol: string; current_price: number; price_change_percentage_24h?: number; total_volume?: number }[] = [];
     
@@ -37,8 +36,8 @@ export function useWebSocketAlerts(enabledSymbols: string[] = []) {
       result.push({
         symbol,
         current_price: update.price,
-        price_change_percentage_24h: update.change24h,
-        total_volume: 0, // WebSocket doesn't provide volume
+        price_change_percentage_24h: 0,
+        total_volume: 0,
       });
     });
     
@@ -46,7 +45,7 @@ export function useWebSocketAlerts(enabledSymbols: string[] = []) {
   }, []);
   
   // Check for instant alert triggers from WebSocket
-  const checkInstantAlerts = useCallback((priceUpdate: WebSocketPriceUpdate): AlertCheckResult[] => {
+  const checkInstantAlerts = useCallback((priceUpdate: WebSocketPriceData): AlertCheckResult[] => {
     const results: AlertCheckResult[] = [];
     const symbol = priceUpdate.symbol.toUpperCase();
     const price = priceUpdate.price;
