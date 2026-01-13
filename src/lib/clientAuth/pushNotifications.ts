@@ -1,11 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🔔 Client-Side Push Notifications
+// 🔔 Client-Side Push Notifications with ZK Encryption
 // ═══════════════════════════════════════════════════════════════════════════════
 // Fully client-side push notification management
-// Uses native browser Notification API
+// Uses native browser Notification API with encrypted settings
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const STORAGE_KEY = "zk_push_settings";
+import { zkEncrypt, zkDecrypt } from "@/lib/zkCrypto";
+
+const STORAGE_KEY = "zk_push_settings_v2";
 
 interface PushSettings {
   enabled: boolean;
@@ -23,21 +25,33 @@ const DEFAULT_SETTINGS: PushSettings = {
   volumeSpike: true,
 };
 
-// Get push settings
-export function getPushSettings(userId: string): PushSettings {
+// Get push settings (encrypted)
+export async function getPushSettings(userId: string): Promise<PushSettings> {
   try {
     const raw = localStorage.getItem(`${STORAGE_KEY}_${userId}`);
     if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    
+    const decrypted = await zkDecrypt(raw);
+    if (!decrypted) return DEFAULT_SETTINGS;
+    
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(decrypted) };
   } catch {
     return DEFAULT_SETTINGS;
   }
 }
 
-// Save push settings
-export function savePushSettings(userId: string, settings: Partial<PushSettings>): void {
-  const current = getPushSettings(userId);
-  localStorage.setItem(`${STORAGE_KEY}_${userId}`, JSON.stringify({ ...current, ...settings }));
+// Save push settings (encrypted)
+export async function savePushSettings(userId: string, settings: Partial<PushSettings>): Promise<void> {
+  try {
+    const current = await getPushSettings(userId);
+    const updated = { ...current, ...settings };
+    const encrypted = await zkEncrypt(JSON.stringify(updated));
+    localStorage.setItem(`${STORAGE_KEY}_${userId}`, encrypted);
+  } catch {
+    // Fallback to plain storage
+    const current = await getPushSettings(userId);
+    localStorage.setItem(`${STORAGE_KEY}_${userId}`, JSON.stringify({ ...current, ...settings }));
+  }
 }
 
 // Check if notifications are supported
@@ -68,7 +82,7 @@ export async function enablePushNotifications(userId: string): Promise<boolean> 
   const granted = await requestNotificationPermission();
   
   if (granted) {
-    savePushSettings(userId, { enabled: true });
+    await savePushSettings(userId, { enabled: true });
     
     // Show confirmation notification
     showNotification({
@@ -82,8 +96,8 @@ export async function enablePushNotifications(userId: string): Promise<boolean> 
 }
 
 // Disable push notifications
-export function disablePushNotifications(userId: string): void {
-  savePushSettings(userId, { enabled: false });
+export async function disablePushNotifications(userId: string): Promise<void> {
+  await savePushSettings(userId, { enabled: false });
 }
 
 // Show a notification
@@ -104,6 +118,7 @@ export function showNotification(options: {
     tag: options.tag || `zk-${Date.now()}`,
     badge: "/pwa-192x192.png",
   });
+  
   if (options.url) {
     notification.onclick = () => {
       window.focus();
@@ -119,14 +134,14 @@ export function showNotification(options: {
 }
 
 // Send price alert notification
-export function sendPriceAlertNotification(
+export async function sendPriceAlertNotification(
   userId: string,
   symbol: string,
   condition: "above" | "below",
   targetPrice: number,
   currentPrice: number
-): void {
-  const settings = getPushSettings(userId);
+): Promise<void> {
+  const settings = await getPushSettings(userId);
   if (!settings.enabled || !settings.priceAlerts) return;
   
   const emoji = condition === "above" ? "📈" : "📉";
@@ -142,13 +157,13 @@ export function sendPriceAlertNotification(
 }
 
 // Send whale activity notification
-export function sendWhaleActivityNotification(
+export async function sendWhaleActivityNotification(
   userId: string,
   symbol: string,
   type: "buy" | "sell",
   amount: number
-): void {
-  const settings = getPushSettings(userId);
+): Promise<void> {
+  const settings = await getPushSettings(userId);
   if (!settings.enabled || !settings.whaleActivity) return;
   
   const emoji = type === "buy" ? "🐋💚" : "🐋❤️";
@@ -164,13 +179,13 @@ export function sendWhaleActivityNotification(
 }
 
 // Send sentiment shift notification
-export function sendSentimentNotification(
+export async function sendSentimentNotification(
   userId: string,
   symbol: string,
   sentiment: "bullish" | "bearish" | "neutral",
   confidence: number
-): void {
-  const settings = getPushSettings(userId);
+): Promise<void> {
+  const settings = await getPushSettings(userId);
   if (!settings.enabled || !settings.sentimentShift) return;
   
   const emoji = sentiment === "bullish" ? "🟢" : sentiment === "bearish" ? "🔴" : "⚪";
@@ -185,12 +200,12 @@ export function sendSentimentNotification(
 }
 
 // Send volume spike notification
-export function sendVolumeSpikeNotification(
+export async function sendVolumeSpikeNotification(
   userId: string,
   symbol: string,
   volumeChange: number
-): void {
-  const settings = getPushSettings(userId);
+): Promise<void> {
+  const settings = await getPushSettings(userId);
   if (!settings.enabled || !settings.volumeSpike) return;
   
   showNotification({

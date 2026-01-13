@@ -36,7 +36,7 @@ export function usePushNotifications() {
     
     try {
       const permission = getNotificationPermission();
-      const settings = getPushSettings(user.id);
+      const settings = await getPushSettings(user.id);
       setIsSubscribed(permission === 'granted' && settings.enabled);
     } catch (error) {
       console.error('Error checking subscription:', error);

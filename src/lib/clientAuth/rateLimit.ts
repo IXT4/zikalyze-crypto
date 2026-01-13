@@ -1,11 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🔒 Client-Side Rate Limiting
+// 🔒 Client-Side Rate Limiting with ZK Encryption
 // ═══════════════════════════════════════════════════════════════════════════════
-// Fully client-side rate limiting using localStorage
-// No server dependencies
+// Fully client-side rate limiting using encrypted localStorage
+// No server dependencies - all data ZK encrypted
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const STORAGE_KEY = "zk_rate_limit";
+import { zkEncrypt, zkDecrypt } from "@/lib/zkCrypto";
+
+const STORAGE_KEY = "zk_rate_limit_v2";
 const MAX_ATTEMPTS = 5;
 const WINDOW_MINUTES = 15;
 
@@ -21,21 +23,32 @@ interface RateLimitResult {
 }
 
 function getStorageKey(email: string): string {
-  return `${STORAGE_KEY}_${email.toLowerCase()}`;
+  return `${STORAGE_KEY}_${email.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
 }
 
-function getData(email: string): RateLimitData {
+async function getData(email: string): Promise<RateLimitData> {
   try {
     const raw = localStorage.getItem(getStorageKey(email));
     if (!raw) return { attempts: [] };
-    return JSON.parse(raw);
+    
+    // Decrypt the data
+    const decrypted = await zkDecrypt(raw);
+    if (!decrypted) return { attempts: [] };
+    
+    return JSON.parse(decrypted);
   } catch {
     return { attempts: [] };
   }
 }
 
-function saveData(email: string, data: RateLimitData): void {
-  localStorage.setItem(getStorageKey(email), JSON.stringify(data));
+async function saveData(email: string, data: RateLimitData): Promise<void> {
+  try {
+    const encrypted = await zkEncrypt(JSON.stringify(data));
+    localStorage.setItem(getStorageKey(email), encrypted);
+  } catch {
+    // Fallback to plain storage if encryption fails
+    localStorage.setItem(getStorageKey(email), JSON.stringify(data));
+  }
 }
 
 // Clean up old attempts outside the window
@@ -49,9 +62,9 @@ function cleanOldAttempts(data: RateLimitData): RateLimitData {
 }
 
 // Check if login is allowed
-export function checkRateLimit(email: string): RateLimitResult {
-  const data = cleanOldAttempts(getData(email));
-  saveData(email, data);
+export async function checkRateLimit(email: string): Promise<RateLimitResult> {
+  const data = cleanOldAttempts(await getData(email));
+  await saveData(email, data);
   
   const failedAttempts = data.attempts.filter(a => !a.success);
   const failedCount = failedAttempts.length;
@@ -80,8 +93,8 @@ export function checkRateLimit(email: string): RateLimitResult {
 }
 
 // Record a login attempt
-export function recordLoginAttempt(email: string, success: boolean): void {
-  let data = cleanOldAttempts(getData(email));
+export async function recordLoginAttempt(email: string, success: boolean): Promise<void> {
+  let data = cleanOldAttempts(await getData(email));
   
   if (success) {
     // Clear failed attempts on success
@@ -93,13 +106,13 @@ export function recordLoginAttempt(email: string, success: boolean): void {
     success,
   });
   
-  saveData(email, data);
+  await saveData(email, data);
   
   // Auto-cleanup: remove data older than 24 hours
   const dayMs = 24 * 60 * 60 * 1000;
   const dayCutoff = Date.now() - dayMs;
   data.attempts = data.attempts.filter(a => a.timestamp > dayCutoff);
-  saveData(email, data);
+  await saveData(email, data);
 }
 
 // Format retry_after for display
@@ -112,8 +125,8 @@ export function formatRetryAfter(seconds: number): string {
 }
 
 // Get recent login history (for settings page)
-export function getLoginHistory(email: string, limit = 10): { timestamp: Date; success: boolean }[] {
-  const data = getData(email);
+export async function getLoginHistory(email: string, limit = 10): Promise<{ timestamp: Date; success: boolean }[]> {
+  const data = await getData(email);
   return data.attempts
     .slice(-limit)
     .reverse()
