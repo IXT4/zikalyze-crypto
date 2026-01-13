@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔒 Running pre-commit security checks..."
+
+# Run ESLint on staged files
+echo "📝 Running ESLint..."
+npx lint-staged
+
+# Run npm audit for high/critical vulnerabilities
+echo "🔍 Running security audit..."
+npm audit --audit-level=high --omit=dev
+
+# Run TypeScript type checking
+echo "🔷 Running TypeScript check..."
+npx tsc --noEmit
+
+echo "✅ All pre-commit checks passed!"
