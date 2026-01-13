@@ -1,0 +1,138 @@
+name: 🔒 Security Bug Report
+description: Report a security vulnerability or concern (for sensitive issues, use GitHub Security Advisories instead)
+title: "[Security]: "
+labels: ["security", "bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚠️ Important Security Notice
+        
+        **For critical vulnerabilities**, please use [GitHub Security Advisories](../../security/advisories/new) instead of this public form.
+        
+        This template is for lower-severity security concerns that don't expose sensitive information when discussed publicly.
+
+  - type: checkboxes
+    id: acknowledgment
+    attributes:
+      label: Security Acknowledgment
+      description: Please confirm the following before submitting
+      options:
+        - label: I have reviewed the [Security Policy](../../SECURITY.md)
+          required: true
+        - label: This issue does NOT contain sensitive information (credentials, tokens, PII)
+          required: true
+        - label: This is NOT a critical vulnerability (use Security Advisories for those)
+          required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity Level
+      description: How severe is this security issue?
+      options:
+        - Low - Minor security improvement
+        - Medium - Potential vulnerability with limited impact
+        - High - Significant vulnerability (consider using Security Advisories)
+      default: 0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Security Category
+      description: What type of security issue is this?
+      options:
+        - Authentication / Authorization
+        - Input Validation
+        - Data Exposure
+        - Cross-Site Scripting (XSS)
+        - SQL Injection
+        - Insecure Dependencies
+        - Configuration Issue
+        - Privacy Concern
+        - Rate Limiting / DoS
+        - Cryptography
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the security issue clearly
+      placeholder: |
+        What is the security concern?
+        Where in the application does this occur?
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Potential Impact
+      description: What could an attacker achieve by exploiting this?
+      placeholder: |
+        - What data could be exposed?
+        - What actions could be performed?
+        - Who would be affected?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can this issue be reproduced?
+      placeholder: |
+        1. Navigate to...
+        2. Enter...
+        3. Observe...
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected-components
+    attributes:
+      label: Affected Components
+      description: Which parts of the application are affected?
+      placeholder: |
+        - Pages: /auth, /settings
+        - Components: LoginForm, SessionManagement
+        - Backend: Edge functions, Database tables
+    validations:
+      required: false
+
+  - type: textarea
+    id: suggested-fix
+    attributes:
+      label: Suggested Fix
+      description: If you have ideas for how to fix this, please share
+      placeholder: |
+        Describe potential solutions or mitigations...
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Any relevant links, CVEs, or documentation
+      placeholder: |
+        - OWASP reference: https://...
+        - Related CVE: CVE-XXXX-XXXXX
+        - Documentation: https://...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you like to help fix this issue?
+      options:
+        - label: I am willing to submit a pull request to fix this issue
