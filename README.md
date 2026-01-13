@@ -6,6 +6,7 @@
 
 **Decentralized Crypto Trading Intelligence Platform**
 
+[![Security Checks](https://github.com/tikewn/Zikalyze/actions/workflows/security-checks.yml/badge.svg)](https://github.com/tikewn/Zikalyze/actions/workflows/security-checks.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![React](https://img.shields.io/badge/React-18.3-blue.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
