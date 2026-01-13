@@ -206,6 +206,34 @@ export default {
             boxShadow: "0 0 0 1px hsl(var(--destructive) / 0.3), 0 0 16px 2px hsl(var(--destructive) / 0.2)",
           },
         },
+        "cmc-glow-up": {
+          "0%": {
+            backgroundColor: "hsl(var(--success) / 0.25)",
+            boxShadow: "inset 0 0 20px 4px hsl(var(--success) / 0.3), 0 0 12px 2px hsl(var(--success) / 0.2)",
+          },
+          "50%": {
+            backgroundColor: "hsl(var(--success) / 0.15)",
+            boxShadow: "inset 0 0 15px 2px hsl(var(--success) / 0.2), 0 0 8px 1px hsl(var(--success) / 0.15)",
+          },
+          "100%": {
+            backgroundColor: "transparent",
+            boxShadow: "none",
+          },
+        },
+        "cmc-glow-down": {
+          "0%": {
+            backgroundColor: "hsl(var(--destructive) / 0.25)",
+            boxShadow: "inset 0 0 20px 4px hsl(var(--destructive) / 0.3), 0 0 12px 2px hsl(var(--destructive) / 0.2)",
+          },
+          "50%": {
+            backgroundColor: "hsl(var(--destructive) / 0.15)",
+            boxShadow: "inset 0 0 15px 2px hsl(var(--destructive) / 0.2), 0 0 8px 1px hsl(var(--destructive) / 0.15)",
+          },
+          "100%": {
+            backgroundColor: "transparent",
+            boxShadow: "none",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -223,6 +251,8 @@ export default {
         "roll-down": "roll-down 0.2s ease-out forwards",
         "live-glow-bullish": "live-glow-bullish 2s ease-in-out infinite",
         "live-glow-bearish": "live-glow-bearish 2s ease-in-out infinite",
+        "cmc-glow-up": "cmc-glow-up 1.5s ease-out forwards",
+        "cmc-glow-down": "cmc-glow-down 1.5s ease-out forwards",
       },
     },
   },

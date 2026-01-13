@@ -27,7 +27,7 @@ interface Top100CryptoListProps {
   loading?: boolean;
 }
 
-// Memoized row component with flash animation on price changes
+// Memoized row component with CMC-style glow animation on price changes
 interface CryptoRowProps {
   crypto: CryptoPrice;
   index: number;
@@ -53,12 +53,40 @@ const CryptoRow = memo(({
   onSelect,
   onAlertClick,
 }: CryptoRowProps) => {
+  const [glowDirection, setGlowDirection] = useState<"up" | "down" | null>(null);
+  const prevPriceRef = useRef<number>(livePrice);
+  const isFirstRender = useRef(true);
+  
+  useEffect(() => {
+    // Skip animation on first render
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      prevPriceRef.current = livePrice;
+      return;
+    }
+    
+    const prevPrice = prevPriceRef.current;
+    const priceDiff = Math.abs(livePrice - prevPrice) / prevPrice;
+    
+    // Only trigger glow for changes > 0.1% to avoid micro-flickers
+    if (priceDiff > 0.001 && livePrice !== prevPrice) {
+      setGlowDirection(livePrice > prevPrice ? "up" : "down");
+      
+      // Clear glow after animation completes
+      const timer = setTimeout(() => setGlowDirection(null), 1500);
+      prevPriceRef.current = livePrice;
+      return () => clearTimeout(timer);
+    }
+  }, [livePrice]);
+  
   return (
     <tr
       onClick={() => onSelect(crypto.symbol.toUpperCase())}
       className={cn(
-        "border-b border-border/50 cursor-pointer transition-colors duration-200 hover:bg-secondary/50",
-        isSelected && "bg-primary/10"
+        "border-b border-border/50 cursor-pointer transition-all duration-200 hover:bg-secondary/50",
+        isSelected && "bg-primary/10",
+        glowDirection === "up" && "animate-cmc-glow-up",
+        glowDirection === "down" && "animate-cmc-glow-down"
       )}
     >
       <td className="py-3 text-sm text-muted-foreground">{index + 1}</td>
