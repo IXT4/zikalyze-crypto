@@ -1,22 +1,10 @@
 project_id = "eqtzrftndyninwasclfd"
 
-[functions.send-push-notification]
-verify_jwt = false
-
 [functions.delete-account]
 verify_jwt = false
 
 [functions.send-email]
 verify_jwt = false
 
-[functions.check-rate-limit]
-verify_jwt = false
-
-[functions.totp-2fa]
-verify_jwt = false
-
 [functions.send-digest-email]
-verify_jwt = false
-
-[functions.manage-sessions]
 verify_jwt = false
