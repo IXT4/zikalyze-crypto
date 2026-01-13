@@ -692,56 +692,25 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-foreground">Zikalyze AI</h3>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/20 text-primary">v11.0</span>
-                {/* Status badges - learning runs silently in background */}
-                {isOffline ? (
+                {/* Minimalist live indicator - only show when offline/cached, hide all tech labels */}
+                {isOffline && (
                   <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-destructive/20 text-destructive">
                     <WifiOff className="h-3 w-3" />
                     <span>OFFLINE</span>
                   </div>
-                ) : isUsingCache ? (
+                )}
+                {isUsingCache && !isOffline && (
                   <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-warning/20 text-warning">
                     <Database className="h-3 w-3" />
                     <span>CACHED</span>
                   </div>
-                ) : liveData.priceIsLive ? (
-                  <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium transition-all bg-success/20 text-success">
-                    <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                    <span>LIVE</span>
-                  </div>
-                ) : null}
-                {/* Cache Available Indicator */}
-                {hasCache && !isUsingCache && !isOffline && (
-                  <div className="flex items-center gap-1 text-[9px] px-1 py-0.5 rounded bg-muted/50 text-muted-foreground" title={`Cached: ${getCacheAge()}`}>
-                    <Database className="h-2.5 w-2.5" />
-                  </div>
                 )}
-                {/* Chart Trend Data Status */}
-                {chartTrendData?.isLive && (
-                  <div className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-chart-orange/20 text-chart-orange font-medium" title={`24h chart: ${chartTrendData.candles.length} candles, RSI ${chartTrendData.rsi.toFixed(0)}`}>
-                    <BarChart3 className="h-2.5 w-2.5" />
-                    <span>24H CHART</span>
-                  </div>
-                )}
-                {/* Multi-Timeframe Status */}
-                {multiTfData && !multiTfData.isLoading && multiTfData.confluence.alignedTimeframes >= 2 && (
-                  <div className={cn(
-                    "flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium",
-                    multiTfData.confluence.overallBias === 'BULLISH' ? "bg-success/20 text-success" :
-                    multiTfData.confluence.overallBias === 'BEARISH' ? "bg-destructive/20 text-destructive" :
-                    "bg-muted/50 text-muted-foreground"
-                  )} title={`Multi-TF: ${multiTfData.confluence.recommendation}`}>
-                    <Layers className="h-2.5 w-2.5" />
-                    <span>MTF {multiTfData.confluence.alignedTimeframes}/4</span>
-                  </div>
+                {/* Subtle pulsing dot when connected to real-time data - no text labels */}
+                {!isOffline && !isUsingCache && isWebSocketLive && (
+                  <span className="h-2 w-2 rounded-full bg-success animate-pulse" title="Connected to real-time price & chain data" />
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{displayedAccuracy.toFixed(0)}% Accuracy</span>
-                {learningStats && learningStats.total_feedback > 0 && (
-                  <span className="text-xs text-primary/70">• {learningStats.total_feedback} feedback</span>
-                )}
-              </div>
+              <span className="text-xs text-muted-foreground">Real-time market analysis</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
