@@ -1,13 +1,19 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📜 useAnalysisHistoryClient — Fully Client-Side Analysis History
+// 📜 useAnalysisHistoryClient — Fully Client-Side Analysis History with E2E Encryption
 // ═══════════════════════════════════════════════════════════════════════════════
 // Runs 100% in the browser with IndexedDB storage and optional cloud sync
+// All sensitive analysis data is encrypted before storage
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import * as storage from '@/lib/clientStorage';
 import { queueSync, STORES } from '@/lib/clientStorage';
+import { 
+  encryptAnalysisRecord, 
+  decryptAnalysisRecords,
+  decryptAnalysisRecord 
+} from '@/lib/e2eAnalysisEncryption';
 
 export interface AnalysisRecord {
   id: string;
@@ -39,7 +45,7 @@ export const useAnalysisHistoryClient = (symbol: string) => {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
-  // Fetch history from IndexedDB
+  // Fetch history from IndexedDB and decrypt
   const fetchHistory = useCallback(async () => {
     if (!symbol) {
       setHistory([]);
@@ -54,7 +60,10 @@ export const useAnalysisHistoryClient = (symbol: string) => {
         ? localHistory.filter(r => r.user_id === user.id || r.user_id === null)
         : localHistory.filter(r => r.user_id === null);
 
-      setHistory(filtered.map(r => ({
+      // Decrypt all records
+      const decryptedRecords = await decryptAnalysisRecords(filtered);
+
+      setHistory(decryptedRecords.map(r => ({
         id: r.id,
         symbol: r.symbol,
         price: r.price,
@@ -120,7 +129,7 @@ export const useAnalysisHistoryClient = (symbol: string) => {
     calculateLearningStats();
   }, [fetchHistory, calculateLearningStats]);
 
-  // Save a new analysis
+  // Save a new analysis with E2E encryption
   const saveAnalysis = useCallback(async (
     analysisText: string,
     price: number,
@@ -133,7 +142,7 @@ export const useAnalysisHistoryClient = (symbol: string) => {
         ? Math.round(confidence)
         : null;
 
-      const newRecord: storage.ClientAnalysisRecord = {
+      const plaintextRecord: storage.ClientAnalysisRecord = {
         id: storage.generateId(),
         symbol: symbol.toUpperCase(),
         price,
@@ -148,22 +157,26 @@ export const useAnalysisHistoryClient = (symbol: string) => {
         synced: false,
       };
 
-      // Save to IndexedDB
-      await storage.saveAnalysisRecord(newRecord);
+      // Encrypt sensitive fields before storage
+      const encryptedRecord = await encryptAnalysisRecord(plaintextRecord);
+      
+      // Save encrypted record to IndexedDB
+      await storage.saveAnalysisRecord(encryptedRecord);
 
-      // Queue for cloud sync if user is authenticated
+      // Queue encrypted data for cloud sync if user is authenticated
       if (user) {
         await queueSync({
           type: 'create',
           store: STORES.ANALYSIS_HISTORY,
-          data: newRecord,
+          data: encryptedRecord,
         });
       }
 
       // Refresh history
       await fetchHistory();
 
-      return newRecord.id;
+      console.log('[AnalysisHistory] Saved E2E encrypted analysis');
+      return plaintextRecord.id;
     } catch (err) {
       console.error('[AnalysisHistory] Error saving analysis:', err);
       return null;
@@ -179,14 +192,17 @@ export const useAnalysisHistoryClient = (symbol: string) => {
       if (user) {
         const record = history.find(r => r.id === id);
         if (record) {
+          // Re-encrypt the record with updated feedback
+          const encryptedRecord = await encryptAnalysisRecord({
+            ...record,
+            was_correct: wasCorrect,
+            feedback_at: new Date().toISOString(),
+          });
+          
           await queueSync({
             type: 'update',
             store: STORES.ANALYSIS_HISTORY,
-            data: {
-              ...record,
-              was_correct: wasCorrect,
-              feedback_at: new Date().toISOString(),
-            },
+            data: encryptedRecord,
           });
         }
       }
