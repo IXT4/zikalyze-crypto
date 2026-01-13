@@ -1,66 +1,53 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-
-// VAPID public key from environment
-const VAPID_PUBLIC_KEY = 'BMAOEKFP15nphuIcym7qsUcKxumxeCZfrQKE21HuAlyADnCVOkrOsy3vzg0ZScARSirk5JQSbJa3jZwYiCD6Ano';
-
-function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray.buffer;
-}
+import { useAuth } from '@/hooks/useAuth';
+import {
+  isNotificationSupported,
+  getNotificationPermission,
+  enablePushNotifications,
+  disablePushNotifications,
+  getPushSettings,
+  showNotification,
+} from '@/lib/clientAuth';
 
 export function usePushNotifications() {
   const [isSupported, setIsSupported] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   // Check if push is supported
   useEffect(() => {
-    const supported = 'serviceWorker' in navigator && 'PushManager' in window && !!VAPID_PUBLIC_KEY;
+    const supported = isNotificationSupported();
     setIsSupported(supported);
     
     if (!supported) {
       setIsLoading(false);
-      if (!VAPID_PUBLIC_KEY) {
-        console.warn('VAPID public key not configured');
-      }
     }
   }, []);
 
   // Check current subscription status
   const checkSubscription = useCallback(async () => {
-    if (!isSupported) return;
+    if (!isSupported || !user?.id) {
+      setIsLoading(false);
+      return;
+    }
     
     try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      setIsSubscribed(!!subscription);
+      const permission = getNotificationPermission();
+      const settings = getPushSettings(user.id);
+      setIsSubscribed(permission === 'granted' && settings.enabled);
     } catch (error) {
       console.error('Error checking subscription:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [isSupported]);
+  }, [isSupported, user?.id]);
 
   useEffect(() => {
-    if (isSupported) {
-      // Register service worker
-      navigator.serviceWorker.register('/sw.js')
-        .then(() => checkSubscription())
-        .catch((error) => {
-          console.error('Service worker registration failed:', error);
-          setIsLoading(false);
-        });
-    }
-  }, [isSupported, checkSubscription]);
+    checkSubscription();
+  }, [checkSubscription]);
 
   const subscribe = useCallback(async (): Promise<boolean> => {
     if (!isSupported) {
@@ -72,23 +59,21 @@ export function usePushNotifications() {
       return false;
     }
 
+    if (!user?.id) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to enable push notifications",
+        variant: "destructive"
+      });
+      return false;
+    }
+
     try {
       setIsLoading(true);
 
-      // Get user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({
-          title: "Authentication Required",
-          description: "Please log in to enable push notifications",
-          variant: "destructive"
-        });
-        return false;
-      }
-
-      // Request notification permission
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
+      const success = await enablePushNotifications(user.id);
+      
+      if (!success) {
         toast({
           title: "Permission Denied",
           description: "Please allow notifications in your browser settings",
@@ -97,42 +82,10 @@ export function usePushNotifications() {
         return false;
       }
 
-      // Get push subscription
-      const registration = await navigator.serviceWorker.ready;
-      
-      // Unsubscribe from any existing subscription first
-      const existingSubscription = await registration.pushManager.getSubscription();
-      if (existingSubscription) {
-        await existingSubscription.unsubscribe();
-      }
-
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-      });
-
-      const subscriptionJson = subscription.toJSON();
-      
-      // Save to database
-      const { error } = await supabase.from('push_subscriptions').upsert({
-        user_id: user.id,
-        endpoint: subscriptionJson.endpoint!,
-        p256dh: subscriptionJson.keys!.p256dh,
-        auth: subscriptionJson.keys!.auth,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'user_id,endpoint'
-      });
-
-      if (error) {
-        console.error('Error saving subscription:', error);
-        throw error;
-      }
-
       setIsSubscribed(true);
       toast({
         title: "Push Notifications Enabled",
-        description: "You'll receive alerts even when the browser is closed"
+        description: "You'll receive alerts for price movements and market events"
       });
       
       return true;
@@ -147,28 +100,14 @@ export function usePushNotifications() {
     } finally {
       setIsLoading(false);
     }
-  }, [isSupported, toast]);
+  }, [isSupported, user?.id, toast]);
 
   const unsubscribe = useCallback(async (): Promise<boolean> => {
     try {
       setIsLoading(true);
 
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      
-      if (subscription) {
-        await subscription.unsubscribe();
-        
-        // Remove from database
-        if (user) {
-          await supabase
-            .from('push_subscriptions')
-            .delete()
-            .eq('user_id', user.id)
-            .eq('endpoint', subscription.endpoint);
-        }
+      if (user?.id) {
+        disablePushNotifications(user.id);
       }
 
       setIsSubscribed(false);
@@ -189,13 +128,25 @@ export function usePushNotifications() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [user?.id, toast]);
+
+  // Helper to show a test notification
+  const sendTestNotification = useCallback(() => {
+    if (!isSubscribed) return;
+    
+    showNotification({
+      title: "Test Notification",
+      body: "Push notifications are working correctly!",
+      urgency: "low",
+    });
+  }, [isSubscribed]);
 
   return {
     isSupported,
     isSubscribed,
     isLoading,
     subscribe,
-    unsubscribe
+    unsubscribe,
+    sendTestNotification,
   };
 }
