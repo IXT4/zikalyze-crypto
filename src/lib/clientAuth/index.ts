@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🔐 Client-Side Authentication Library
+// 🔐 Client-Side Authentication Library with ZK Encryption
 // ═══════════════════════════════════════════════════════════════════════════════
 // Fully client-side auth utilities - no server dependencies
+// All sensitive data encrypted with AES-256-GCM (ZK-style)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // TOTP 2FA
@@ -18,7 +19,7 @@ export {
   disable2FA,
 } from "./totp";
 
-// Rate Limiting
+// Rate Limiting (with ZK encryption)
 export {
   checkRateLimit,
   recordLoginAttempt,
@@ -26,7 +27,7 @@ export {
   getLoginHistory,
 } from "./rateLimit";
 
-// Session Tracking
+// Session Tracking (with ZK encryption)
 export {
   registerSession,
   listSessions,
@@ -36,7 +37,7 @@ export {
   type SessionInfo,
 } from "./sessionTracking";
 
-// Push Notifications
+// Push Notifications (with ZK encryption)
 export {
   isNotificationSupported,
   getNotificationPermission,

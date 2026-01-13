@@ -14,7 +14,7 @@ interface RateLimitResult {
 export const useRateLimit = () => {
   const checkRateLimit = async (email: string): Promise<RateLimitResult> => {
     try {
-      return checkRateLimitClient(email.toLowerCase());
+      return await checkRateLimitClient(email.toLowerCase());
     } catch (err) {
       console.error("Rate limit check error:", err);
       return { allowed: true, attempts: 0, max_attempts: 5, retry_after: 0 };
@@ -23,7 +23,7 @@ export const useRateLimit = () => {
 
   const recordLoginAttempt = async (email: string, success: boolean): Promise<void> => {
     try {
-      recordLoginAttemptClient(email.toLowerCase(), success);
+      await recordLoginAttemptClient(email.toLowerCase(), success);
     } catch (err) {
       console.error("Failed to record login attempt:", err);
     }
