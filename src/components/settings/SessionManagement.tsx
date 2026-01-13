@@ -15,35 +15,31 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Monitor, Smartphone, Tablet, Globe, Trash2, LogOut } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
-
-interface Session {
-  id: string;
-  device_info: string;
-  ip_address: string;
-  last_active_at: string;
-  created_at: string;
-  is_current: boolean;
-}
+import { useAuth } from "@/hooks/useAuth";
+import { 
+  listSessions, 
+  revokeSession as revokeSessionClient, 
+  revokeAllOtherSessions,
+  type SessionInfo 
+} from "@/lib/clientAuth";
 
 export function SessionManagement() {
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const { user } = useAuth();
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [revoking, setRevoking] = useState<string | null>(null);
 
   const fetchSessions = async () => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const response = await supabase.functions.invoke("manage-sessions", {
-        body: { action: "list" },
-      });
-
-      if (response.error) throw response.error;
-      setSessions(response.data.sessions || []);
+      const sessionList = await listSessions(user.id);
+      setSessions(sessionList);
     } catch (error) {
       console.error("Failed to fetch sessions:", error);
       toast.error("Failed to load sessions");
@@ -54,16 +50,18 @@ export function SessionManagement() {
 
   useEffect(() => {
     fetchSessions();
-  }, []);
+  }, [user?.id]);
 
   const revokeSession = async (sessionId: string) => {
+    if (!user?.id) return;
+    
     setRevoking(sessionId);
     try {
-      const response = await supabase.functions.invoke("manage-sessions", {
-        body: { action: "revoke", sessionId },
-      });
-
-      if (response.error) throw response.error;
+      const success = await revokeSessionClient(user.id, sessionId);
+      
+      if (!success) {
+        throw new Error("Cannot revoke current session");
+      }
       
       setSessions(prev => prev.filter(s => s.id !== sessionId));
       toast.success("Session revoked successfully");
@@ -75,15 +73,12 @@ export function SessionManagement() {
   };
 
   const revokeAllSessions = async () => {
+    if (!user?.id) return;
+    
     setRevoking("all");
     try {
-      const response = await supabase.functions.invoke("manage-sessions", {
-        body: { action: "revoke-all" },
-      });
-
-      if (response.error) throw response.error;
-      
-      setSessions(prev => prev.filter(s => s.is_current));
+      await revokeAllOtherSessions(user.id);
+      setSessions(prev => prev.filter(s => s.isCurrent));
       toast.success("All other sessions revoked");
     } catch (error) {
       toast.error("Failed to revoke sessions");
@@ -103,7 +98,7 @@ export function SessionManagement() {
     return <Monitor className="h-5 w-5" />;
   };
 
-  const otherSessions = sessions.filter(s => !s.is_current);
+  const otherSessions = sessions.filter(s => !s.isCurrent);
 
   if (loading) {
     return (
@@ -175,13 +170,13 @@ export function SessionManagement() {
               className="flex items-center gap-4 p-4 border rounded-lg bg-card hover:bg-accent/50 transition-colors"
             >
               <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 text-primary">
-                {getDeviceIcon(session.device_info)}
+                {getDeviceIcon(session.deviceInfo)}
               </div>
               
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium truncate">{session.device_info}</span>
-                  {session.is_current && (
+                  <span className="font-medium truncate">{session.deviceInfo}</span>
+                  {session.isCurrent && (
                     <Badge variant="secondary" className="text-xs">
                       Current
                     </Badge>
@@ -189,15 +184,15 @@ export function SessionManagement() {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Globe className="h-3 w-3" />
-                  <span>{session.ip_address}</span>
+                  <span>Local Device</span>
                   <span>•</span>
                   <span>
-                    Active {formatDistanceToNow(new Date(session.last_active_at), { addSuffix: true })}
+                    Active {formatDistanceToNow(new Date(session.lastActiveAt), { addSuffix: true })}
                   </span>
                 </div>
               </div>
               
-              {!session.is_current && (
+              {!session.isCurrent && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button
@@ -213,7 +208,7 @@ export function SessionManagement() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Revoke this session?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will sign out the device "{session.device_info}" and require signing in again.
+                        This will sign out the device "{session.deviceInfo}" and require signing in again.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
