@@ -320,12 +320,15 @@ serve(async (req: Request) => {
           }
         }
         
-        // Clean up old sessions (older than 30 days)
+        // Clean up inactive sessions (older than 7 days)
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
         await supabase
           .from("user_sessions")
           .delete()
           .eq("user_id", user.id)
-          .lt("last_active_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+          .lt("last_active_at", sevenDaysAgo);
+        
+        console.log(`Cleaned up inactive sessions older than 7 days for user ${user.id}`);
         
         return new Response(
           JSON.stringify({ success: true }),
