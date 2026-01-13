@@ -13,7 +13,7 @@
 [![Vite](https://img.shields.io/badge/Vite-5.0-purple.svg)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC.svg)](https://tailwindcss.com/)
 
-[Live Demo](https://zikalyze.lovable.app) • [Documentation](#documentation) • [Contributing](#contributing) • [Discussions](https://github.com/tikewn/Zikalyze/discussions)
+[Live Demo](https://zikalyze.app) • [Documentation](#documentation) • [Contributing](#contributing) • [Discussions](https://github.com/tikewn/Zikalyze/discussions)
 
 </div>
 
