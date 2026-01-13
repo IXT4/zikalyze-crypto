@@ -209,23 +209,22 @@ serve(async (req: Request) => {
       global: { headers: { Authorization: authHeader } }
     });
     
-    // Verify token using getClaims
-    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    // Verify token using getUser - more reliable than getClaims for edge functions
+    const { data: userData, error: userError } = await authClient.auth.getUser(token);
+    if (userError || !userData?.user) {
+      console.error("Auth verification failed:", userError?.message || "No user data");
       return new Response(
         JSON.stringify({ error: "Invalid token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     
-    const userId = claimsData.claims.sub;
-    const userEmail = claimsData.claims.email as string;
+    const user = userData.user;
+    const userId = user.id;
+    const userEmail = user.email;
     
     // Service role client for database operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
-    // Create a user object for compatibility
-    const user = { id: userId, email: userEmail };
 
     const { action, sessionId } = await req.json();
     const userAgent = req.headers.get("User-Agent") || "";
