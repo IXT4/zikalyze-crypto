@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Brain, Zap, Play, RefreshCw, Activity, Copy, Check, History, ChevronDown, Clock, Trash2, X, ThumbsUp, ThumbsDown, TrendingUp, Award, WifiOff, Database, Cpu, BarChart3, Layers, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -11,11 +11,14 @@ import { useOnChainData } from "@/hooks/useOnChainData";
 import { useChartTrendData } from "@/hooks/useChartTrendData";
 import { useMultiTimeframeData, Timeframe } from "@/hooks/useMultiTimeframeData";
 import { useAILearning } from "@/hooks/useAILearning";
+import { useGlobalPriceWebSocket } from "@/hooks/useGlobalPriceWebSocket";
 import { runClientSideAnalysis, AnalysisResult } from "@/lib/zikalyze-brain";
 import { MultiTimeframeInput, TimeframeAnalysisInput } from "@/lib/zikalyze-brain/types";
 import { format } from "date-fns";
 import { Progress } from "@/components/ui/progress";
 import AISummaryCard from "./AISummaryCard";
+import { LivePriceLarge } from "./LivePrice";
+import { PriceChange } from "./PriceChange";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,6 +76,11 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   // Comprehensive live market data (prices, on-chain, sentiment)
   const liveData = useLiveMarketData(crypto, price, change, high24h, low24h, volume);
   
+  // 🔥 Direct WebSocket access for ultra-real-time price updates (same as Top100CryptoList)
+  const websocketSymbols = useMemo(() => [crypto.toUpperCase()], [crypto]);
+  const websocket = useGlobalPriceWebSocket(websocketSymbols);
+  const wsPrice = websocket.getPrice(crypto.toUpperCase());
+  
   // 📊 Real-time 24h chart data for accurate trend analysis
   const chartTrendData = useChartTrendData(crypto);
   
@@ -91,11 +99,15 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   );
   
   // ALWAYS prioritize WebSocket live data over prop fallbacks
-  const currentPrice = liveData.priceIsLive ? liveData.price : price;
+  // Use direct WebSocket price (same source as Top100) for maximum consistency
+  const currentPrice = wsPrice?.price || (liveData.priceIsLive ? liveData.price : price);
   const currentChange = liveData.priceIsLive ? liveData.change24h : change;
   const currentHigh = liveData.priceIsLive && liveData.high24h > 0 ? liveData.high24h : (high24h || price * 1.02);
   const currentLow = liveData.priceIsLive && liveData.low24h > 0 ? liveData.low24h : (low24h || price * 0.98);
   const currentVolume = liveData.priceIsLive && liveData.volume > 0 ? liveData.volume : (volume || 0);
+  
+  // Track if WebSocket is providing live data
+  const isWebSocketLive = websocket.connected && !!wsPrice;
   
   // Track data freshness and build real-time source string
   const dataAgeMs = Date.now() - liveData.lastUpdated;
@@ -762,34 +774,27 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           </div>
         </div>
 
-        {/* Live Price Display - Shows real-time WebSocket data */}
-        <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-background to-secondary/30 border border-border/50">
+        {/* Live Price Display - Shows real-time WebSocket data with animated updates */}
+        <div className={cn(
+          "mb-4 p-3 rounded-xl bg-gradient-to-r from-background to-secondary/30 border transition-all duration-500",
+          isWebSocketLive ? (currentChange >= 0 ? "border-success/30" : "border-destructive/30") : "border-border/50"
+        )}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-lg font-bold text-foreground">{crypto.toUpperCase()}</span>
-                {liveData.priceIsLive && isDataFresh && (
+                {isWebSocketLive && (
                   <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-success/20 text-success font-medium">
                     <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-                    REALTIME
+                    LIVE
                   </span>
                 )}
               </div>
-              <div className={cn(
-                "text-2xl font-bold tabular-nums",
-                currentChange >= 0 ? "text-success" : "text-destructive"
-              )}>
-                ${currentPrice.toLocaleString(undefined, { 
-                  minimumFractionDigits: currentPrice < 1 ? 4 : 2,
-                  maximumFractionDigits: currentPrice < 1 ? 6 : 2 
-                })}
+              {/* Use LivePriceLarge for animated real-time updates like Top100 */}
+              <div className="text-2xl">
+                <LivePriceLarge value={currentPrice} />
               </div>
-              <div className={cn(
-                "text-sm font-medium px-2 py-0.5 rounded",
-                currentChange >= 0 ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
-              )}>
-                {currentChange >= 0 ? "+" : ""}{currentChange.toFixed(2)}%
-              </div>
+              <PriceChange value={currentChange} showBadge={true} />
             </div>
           </div>
         </div>
