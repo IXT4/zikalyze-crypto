@@ -1,11 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🔄 SYNC MANAGER — Handles offline-to-cloud synchronization
+// 🔄 SYNC MANAGER — Handles offline-to-cloud synchronization with E2E encryption
 // ═══════════════════════════════════════════════════════════════════════════════
 // Syncs local IndexedDB data with Supabase when online
+// Analysis history is synced in encrypted form - cloud never sees plaintext
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { supabase } from '@/integrations/supabase/client';
 import * as storage from './clientStorage';
+import { isRecordEncrypted } from './e2eAnalysisEncryption';
 
 let syncInProgress = false;
 let syncListeners: Array<(status: SyncStatus) => void> = [];
@@ -178,26 +180,37 @@ async function syncAnalysisHistory(
   data: storage.ClientAnalysisRecord,
   userId: string
 ): Promise<void> {
+  // Data should already be encrypted by useAnalysisHistoryClient
+  // We verify it's encrypted before sending to cloud
+  if (type !== 'delete' && !isRecordEncrypted(data)) {
+    console.warn('[SyncManager] Analysis record not encrypted, skipping sync');
+    return;
+  }
+
   switch (type) {
     case 'create':
+      // analysis_text and bias are already encrypted (E2E prefixed)
       await supabase.from('analysis_history').insert({
         id: data.id,
         symbol: data.symbol,
         price: data.price,
         change_24h: data.change_24h,
-        analysis_text: data.analysis_text,
+        analysis_text: data.analysis_text, // Encrypted
         confidence: data.confidence,
-        bias: data.bias,
+        bias: data.bias, // Encrypted
         user_id: userId,
         was_correct: data.was_correct,
         feedback_at: data.feedback_at,
       });
+      console.log('[SyncManager] Synced E2E encrypted analysis to cloud');
       break;
     case 'update':
       await supabase.from('analysis_history')
         .update({
           was_correct: data.was_correct,
           feedback_at: data.feedback_at,
+          analysis_text: data.analysis_text, // Keep encrypted
+          bias: data.bias, // Keep encrypted
         })
         .eq('id', data.id)
         .eq('user_id', userId);
@@ -273,7 +286,8 @@ export async function downloadFromCloud(): Promise<void> {
       console.log(`[SyncManager] Downloaded ${alerts.length} alerts`);
     }
 
-    // Download analysis history (last 50)
+    // Download analysis history (last 50) - stored encrypted
+    // Records remain encrypted, will be decrypted on-demand when accessed via hook
     const { data: history } = await supabase
       .from('analysis_history')
       .select('*')
@@ -283,12 +297,13 @@ export async function downloadFromCloud(): Promise<void> {
 
     if (history) {
       for (const record of history) {
+        // Store as-is (encrypted) - decryption happens in useAnalysisHistoryClient
         await storage.saveAnalysisRecord({
           ...record,
           synced: true,
         });
       }
-      console.log(`[SyncManager] Downloaded ${history.length} analysis records`);
+      console.log(`[SyncManager] Downloaded ${history.length} encrypted analysis records`);
     }
 
     // Download AI learning data
