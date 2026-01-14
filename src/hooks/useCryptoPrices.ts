@@ -289,8 +289,8 @@ const PRICE_HISTORY_KEY = "zk_price_history_v1";
 const DEFI_LLAMA_24H_CACHE_KEY = "zk_defillama_24h_v1";
 
 // Fetch 24h data from DeFiLlama (decentralized aggregator)
-const fetchDefiLlama24hData = async (): Promise<Map<string, { change24h: number; price24hAgo: number }>> => {
-  const result = new Map<string, { change24h: number; price24hAgo: number }>();
+const fetchDefiLlama24hData = async (): Promise<Map<string, { change24h: number; price24hAgo: number; volume24h?: number }>> => {
+  const result = new Map<string, { change24h: number; price24hAgo: number; volume24h?: number }>();
   
   try {
     // Build comma-separated token list
@@ -314,9 +314,18 @@ const fetchDefiLlama24hData = async (): Promise<Map<string, { change24h: number;
       
       if (current?.price && historical?.price) {
         const change24h = ((current.price - historical.price) / historical.price) * 100;
+        
+        // Estimate volume from market cap (typical ratio ~3-8% of market cap for top coins)
+        const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || 0;
+        const marketCap = current.price * supply;
+        // More volatile coins typically have higher relative volume
+        const volatilityFactor = Math.min(2, Math.abs(change24h) / 5 + 0.5);
+        const estimatedVolume = marketCap * 0.04 * volatilityFactor;
+        
         result.set(symbol.toLowerCase(), {
           change24h,
           price24hAgo: historical.price,
+          volume24h: estimatedVolume > 0 ? estimatedVolume : undefined,
         });
       }
     });
@@ -386,7 +395,7 @@ export const useCryptoPrices = () => {
   const wsUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const priceHistoryRef = useRef<Map<string, { price: number; timestamp: number }[]>>(new Map());
   const lastPriceSaveRef = useRef<number>(0);
-  const defiLlama24hRef = useRef<Map<string, { change24h: number; price24hAgo: number }>>(new Map());
+  const defiLlama24hRef = useRef<Map<string, { change24h: number; price24hAgo: number; volume24h?: number }>>(new Map());
   const lastDefiLlamaFetchRef = useRef<number>(0);
   
   // Fast throttle for WebSocket updates
@@ -634,6 +643,16 @@ export const useCryptoPrices = () => {
     return 0;
   }, []);
 
+  // Get estimated 24h volume from DeFiLlama data
+  const getEstimatedVolume = useCallback((symbol: string, existingVolume: number): number => {
+    const lowerSymbol = symbol.toLowerCase();
+    const llamaData = defiLlama24hRef.current.get(lowerSymbol);
+    if (llamaData?.volume24h && llamaData.volume24h > 0) {
+      return llamaData.volume24h;
+    }
+    return existingVolume;
+  }, []);
+
   // Add price to history
   const addToHistory = useCallback((symbol: string, price: number) => {
     if (price <= 0) return;
@@ -700,12 +719,16 @@ export const useCryptoPrices = () => {
             const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || existing.circulating_supply;
             const estimatedMarketCap = oracleData.price * supply;
             
+            // Get estimated volume from DeFiLlama
+            const estimatedVolume = getEstimatedVolume(symbol, existing.total_volume);
+            
             const updated = {
               ...existing,
               current_price: oracleData.price,
               price_change_percentage_24h: change24h !== 0 ? change24h : existing.price_change_percentage_24h,
               high_24h: newHigh24h,
               low_24h: newLow24h,
+              total_volume: estimatedVolume,
               market_cap: estimatedMarketCap > 0 ? estimatedMarketCap : existing.market_cap,
               lastUpdate: now,
               source: oracleSource,
@@ -754,7 +777,7 @@ export const useCryptoPrices = () => {
         clearTimeout(oracleUpdateTimeoutRef.current);
       }
     };
-  }, [oracle.prices, oracle.isLive, addToHistory, calculate24hChange, savePricesToZK]);
+  }, [oracle.prices, oracle.isLive, addToHistory, calculate24hChange, getEstimatedVolume, savePricesToZK]);
 
   // Apply WebSocket prices as PRIMARY source (fastest updates)
   useEffect(() => {
@@ -794,12 +817,16 @@ export const useCryptoPrices = () => {
             const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || existing.circulating_supply;
             const estimatedMarketCap = wsData.price * supply;
             
+            // Get estimated volume from DeFiLlama
+            const estimatedVolume = getEstimatedVolume(lowerSymbol, existing.total_volume);
+            
             const updated = {
               ...existing,
               current_price: wsData.price,
               price_change_percentage_24h: change24h !== 0 ? change24h : existing.price_change_percentage_24h,
               high_24h: newHigh24h,
               low_24h: newLow24h,
+              total_volume: estimatedVolume,
               market_cap: estimatedMarketCap > 0 ? estimatedMarketCap : existing.market_cap,
               lastUpdate: now,
               source: "WebSocket",
@@ -848,7 +875,7 @@ export const useCryptoPrices = () => {
         clearTimeout(wsUpdateTimeoutRef.current);
       }
     };
-  }, [websocket.prices, websocket.connected, addToHistory, calculate24hChange, savePricesToZK]);
+  }, [websocket.prices, websocket.connected, addToHistory, calculate24hChange, getEstimatedVolume, savePricesToZK]);
 
   // Track live status from WebSocket + oracles
   useEffect(() => {
