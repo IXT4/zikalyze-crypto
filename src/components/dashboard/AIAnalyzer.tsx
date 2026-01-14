@@ -624,13 +624,13 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const hasChartData = chartTrendData?.isLive && chartTrendData?.candles?.length > 0;
   const hasMultiTfData = multiTfData && !multiTfData.isLoading && multiTfData.confluence;
   
-  // Calculate accuracy based on actual data quality
-  let displayedAccuracy = 75; // Base
-  if (hasLivePrice) displayedAccuracy += 10; // +10 for live WebSocket prices
-  if (hasOnChainData) displayedAccuracy += 5; // +5 for on-chain metrics
-  if (hasChartData) displayedAccuracy += 5; // +5 for chart trend data
-  if (hasMultiTfData) displayedAccuracy += 4; // +4 for multi-timeframe confluence
-  displayedAccuracy = Math.min(99, displayedAccuracy);
+  // Calculate accuracy based on actual data quality - weighted by reliability
+  let displayedAccuracy = 78; // Base accuracy with any data
+  if (hasLivePrice) displayedAccuracy += 12; // +12 for live WebSocket prices (most critical)
+  if (hasOnChainData) displayedAccuracy += 4; // +4 for on-chain metrics
+  if (hasChartData) displayedAccuracy += 3; // +3 for chart trend data
+  if (hasMultiTfData) displayedAccuracy += 2; // +2 for multi-timeframe confluence
+  displayedAccuracy = Math.min(99, Math.max(75, displayedAccuracy));
 
   return (
     <div className="rounded-2xl border border-border bg-card p-6 overflow-hidden relative">

@@ -72,18 +72,20 @@ const useAnimatedValue = (targetValue: number, duration: number = 300) => {
 // Enhanced flash effect hook - more sensitive for visible real-time updates
 const useFlashEffect = (value: number) => {
   const [flashClass, setFlashClass] = useState<string | null>(null);
-  const prevValueRef = useRef<number | undefined>(undefined);
+  const prevValueRef = useRef<number>(value);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isMountedRef = useRef(false);
+  const isFirstRenderRef = useRef(true);
 
   useEffect(() => {
-    if (!isMountedRef.current) {
-      isMountedRef.current = true;
+    // Skip first render
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
       prevValueRef.current = value;
       return;
     }
 
-    if (prevValueRef.current === undefined || value === prevValueRef.current) return;
+    // Skip if no actual change
+    if (value === prevValueRef.current) return;
 
     // Flash on any visible change (0.01% threshold)
     const change = Math.abs(value - prevValueRef.current);
@@ -92,22 +94,31 @@ const useFlashEffect = (value: number) => {
       return;
     }
 
+    const newFlashClass = value > prevValueRef.current ? "change-flash-up" : "change-flash-down";
+    prevValueRef.current = value;
+
+    // Clear existing timeout
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
 
-    setFlashClass(value > prevValueRef.current ? "change-flash-up" : "change-flash-down");
+    setFlashClass(newFlashClass);
 
     timeoutRef.current = setTimeout(() => {
       setFlashClass(null);
+      timeoutRef.current = null;
     }, 500);
-
-    prevValueRef.current = value;
-
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
   }, [value]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   return flashClass;
 };

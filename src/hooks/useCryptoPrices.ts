@@ -676,16 +676,36 @@ export const useCryptoPrices = () => {
     priceHistoryRef.current.set(lowerSymbol, trimmed);
   }, []);
   
+  // Track oracle and websocket data with refs to prevent infinite loops
+  const lastOracleUpdateRef = useRef<number>(0);
+  const lastWsUpdateRef = useRef<number>(0);
+  const oraclePricesHashRef = useRef<string>("");
+  const wsPricesHashRef = useRef<string>("");
+
   // Apply Oracle prices as primary source (DECENTRALIZED ONLY)
   useEffect(() => {
     if (!oracle.isLive || oracle.prices.size === 0) return;
+    
+    // Create hash of first 10 prices to detect actual changes
+    const pricesHash = Array.from(oracle.prices.entries())
+      .slice(0, 10)
+      .map(([k, v]) => `${k}:${v.price.toFixed(4)}`)
+      .join("|");
+    
+    // Skip if no actual change
+    if (pricesHash === oraclePricesHashRef.current) return;
+    oraclePricesHashRef.current = pricesHash;
+    
+    // Throttle updates - minimum 200ms between updates
+    const now = Date.now();
+    if (now - lastOracleUpdateRef.current < 200) return;
+    lastOracleUpdateRef.current = now;
     
     if (oracleUpdateTimeoutRef.current) {
       clearTimeout(oracleUpdateTimeoutRef.current);
     }
     
     oracleUpdateTimeoutRef.current = setTimeout(() => {
-      const now = Date.now();
       let hasUpdates = false;
       
       oracle.prices.forEach((oracleData, _key) => {
@@ -701,13 +721,9 @@ export const useCryptoPrices = () => {
           if (isSignificant) {
             const oracleSource = oracleData.source === "Pyth" ? "Pyth Oracle" : "WebSocket";
             
-            // Add to price history for 24h calculations
             addToHistory(symbol, oracleData.price);
-            
-            // Calculate 24h change from DeFiLlama or local history
             const change24h = calculate24hChange(symbol, oracleData.price, existing.price_change_percentage_24h);
             
-            // Update high/low if price breaks range
             const newHigh24h = existing.high_24h > 0 
               ? Math.max(existing.high_24h, oracleData.price) 
               : oracleData.price;
@@ -715,11 +731,8 @@ export const useCryptoPrices = () => {
               ? Math.min(existing.low_24h, oracleData.price) 
               : oracleData.price;
             
-            // Estimate market cap from price * circulating supply
             const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || existing.circulating_supply;
             const estimatedMarketCap = oracleData.price * supply;
-            
-            // Get estimated volume from DeFiLlama
             const estimatedVolume = getEstimatedVolume(symbol, existing.total_volume);
             
             const updated = {
@@ -737,7 +750,6 @@ export const useCryptoPrices = () => {
             hasUpdates = true;
           }
         } else if (!existing) {
-          // Add new token from oracle
           const metadata = getAllTokenMetadata().find(m => m.symbol.toLowerCase() === symbol);
           if (metadata) {
             const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || 0;
@@ -770,26 +782,39 @@ export const useCryptoPrices = () => {
         setPrices(priceArray);
         savePricesToZK(priceArray);
       }
-    }, 80);
+    }, 100);
     
     return () => {
       if (oracleUpdateTimeoutRef.current) {
         clearTimeout(oracleUpdateTimeoutRef.current);
       }
     };
-  }, [oracle.prices, oracle.isLive, addToHistory, calculate24hChange, getEstimatedVolume, savePricesToZK]);
+  }, [oracle.isLive, oracle.prices.size, addToHistory, calculate24hChange, getEstimatedVolume, savePricesToZK]);
 
   // Apply WebSocket prices as PRIMARY source (fastest updates)
   useEffect(() => {
-    // Process even if not fully connected - prices may have data
     if (websocket.prices.size === 0) return;
+    
+    // Create hash of first 10 prices to detect actual changes
+    const pricesHash = Array.from(websocket.prices.entries())
+      .slice(0, 10)
+      .map(([k, v]) => `${k}:${v.price.toFixed(4)}`)
+      .join("|");
+    
+    // Skip if no actual change
+    if (pricesHash === wsPricesHashRef.current) return;
+    wsPricesHashRef.current = pricesHash;
+    
+    // Throttle updates - minimum 100ms between updates
+    const now = Date.now();
+    if (now - lastWsUpdateRef.current < 100) return;
+    lastWsUpdateRef.current = now;
     
     if (wsUpdateTimeoutRef.current) {
       clearTimeout(wsUpdateTimeoutRef.current);
     }
     
     wsUpdateTimeoutRef.current = setTimeout(() => {
-      const now = Date.now();
       let hasUpdates = false;
       
       websocket.prices.forEach((wsData, symbol) => {
@@ -799,13 +824,11 @@ export const useCryptoPrices = () => {
         const existing = pricesRef.current.get(lowerSymbol);
         
         if (existing) {
-          // FIX: Allow update if existing price is 0 OR if price changed significantly
           const isFirstPrice = existing.current_price === 0 || existing.current_price === undefined;
           const priceDiff = existing.current_price > 0 
             ? Math.abs(existing.current_price - wsData.price) / existing.current_price 
             : 1;
-          // Ultra-sensitive threshold so prices visibly move in real time
-          const isSignificant = isFirstPrice || priceDiff > 0.000001; // 0.0001% threshold
+          const isSignificant = isFirstPrice || priceDiff > 0.0001;
           
           if (isSignificant) {
             addToHistory(lowerSymbol, wsData.price);
@@ -816,8 +839,6 @@ export const useCryptoPrices = () => {
             
             const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || existing.circulating_supply;
             const estimatedMarketCap = wsData.price * supply;
-            
-            // Get estimated volume from DeFiLlama
             const estimatedVolume = getEstimatedVolume(lowerSymbol, existing.total_volume);
             
             const updated = {
@@ -835,7 +856,6 @@ export const useCryptoPrices = () => {
             hasUpdates = true;
           }
         } else {
-          // FIX: Create new price entry if not existing (for symbols not in initial list)
           const metadata = getAllTokenMetadata().find(m => m.symbol.toLowerCase() === lowerSymbol);
           if (metadata) {
             const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || 0;
@@ -875,7 +895,7 @@ export const useCryptoPrices = () => {
         clearTimeout(wsUpdateTimeoutRef.current);
       }
     };
-  }, [websocket.prices, websocket.connected, addToHistory, calculate24hChange, getEstimatedVolume, savePricesToZK]);
+  }, [websocket.prices.size, websocket.connected, addToHistory, calculate24hChange, getEstimatedVolume, savePricesToZK]);
 
   // Track live status from WebSocket + oracles
   useEffect(() => {
