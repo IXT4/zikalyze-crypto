@@ -779,17 +779,47 @@ setInterval(updateTickRate, 250);
 
 export function useGlobalPriceWebSocket(symbols: string[] = []) {
   const [state, setState] = useState<WebSocketState>(globalState);
-  const [prices, setPrices] = useState<Map<string, WebSocketPriceData>>(new Map(globalPrices));
+  const [prices, setPrices] = useState<Map<string, WebSocketPriceData>>(() => new Map(globalPrices));
   const symbolsRef = useRef<string[]>(symbols);
+  const lastPricesHashRef = useRef<string>("");
+  const lastStateHashRef = useRef<string>("");
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
     symbolsRef.current = symbols;
   }, [symbols]);
 
   useEffect(() => {
-    const listener = (newPrices: Map<string, WebSocketPriceData>) => {
-      setPrices(newPrices);
-      setState({ ...globalState });
+    isMountedRef.current = true;
+    
+    // Throttled listener - prevents rapid state updates
+    let updateScheduled = false;
+    const listener = () => {
+      if (updateScheduled || !isMountedRef.current) return;
+      updateScheduled = true;
+      
+      requestAnimationFrame(() => {
+        if (!isMountedRef.current) return;
+        updateScheduled = false;
+        
+        // Create hash of prices to detect actual changes
+        const pricesHash = Array.from(globalPrices.entries())
+          .slice(0, 20)
+          .map(([k, v]) => `${k}:${v.price.toFixed(2)}`)
+          .join("|");
+        
+        const stateHash = `${globalState.connected}:${globalState.primarySource}:${globalState.subscribedCount}`;
+        
+        if (pricesHash !== lastPricesHashRef.current) {
+          lastPricesHashRef.current = pricesHash;
+          setPrices(new Map(globalPrices));
+        }
+        
+        if (stateHash !== lastStateHashRef.current) {
+          lastStateHashRef.current = stateHash;
+          setState({ ...globalState });
+        }
+      });
     };
 
     globalListeners.add(listener);
@@ -808,28 +838,36 @@ export function useGlobalPriceWebSocket(symbols: string[] = []) {
       connect();
     }
 
-    // Initial state sync
-    setPrices(new Map(globalPrices));
+    // Initial state sync - only once
+    if (globalPrices.size > 0) {
+      setPrices(new Map(globalPrices));
+    }
     setState({ ...globalState });
 
-    // Sync interval - throttled to prevent excessive updates
+    // Periodic sync - much slower to prevent loops
     const syncInterval = setInterval(() => {
-      const newPrices = new Map(globalPrices);
-      const newState = { ...globalState };
-      // Only update if actually changed
-      setPrices(prev => {
-        if (prev.size !== newPrices.size) return newPrices;
-        return prev;
-      });
-      setState(prev => {
-        if (prev.connected !== newState.connected || prev.primarySource !== newState.primarySource) {
-          return newState;
-        }
-        return prev;
-      });
-    }, 500);
+      if (!isMountedRef.current) return;
+      
+      const pricesHash = Array.from(globalPrices.entries())
+        .slice(0, 20)
+        .map(([k, v]) => `${k}:${v.price.toFixed(2)}`)
+        .join("|");
+      
+      const stateHash = `${globalState.connected}:${globalState.primarySource}`;
+      
+      if (pricesHash !== lastPricesHashRef.current) {
+        lastPricesHashRef.current = pricesHash;
+        setPrices(new Map(globalPrices));
+      }
+      
+      if (stateHash !== lastStateHashRef.current) {
+        lastStateHashRef.current = stateHash;
+        setState({ ...globalState });
+      }
+    }, 1000);
 
     return () => {
+      isMountedRef.current = false;
       clearInterval(syncInterval);
       globalListeners.delete(listener);
 
@@ -846,12 +884,12 @@ export function useGlobalPriceWebSocket(symbols: string[] = []) {
   }, [symbols.join(",")]);
 
   const getPrice = useCallback((symbol: string): WebSocketPriceData | null => {
-    return prices.get(symbol.toUpperCase()) || null;
-  }, [prices]);
+    return globalPrices.get(symbol.toUpperCase()) || null;
+  }, []);
 
   const getAllPrices = useCallback((): WebSocketPriceData[] => {
-    return Array.from(prices.values());
-  }, [prices]);
+    return Array.from(globalPrices.values());
+  }, []);
 
   return {
     ...state,
