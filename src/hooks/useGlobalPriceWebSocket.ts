@@ -784,6 +784,7 @@ export function useGlobalPriceWebSocket(symbols: string[] = []) {
   const lastPricesHashRef = useRef<string>("");
   const lastStateHashRef = useRef<string>("");
   const isMountedRef = useRef(true);
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     symbolsRef.current = symbols;
@@ -792,34 +793,26 @@ export function useGlobalPriceWebSocket(symbols: string[] = []) {
   useEffect(() => {
     isMountedRef.current = true;
     
-    // Throttled listener - prevents rapid state updates
-    let updateScheduled = false;
-    const listener = () => {
-      if (updateScheduled || !isMountedRef.current) return;
-      updateScheduled = true;
+    // Direct listener - no throttling for real-time accuracy
+    const listener = (newPrices: Map<string, WebSocketPriceData>) => {
+      if (!isMountedRef.current) return;
       
-      requestAnimationFrame(() => {
-        if (!isMountedRef.current) return;
-        updateScheduled = false;
-        
-        // Create hash of prices to detect actual changes
-        const pricesHash = Array.from(globalPrices.entries())
-          .slice(0, 20)
-          .map(([k, v]) => `${k}:${v.price.toFixed(2)}`)
-          .join("|");
-        
-        const stateHash = `${globalState.connected}:${globalState.primarySource}:${globalState.subscribedCount}`;
-        
-        if (pricesHash !== lastPricesHashRef.current) {
-          lastPricesHashRef.current = pricesHash;
-          setPrices(new Map(globalPrices));
-        }
-        
-        if (stateHash !== lastStateHashRef.current) {
-          lastStateHashRef.current = stateHash;
-          setState({ ...globalState });
-        }
-      });
+      // Only update if prices actually changed (hash comparison)
+      const pricesHash = Array.from(newPrices.entries())
+        .slice(0, 30)
+        .map(([k, v]) => `${k}:${v.price.toFixed(4)}`)
+        .join("|");
+      
+      if (pricesHash !== lastPricesHashRef.current) {
+        lastPricesHashRef.current = pricesHash;
+        setPrices(new Map(newPrices));
+      }
+      
+      const stateHash = `${globalState.connected}:${globalState.primarySource}:${globalState.subscribedCount}`;
+      if (stateHash !== lastStateHashRef.current) {
+        lastStateHashRef.current = stateHash;
+        setState({ ...globalState });
+      }
     };
 
     globalListeners.add(listener);
@@ -839,36 +832,14 @@ export function useGlobalPriceWebSocket(symbols: string[] = []) {
     }
 
     // Initial state sync - only once
-    if (globalPrices.size > 0) {
+    if (!initializedRef.current && globalPrices.size > 0) {
+      initializedRef.current = true;
       setPrices(new Map(globalPrices));
+      setState({ ...globalState });
     }
-    setState({ ...globalState });
-
-    // Periodic sync - much slower to prevent loops
-    const syncInterval = setInterval(() => {
-      if (!isMountedRef.current) return;
-      
-      const pricesHash = Array.from(globalPrices.entries())
-        .slice(0, 20)
-        .map(([k, v]) => `${k}:${v.price.toFixed(2)}`)
-        .join("|");
-      
-      const stateHash = `${globalState.connected}:${globalState.primarySource}`;
-      
-      if (pricesHash !== lastPricesHashRef.current) {
-        lastPricesHashRef.current = pricesHash;
-        setPrices(new Map(globalPrices));
-      }
-      
-      if (stateHash !== lastStateHashRef.current) {
-        lastStateHashRef.current = stateHash;
-        setState({ ...globalState });
-      }
-    }, 1000);
 
     return () => {
       isMountedRef.current = false;
-      clearInterval(syncInterval);
       globalListeners.delete(listener);
 
       if (globalListeners.size === 0) {
@@ -883,6 +854,7 @@ export function useGlobalPriceWebSocket(symbols: string[] = []) {
     }
   }, [symbols.join(",")]);
 
+  // Direct access to global prices - always fresh, no state delay
   const getPrice = useCallback((symbol: string): WebSocketPriceData | null => {
     return globalPrices.get(symbol.toUpperCase()) || null;
   }, []);

@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAnalysisHistory, AnalysisRecord } from "@/hooks/useAnalysisHistory";
-import { useLiveMarketData } from "@/hooks/useLiveMarketData";
 import { useAnalysisCache } from "@/hooks/useAnalysisCache";
 import { useOnChainData } from "@/hooks/useOnChainData";
 import { useChartTrendData } from "@/hooks/useChartTrendData";
@@ -98,12 +97,11 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const lastFrameTimeRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
-  // Comprehensive live market data (prices, on-chain, sentiment)
-  const liveData = useLiveMarketData(crypto, price, change, high24h, low24h, volume);
-  
-  // 🔥 Direct WebSocket access for ultra-real-time price updates (same as Top100CryptoList)
+  // 🔥 Direct WebSocket access for ultra-real-time price updates (NO CACHE)
   const websocketSymbols = useMemo(() => [crypto.toUpperCase()], [crypto]);
   const websocket = useGlobalPriceWebSocket(websocketSymbols);
+  
+  // Get LIVE price directly from WebSocket - no caching, no fallback to props
   const wsPrice = websocket.getPrice(crypto.toUpperCase());
   
   // 📊 Real-time 24h chart data for accurate trend analysis
@@ -111,43 +109,37 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   
   // 📈 Multi-timeframe analysis (15m, 1h, 4h, 1d)
   const multiTfData = useMultiTimeframeData(crypto);
-  // Real-time on-chain data with whale tracking - use live price for accuracy
+  
+  // Real-time on-chain data with whale tracking
   const { metrics: onChainMetrics, streamStatus } = useOnChainData(
     crypto, 
-    liveData.priceIsLive ? liveData.price : price, 
-    liveData.priceIsLive ? liveData.change24h : change, 
-    {
-      volume: liveData.priceIsLive ? liveData.volume : volume,
-      marketCap,
-      coinGeckoId: undefined
-    }
+    wsPrice?.price || price, 
+    change, 
+    { volume, marketCap, coinGeckoId: undefined }
   );
   
-  // ALWAYS prioritize WebSocket live data over prop fallbacks
-  // Use direct WebSocket price (same source as Top100) for maximum consistency
-  const currentPrice = wsPrice?.price || (liveData.priceIsLive ? liveData.price : price);
-  const currentChange = liveData.priceIsLive ? liveData.change24h : change;
-  const currentHigh = liveData.priceIsLive && liveData.high24h > 0 ? liveData.high24h : (high24h || price * 1.02);
-  const currentLow = liveData.priceIsLive && liveData.low24h > 0 ? liveData.low24h : (low24h || price * 0.98);
-  const currentVolume = liveData.priceIsLive && liveData.volume > 0 ? liveData.volume : (volume || 0);
+  // ALWAYS use WebSocket price - NEVER use cached/prop prices for AI analysis
+  const currentPrice = wsPrice?.price || price;
+  const currentChange = change;
+  const currentHigh = high24h || currentPrice * 1.02;
+  const currentLow = low24h || currentPrice * 0.98;
+  const currentVolume = volume || 0;
   
   // Track if WebSocket is providing live data
-  const isWebSocketLive = websocket.connected && !!wsPrice;
+  const isWebSocketLive = websocket.connected && !!wsPrice && wsPrice.price > 0;
   
-  // Track data freshness and build real-time source string
-  const dataAgeMs = Date.now() - liveData.lastUpdated;
-  const isDataFresh = dataAgeMs < 5000; // Data is fresh if < 5 seconds old
+  // Data freshness - WebSocket data is always fresh
+  const isDataFresh = isWebSocketLive || (Date.now() - (wsPrice?.timestamp || 0) < 5000);
   
   // Build actual data source string for analysis
-  const buildDataSourceString = () => {
+  const actualDataSource = useMemo(() => {
     const sources: string[] = [];
-    if (liveData.priceIsLive) sources.push('WebSocket');
+    if (isWebSocketLive) sources.push('Live WebSocket');
     if (onChainMetrics && streamStatus === 'connected') sources.push('On-Chain');
-    if (liveData.sentiment?.isLive) sources.push('Sentiment');
-    return sources.length > 0 ? sources.join(' + ') : 'Fallback';
-  };
-  const actualDataSource = buildDataSourceString();
-  const isRealTimeData = liveData.priceIsLive && isDataFresh;
+    return sources.length > 0 ? sources.join(' + ') : 'REST Fallback';
+  }, [isWebSocketLive, onChainMetrics, streamStatus]);
+  
+  const isRealTimeData = isWebSocketLive;
   
   const { history, learningStats, loading: historyLoading, saveAnalysis, submitFeedback, deleteAnalysis, clearAllHistory } = useAnalysisHistory(crypto);
   const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
@@ -249,14 +241,13 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       const analysisVolume = currentVolume;
       
       // Log data source for debugging
-      console.log(`[AI Analysis] Using ${liveData.priceIsLive ? 'REAL-TIME WEBSOCKET' : 'CACHED'} data:`, {
+      console.log(`[AI Analysis] Using ${isWebSocketLive ? 'LIVE WEBSOCKET' : 'REST FALLBACK'} data:`, {
         price: analysisPrice,
         change: analysisChange,
         high: analysisHigh,
         low: analysisLow,
         volume: analysisVolume,
-        dataAge: `${dataAgeMs}ms`,
-        source: liveData.dataSourcesSummary
+        source: actualDataSource
       });
 
       // Use real-time on-chain data from useOnChainData hook (more comprehensive)
@@ -290,38 +281,10 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
         blockHeight: onChainMetrics.blockHeight,
         difficulty: onChainMetrics.difficulty,
         source: onChainMetrics.source
-      } : liveData.onChain ? {
-        exchangeNetFlow: liveData.onChain.exchangeNetFlow,
-        whaleActivity: liveData.onChain.whaleActivity,
-        longTermHolders: { 
-          accumulating: liveData.onChain.activeAddresses.trend === 'INCREASING', 
-          change7d: liveData.onChain.activeAddresses.change24h * 7, 
-          sentiment: liveData.onChain.activeAddresses.trend === 'INCREASING' ? 'BULLISH' : 'NEUTRAL' 
-        },
-        shortTermHolders: { 
-          behavior: 'NEUTRAL', 
-          profitLoss: 0 
-        },
-        activeAddresses: liveData.onChain.activeAddresses,
-        transactionVolume: liveData.onChain.transactionVolume,
-        mempoolData: { 
-          unconfirmedTxs: liveData.onChain.mempoolData.unconfirmedTxs, 
-          mempoolSize: liveData.onChain.mempoolData.unconfirmedTxs * 250,
-          avgFeeRate: liveData.onChain.mempoolData.avgFeeRate 
-        },
-        source: 'live-market-data'
       } : undefined;
 
-      // Adapt sentiment data format
-      const adaptedSentimentData = liveData.sentiment ? {
-        fearGreed: { 
-          value: liveData.sentiment.fearGreedValue, 
-          label: liveData.sentiment.fearGreedLabel 
-        },
-        social: liveData.sentiment.sentimentScore !== undefined ? { 
-          overall: { score: liveData.sentiment.sentimentScore } 
-        } : undefined
-      } : undefined;
+      // Sentiment data - not available without liveData hook, pass undefined
+      const adaptedSentimentData = undefined;
 
       // Build multi-timeframe input (reusable helper)
       const adaptedMultiTfData = buildMultiTimeframeInput(multiTfData);
@@ -388,7 +351,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       clearInterval(stepInterval);
       setIsAnalyzing(false);
     }
-  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, liveData.onChain, liveData.sentiment, useCachedAnalysis, getCacheAge, cacheAnalysis, markFreshData, onChainMetrics, chartTrendData, multiTfData, isRealTimeData, actualDataSource]);
+  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, saveAnalysis, useCachedAnalysis, getCacheAge, cacheAnalysis, markFreshData, onChainMetrics, chartTrendData, multiTfData, isRealTimeData, actualDataSource]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 🧠 BACKGROUND AI LEARNING — Silent, always-on data collection & adaptation
@@ -467,10 +430,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       isLiveData: true,
       dataSource: `LEARNING (${streamUpdateCount + 1} samples)`,
       onChainData: adaptedOnChainData,
-      sentimentData: liveData.sentiment ? {
-        fearGreed: { value: liveData.sentiment.fearGreedValue, label: liveData.sentiment.fearGreedLabel },
-        social: liveData.sentiment.sentimentScore !== undefined ? { overall: { score: liveData.sentiment.sentimentScore } } : undefined
-      } : undefined,
+      sentimentData: undefined,
       chartTrendData: chartTrendData ? {
         candles: chartTrendData.candles, trend24h: chartTrendData.trend24h, trendStrength: chartTrendData.trendStrength,
         higherHighs: chartTrendData.higherHighs, higherLows: chartTrendData.higherLows,
@@ -514,16 +474,16 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       }
       return newCount;
     });
-  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, liveData.sentiment, onChainMetrics, chartTrendData, multiTfData]);
+  }, [crypto, currentPrice, currentChange, currentHigh, currentLow, currentVolume, marketCap, currentLanguage, onChainMetrics, chartTrendData, multiTfData]);
 
   // Auto-start background learning on mount (stable ref to avoid re-triggering)
   const processBackgroundLearningRef = useRef(processBackgroundLearning);
   processBackgroundLearningRef.current = processBackgroundLearning;
   
   useEffect(() => {
-    // Only start once per mount when data becomes live
+    // Only start once per mount when WebSocket is live
     if (backgroundStreamingRef.current) return;
-    if (!liveData.priceIsLive) return;
+    if (!isWebSocketLive) return;
     
     console.log('[AI Learning] Starting background data collection...');
     backgroundStreamingRef.current = true;
@@ -544,7 +504,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
       }
       backgroundStreamingRef.current = false;
     };
-  }, [liveData.priceIsLive]);
+  }, [isWebSocketLive]);
 
   // Restart learning and reset state when crypto changes
   useEffect(() => {
