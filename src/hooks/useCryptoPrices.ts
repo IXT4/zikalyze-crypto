@@ -398,8 +398,8 @@ export const useCryptoPrices = () => {
   const defiLlama24hRef = useRef<Map<string, { change24h: number; price24hAgo: number; volume24h?: number }>>(new Map());
   const lastDefiLlamaFetchRef = useRef<number>(0);
   
-  // Fast throttle for WebSocket updates
-  const UPDATE_THROTTLE_MS = 50;
+  // Ultra-fast updates for real-time streaming
+  const UPDATE_THROTTLE_MS = 16; // ~60fps for smooth price updates
   const PRICE_SAVE_THROTTLE_MS = 5000;
   const DEFI_LLAMA_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -791,110 +791,96 @@ export const useCryptoPrices = () => {
     };
   }, [oracle.isLive, oracle.prices.size, addToHistory, calculate24hChange, getEstimatedVolume, savePricesToZK]);
 
-  // Apply WebSocket prices as PRIMARY source (fastest updates)
+  // Apply WebSocket prices as PRIMARY source (fastest updates - no throttling)
   useEffect(() => {
     if (websocket.prices.size === 0) return;
     
-    // Create hash of first 10 prices to detect actual changes
+    // Create hash to detect actual changes - use more precision for accuracy
     const pricesHash = Array.from(websocket.prices.entries())
-      .slice(0, 10)
-      .map(([k, v]) => `${k}:${v.price.toFixed(4)}`)
+      .slice(0, 20)
+      .map(([k, v]) => `${k}:${v.price.toFixed(6)}`)
       .join("|");
     
     // Skip if no actual change
     if (pricesHash === wsPricesHashRef.current) return;
     wsPricesHashRef.current = pricesHash;
     
-    // Throttle updates - minimum 100ms between updates
     const now = Date.now();
-    if (now - lastWsUpdateRef.current < 100) return;
     lastWsUpdateRef.current = now;
     
-    if (wsUpdateTimeoutRef.current) {
-      clearTimeout(wsUpdateTimeoutRef.current);
-    }
+    // Process immediately - no timeout delay for real-time accuracy
+    let hasUpdates = false;
     
-    wsUpdateTimeoutRef.current = setTimeout(() => {
-      let hasUpdates = false;
+    websocket.prices.forEach((wsData, symbol) => {
+      if (!wsData || wsData.price <= 0) return;
       
-      websocket.prices.forEach((wsData, symbol) => {
-        if (!wsData || wsData.price <= 0) return;
+      const lowerSymbol = symbol.toLowerCase();
+      const existing = pricesRef.current.get(lowerSymbol);
+      
+      if (existing) {
+        const isFirstPrice = existing.current_price === 0 || existing.current_price === undefined;
+        const priceDiff = existing.current_price > 0 
+          ? Math.abs(existing.current_price - wsData.price) / existing.current_price 
+          : 1;
+        // Any price change is significant for real-time display
+        const isSignificant = isFirstPrice || priceDiff > 0.00001;
         
-        const lowerSymbol = symbol.toLowerCase();
-        const existing = pricesRef.current.get(lowerSymbol);
-        
-        if (existing) {
-          const isFirstPrice = existing.current_price === 0 || existing.current_price === undefined;
-          const priceDiff = existing.current_price > 0 
-            ? Math.abs(existing.current_price - wsData.price) / existing.current_price 
-            : 1;
-          const isSignificant = isFirstPrice || priceDiff > 0.0001;
+        if (isSignificant) {
+          addToHistory(lowerSymbol, wsData.price);
+          const change24h = calculate24hChange(lowerSymbol, wsData.price, existing.price_change_percentage_24h);
           
-          if (isSignificant) {
-            addToHistory(lowerSymbol, wsData.price);
-            const change24h = calculate24hChange(lowerSymbol, wsData.price, existing.price_change_percentage_24h);
-            
-            const newHigh24h = existing.high_24h > 0 ? Math.max(existing.high_24h, wsData.price) : wsData.price;
-            const newLow24h = existing.low_24h > 0 ? Math.min(existing.low_24h, wsData.price) : wsData.price;
-            
-            const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || existing.circulating_supply;
-            const estimatedMarketCap = wsData.price * supply;
-            const estimatedVolume = getEstimatedVolume(lowerSymbol, existing.total_volume);
-            
-            const updated = {
-              ...existing,
-              current_price: wsData.price,
-              price_change_percentage_24h: change24h !== 0 ? change24h : existing.price_change_percentage_24h,
-              high_24h: newHigh24h,
-              low_24h: newLow24h,
-              total_volume: estimatedVolume,
-              market_cap: estimatedMarketCap > 0 ? estimatedMarketCap : existing.market_cap,
-              lastUpdate: now,
-              source: "WebSocket",
-            };
-            pricesRef.current.set(lowerSymbol, updated);
-            hasUpdates = true;
-          }
-        } else {
-          const metadata = getAllTokenMetadata().find(m => m.symbol.toLowerCase() === lowerSymbol);
-          if (metadata) {
-            const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || 0;
-            const newPrice: CryptoPrice = {
-              id: metadata.id,
-              symbol: lowerSymbol,
-              name: metadata.name,
-              image: getTokenImageUrl(metadata.symbol),
-              current_price: wsData.price,
-              price_change_percentage_24h: 0,
-              high_24h: wsData.price,
-              low_24h: wsData.price,
-              total_volume: 0,
-              market_cap: wsData.price * supply,
-              market_cap_rank: pricesRef.current.size + 1,
-              circulating_supply: supply,
-              lastUpdate: now,
-              source: "WebSocket",
-            };
-            pricesRef.current.set(lowerSymbol, newPrice);
-            addToHistory(lowerSymbol, wsData.price);
-            hasUpdates = true;
-          }
+          const newHigh24h = existing.high_24h > 0 ? Math.max(existing.high_24h, wsData.price) : wsData.price;
+          const newLow24h = existing.low_24h > 0 ? Math.min(existing.low_24h, wsData.price) : wsData.price;
+          
+          const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || existing.circulating_supply;
+          const estimatedMarketCap = wsData.price * supply;
+          const estimatedVolume = getEstimatedVolume(lowerSymbol, existing.total_volume);
+          
+          pricesRef.current.set(lowerSymbol, {
+            ...existing,
+            current_price: wsData.price,
+            price_change_percentage_24h: change24h !== 0 ? change24h : existing.price_change_percentage_24h,
+            high_24h: newHigh24h,
+            low_24h: newLow24h,
+            total_volume: estimatedVolume,
+            market_cap: estimatedMarketCap > 0 ? estimatedMarketCap : existing.market_cap,
+            lastUpdate: now,
+            source: "WebSocket",
+          });
+          hasUpdates = true;
         }
-      });
-      
-      if (hasUpdates) {
-        const priceArray = Array.from(pricesRef.current.values())
-          .sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
-        setPrices(priceArray);
-        savePricesToZK(priceArray);
+      } else {
+        const metadata = getAllTokenMetadata().find(m => m.symbol.toLowerCase() === lowerSymbol);
+        if (metadata) {
+          const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || 0;
+          pricesRef.current.set(lowerSymbol, {
+            id: metadata.id,
+            symbol: lowerSymbol,
+            name: metadata.name,
+            image: getTokenImageUrl(metadata.symbol),
+            current_price: wsData.price,
+            price_change_percentage_24h: 0,
+            high_24h: wsData.price,
+            low_24h: wsData.price,
+            total_volume: 0,
+            market_cap: wsData.price * supply,
+            market_cap_rank: pricesRef.current.size + 1,
+            circulating_supply: supply,
+            lastUpdate: now,
+            source: "WebSocket",
+          });
+          addToHistory(lowerSymbol, wsData.price);
+          hasUpdates = true;
+        }
       }
-    }, UPDATE_THROTTLE_MS);
+    });
     
-    return () => {
-      if (wsUpdateTimeoutRef.current) {
-        clearTimeout(wsUpdateTimeoutRef.current);
-      }
-    };
+    if (hasUpdates) {
+      const priceArray = Array.from(pricesRef.current.values())
+        .sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
+      setPrices(priceArray);
+      savePricesToZK(priceArray);
+    }
   }, [websocket.prices.size, websocket.connected, addToHistory, calculate24hChange, getEstimatedVolume, savePricesToZK]);
 
   // Track live status from WebSocket + oracles
