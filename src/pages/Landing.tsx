@@ -76,7 +76,7 @@ const Landing = () => {
       {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 md:px-12 lg:px-16 xl:px-24">
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary glow-cyan sm:h-12 sm:w-12 sm:rounded-xl lg:h-14 lg:w-14">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary sm:h-12 sm:w-12 sm:rounded-xl lg:h-14 lg:w-14">
             <TrendingUp className="h-4 w-4 text-primary-foreground sm:h-6 sm:w-6 lg:h-7 lg:w-7" />
           </div>
           <span className="text-xl font-bold text-foreground sm:text-2xl lg:text-3xl">Zikalyze</span>
