@@ -607,7 +607,11 @@ export function analyzeMarketStructure(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🎯 PRECISION ENTRY — Only Trade With Confluence
+// 🎯 PRECISION ENTRY — Expert Derivatives Trader Logic
+// ═══════════════════════════════════════════════════════════════════════════════
+// RULES:
+// 1. Risk/Reward: (Entry - Stop) < (Entry - Target) — ALWAYS
+// 2. No counter-trend trades in strong trends — Wait for pullback
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function generatePrecisionEntry(
@@ -635,9 +639,12 @@ export function generatePrecisionEntry(
   
   const topDown = performTopDownAnalysis(price, high24h, low24h, change);
   
-  // Fibonacci levels with proper precision
+  // Key levels with proper precision
+  const fib236 = low24h + range * 0.236;
   const fib382 = low24h + range * 0.382;
+  const fib500 = low24h + range * 0.500;
   const fib618 = low24h + range * 0.618;
+  const fib786 = low24h + range * 0.786;
   const support = low24h + range * 0.1;
   const resistance = high24h - range * 0.1;
 
@@ -648,6 +655,11 @@ export function generatePrecisionEntry(
   let invalidation = '';
   let structureStatus = '';
   let movementPhase = '';
+
+  // Detect STRONG TREND conditions (avoid counter-trend trades)
+  const isStrongBullishTrend = change >= 4 || (change >= 2.5 && pricePosition >= 70);
+  const isStrongBearishTrend = change <= -4 || (change <= -2.5 && pricePosition <= 30);
+  const trendStrength = topDown.confluenceScore;
 
   // NO TRADE if confluence is low
   if (topDown.tradeableDirection === 'NO_TRADE' || topDown.confluenceScore < 45) {
@@ -663,81 +675,234 @@ export function generatePrecisionEntry(
     };
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🚀 LONG BIAS LOGIC
+  // ═══════════════════════════════════════════════════════════════════════════
   if (bias === 'LONG' || topDown.tradeableDirection === 'LONG') {
-    if (pricePosition < 35) {
+    
+    // RULE 2: If strong bullish trend AND price extended, wait for pullback
+    if (isStrongBullishTrend && pricePosition >= 65) {
+      timing = 'WAIT_PULLBACK';
+      const pullbackEntry = fib500; // Wait for 50% retracement
+      const stopLoss = fib236; // Stop below 23.6% Fib
+      const target = high24h * 1.02; // Target new highs
+      
+      // Verify R:R - (Entry - Stop) must be < (Target - Entry)
+      const risk = pullbackEntry - stopLoss;
+      const reward = target - pullbackEntry;
+      
+      zone = `Wait for pullback to $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
+      trigger = `🟡 WAIT — Strong uptrend (+${change.toFixed(1)}%), wait for pullback to key support`;
+      confirmation = `Buy on bullish price action at $${fib500.toFixed(dec)} (50% Fib)`;
+      invalidation = `Below $${stopLoss.toFixed(dec)} — R:R ${(reward/risk).toFixed(1)}:1`;
+      structureStatus = `Strong Bullish (${trendStrength}% conf)`;
+      movementPhase = 'Waiting for Pullback';
+      
+    } else if (pricePosition < 35) {
+      // Price in discount zone - optimal long entry
       timing = 'NOW';
-      zone = `Discount: $${support.toFixed(dec)} – $${fib382.toFixed(dec)}`;
-      trigger = '🟢 BUY — Price in discount with bullish confluence';
-      confirmation = `${topDown.confluenceScore}% confluence • ${topDown.overallBias} bias`;
-      invalidation = `Below $${(low24h * 0.98).toFixed(dec)}`;
+      const entryPrice = price;
+      const stopLoss = low24h * 0.985; // 1.5% below 24h low
+      const target1 = fib618; // First target at 61.8% Fib
+      const target2 = resistance; // Second target at resistance
+      
+      // Calculate and verify R:R
+      const risk = entryPrice - stopLoss;
+      const reward = target1 - entryPrice;
+      
+      // RULE 1: Ensure proper R:R (risk < reward)
+      if (risk >= reward) {
+        // Adjust stop to ensure minimum 1.5:1 R:R
+        const adjustedStop = entryPrice - (reward / 1.5);
+        zone = `Discount: $${entryPrice.toFixed(dec)} entry`;
+        trigger = '🟢 BUY — Price in discount with bullish confluence';
+        confirmation = `${topDown.confluenceScore}% confluence • Target: $${target1.toFixed(dec)}`;
+        invalidation = `Below $${adjustedStop.toFixed(dec)} — R:R 1.5:1`;
+      } else {
+        zone = `Discount: $${entryPrice.toFixed(dec)} entry`;
+        trigger = '🟢 BUY — Price in discount with bullish confluence';
+        confirmation = `${topDown.confluenceScore}% confluence • Target: $${target1.toFixed(dec)}`;
+        invalidation = `Below $${stopLoss.toFixed(dec)} — R:R ${(reward/risk).toFixed(1)}:1`;
+      }
       structureStatus = `Bullish (${topDown.confluenceScore}% conf)`;
       movementPhase = 'Accumulation';
+      
     } else if (pricePosition > 70) {
+      // Extended - DO NOT chase, wait for pullback
       timing = 'WAIT_PULLBACK';
       zone = `Wait: $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
-      trigger = '🟡 WAIT — Extended, wait for pullback';
-      confirmation = 'Retrace to Fib 38-62% zone';
-      invalidation = `Below $${support.toFixed(dec)}`;
+      trigger = '🟡 WAIT — Extended, do not chase. Wait for pullback to support';
+      confirmation = `Retrace to Fib 38-62% zone with bullish confirmation candle`;
+      invalidation = `Below $${fib236.toFixed(dec)} (trend break)`;
       structureStatus = 'Extended';
       movementPhase = 'Wait for retracement';
+      
     } else {
-      timing = change > 1 ? 'NOW' : 'WAIT_PULLBACK';
-      zone = `Mid-range: $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
-      trigger = change > 1 ? '🟢 BUY — Momentum active' : '🟡 WAIT — Better entry at support';
-      confirmation = `Bullish momentum confirmed`;
-      invalidation = `Below $${support.toFixed(dec)}`;
+      // Mid-range - evaluate momentum
+      if (change > 1.5) {
+        timing = 'NOW';
+        const entryPrice = price;
+        const stopLoss = fib382 * 0.99; // Just below 38.2% Fib
+        const target = resistance;
+        
+        const risk = entryPrice - stopLoss;
+        const reward = target - entryPrice;
+        
+        // Ensure R:R compliance
+        if (risk < reward) {
+          zone = `Entry: $${entryPrice.toFixed(dec)}`;
+          trigger = '🟢 BUY — Momentum active with trend';
+          confirmation = `Target: $${target.toFixed(dec)}`;
+          invalidation = `Below $${stopLoss.toFixed(dec)} — R:R ${(reward/risk).toFixed(1)}:1`;
+        } else {
+          timing = 'WAIT_PULLBACK';
+          zone = `Wait: $${fib382.toFixed(dec)} – $${fib500.toFixed(dec)}`;
+          trigger = '🟡 WAIT — R:R not favorable, wait for better entry';
+          confirmation = 'Wait for pullback to improve risk/reward';
+          invalidation = `Below $${fib236.toFixed(dec)}`;
+        }
+      } else {
+        timing = 'WAIT_PULLBACK';
+        zone = `Wait: $${fib382.toFixed(dec)} – $${fib500.toFixed(dec)}`;
+        trigger = '🟡 WAIT — Better entry at support zone';
+        confirmation = `Buy on bullish price action at Fib levels`;
+        invalidation = `Below $${support.toFixed(dec)}`;
+      }
       structureStatus = 'Trending';
-      movementPhase = 'Impulse';
+      movementPhase = change > 1 ? 'Impulse' : 'Wait for retracement';
     }
-  } else if (bias === 'SHORT' || topDown.tradeableDirection === 'SHORT') {
-    // Check if price is already below key support (breakdown confirmed)
-    const alreadyBelowSupport = price < support;
     
-    if (pricePosition > 65) {
-      // Price at resistance - ideal short zone
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📉 SHORT BIAS LOGIC  
+  // ═══════════════════════════════════════════════════════════════════════════
+  } else if (bias === 'SHORT' || topDown.tradeableDirection === 'SHORT') {
+    
+    // RULE 2: If strong bearish trend AND price already dumped, wait for relief rally
+    if (isStrongBearishTrend && pricePosition <= 35) {
+      timing = 'WAIT_PULLBACK';
+      const pullbackEntry = fib500; // Wait for 50% retracement bounce
+      const stopLoss = fib786; // Stop above 78.6% Fib
+      const target = low24h * 0.98; // Target new lows
+      
+      // Verify R:R
+      const risk = stopLoss - pullbackEntry;
+      const reward = pullbackEntry - target;
+      
+      zone = `Wait for relief rally to $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
+      trigger = `🟡 WAIT — Strong downtrend (${change.toFixed(1)}%), wait for bounce to key resistance`;
+      confirmation = `Sell on bearish price action at $${fib500.toFixed(dec)} (50% Fib)`;
+      invalidation = `Above $${stopLoss.toFixed(dec)} — R:R ${(reward/risk).toFixed(1)}:1`;
+      structureStatus = `Strong Bearish (${trendStrength}% conf)`;
+      movementPhase = 'Waiting for Pullback';
+      
+    } else if (pricePosition > 65) {
+      // Price in premium zone - optimal short entry
       timing = 'NOW';
-      zone = `Premium: $${fib618.toFixed(dec)} – $${resistance.toFixed(dec)}`;
-      trigger = '🔴 SELL — Price in premium with bearish confluence';
-      confirmation = `${topDown.confluenceScore}% confluence • ${topDown.overallBias} bias`;
-      invalidation = `Above $${(high24h * 1.02).toFixed(dec)}`;
+      const entryPrice = price;
+      const stopLoss = high24h * 1.015; // 1.5% above 24h high
+      const target1 = fib382; // First target at 38.2% Fib
+      const target2 = support; // Second target at support
+      
+      // Calculate and verify R:R
+      const risk = stopLoss - entryPrice;
+      const reward = entryPrice - target1;
+      
+      // RULE 1: Ensure proper R:R (risk < reward)
+      if (risk >= reward) {
+        // Adjust stop to ensure minimum 1.5:1 R:R
+        const adjustedStop = entryPrice + (reward / 1.5);
+        zone = `Premium: $${entryPrice.toFixed(dec)} entry`;
+        trigger = '🔴 SELL — Price in premium with bearish confluence';
+        confirmation = `${topDown.confluenceScore}% confluence • Target: $${target1.toFixed(dec)}`;
+        invalidation = `Above $${adjustedStop.toFixed(dec)} — R:R 1.5:1`;
+      } else {
+        zone = `Premium: $${entryPrice.toFixed(dec)} entry`;
+        trigger = '🔴 SELL — Price in premium with bearish confluence';
+        confirmation = `${topDown.confluenceScore}% confluence • Target: $${target1.toFixed(dec)}`;
+        invalidation = `Above $${stopLoss.toFixed(dec)} — R:R ${(reward/risk).toFixed(1)}:1`;
+      }
       structureStatus = `Bearish (${topDown.confluenceScore}% conf)`;
       movementPhase = 'Distribution';
+      
     } else if (pricePosition < 30) {
+      // Check if breakdown confirmed
+      const alreadyBelowSupport = price < support;
+      
       if (alreadyBelowSupport && change < -2) {
-        // Price broke down and still falling - trend continuation
+        // Breakdown confirmed - trend continuation short
         timing = 'NOW';
-        const targetLow = low24h * 0.95;
-        zone = `Breakdown: $${(price * 0.98).toFixed(dec)} – $${price.toFixed(dec)}`;
-        trigger = '🔴 SELL — Breakdown confirmed, momentum short';
-        confirmation = `Price below support, ${Math.abs(change).toFixed(1)}% sell pressure`;
-        invalidation = `Above $${fib382.toFixed(dec)} (reclaim of support)`;
+        const entryPrice = price;
+        const stopLoss = fib382; // Stop at reclaim of support
+        const target = low24h * 0.95; // Target 5% below 24h low
+        
+        const risk = stopLoss - entryPrice;
+        const reward = entryPrice - target;
+        
+        if (risk < reward) {
+          zone = `Breakdown: $${entryPrice.toFixed(dec)} entry`;
+          trigger = '🔴 SELL — Breakdown confirmed, momentum short';
+          confirmation = `Price below support, ${Math.abs(change).toFixed(1)}% sell pressure`;
+          invalidation = `Above $${stopLoss.toFixed(dec)} — R:R ${(reward/risk).toFixed(1)}:1`;
+        } else {
+          timing = 'WAIT_PULLBACK';
+          zone = `Wait: $${fib382.toFixed(dec)} – $${fib500.toFixed(dec)}`;
+          trigger = '🟡 WAIT — R:R not favorable after breakdown';
+          confirmation = 'Wait for bounce to short with better R:R';
+          invalidation = `Above $${fib618.toFixed(dec)}`;
+        }
         structureStatus = 'Breakdown Active';
         movementPhase = 'Impulse Down';
       } else {
-        // Oversold but bearish - wait for relief rally to short
+        // Oversold - wait for relief rally
         timing = 'WAIT_PULLBACK';
         zone = `Wait: $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
         trigger = '🟡 WAIT — Oversold, wait for relief rally to short';
-        confirmation = 'Bounce to Fib 38-62% zone for short entry';
+        confirmation = 'Bounce to Fib 38-62% zone for short entry with bearish candle';
         invalidation = `Above $${resistance.toFixed(dec)} (trend reversal)`;
         structureStatus = 'Oversold';
         movementPhase = 'Wait for retracement';
       }
+      
     } else {
-      timing = change < -1 ? 'NOW' : 'WAIT_PULLBACK';
-      zone = `Mid-range: $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
-      trigger = change < -1 ? '🔴 SELL — Momentum active' : '🟡 WAIT — Better entry at resistance';
-      confirmation = `Bearish momentum confirmed`;
-      invalidation = `Above $${resistance.toFixed(dec)}`;
+      // Mid-range - evaluate momentum
+      if (change < -1.5) {
+        timing = 'NOW';
+        const entryPrice = price;
+        const stopLoss = fib618 * 1.01; // Just above 61.8% Fib
+        const target = support;
+        
+        const risk = stopLoss - entryPrice;
+        const reward = entryPrice - target;
+        
+        if (risk < reward) {
+          zone = `Entry: $${entryPrice.toFixed(dec)}`;
+          trigger = '🔴 SELL — Momentum active with trend';
+          confirmation = `Target: $${target.toFixed(dec)}`;
+          invalidation = `Above $${stopLoss.toFixed(dec)} — R:R ${(reward/risk).toFixed(1)}:1`;
+        } else {
+          timing = 'WAIT_PULLBACK';
+          zone = `Wait: $${fib500.toFixed(dec)} – $${fib618.toFixed(dec)}`;
+          trigger = '🟡 WAIT — R:R not favorable, wait for bounce';
+          confirmation = 'Wait for relief rally to improve risk/reward';
+          invalidation = `Above $${fib786.toFixed(dec)}`;
+        }
+      } else {
+        timing = 'WAIT_PULLBACK';
+        zone = `Wait: $${fib500.toFixed(dec)} – $${fib618.toFixed(dec)}`;
+        trigger = '🟡 WAIT — Better entry at resistance zone';
+        confirmation = `Sell on bearish price action at Fib levels`;
+        invalidation = `Above $${resistance.toFixed(dec)}`;
+      }
       structureStatus = 'Trending';
-      movementPhase = 'Impulse';
+      movementPhase = change < -1 ? 'Impulse' : 'Wait for retracement';
     }
+    
   } else {
     // NEUTRAL bias — no clear direction
     timing = 'AVOID';
     zone = `Range: $${fib382.toFixed(dec)} – $${fib618.toFixed(dec)}`;
     trigger = '⏸️ NO TRADE — Neutral bias, wait for direction';
-    confirmation = 'Wait for breakout or breakdown';
+    confirmation = 'Wait for breakout or breakdown with volume confirmation';
     invalidation = 'N/A';
     structureStatus = 'Neutral';
     movementPhase = 'Consolidation';
