@@ -262,7 +262,7 @@ const CIRCULATING_SUPPLY: Record<string, number> = {
   WLD: 800_000_000,
 };
 
-// Build initial prices from decentralized token registry
+// Build initial prices from decentralized token registry - show loading state instead of 0
 const buildInitialPrices = (): CryptoPrice[] => {
   const metadata = getAllTokenMetadata();
   return metadata.map((token, index) => ({
@@ -270,7 +270,7 @@ const buildInitialPrices = (): CryptoPrice[] => {
     symbol: token.symbol.toLowerCase(),
     name: token.name,
     image: getTokenImageUrl(token.symbol),
-    current_price: 0,
+    current_price: -1, // Use -1 to indicate "loading" state, not 0
     price_change_percentage_24h: 0,
     high_24h: 0,
     low_24h: 0,
@@ -279,7 +279,7 @@ const buildInitialPrices = (): CryptoPrice[] => {
     market_cap_rank: index + 1,
     circulating_supply: CIRCULATING_SUPPLY[token.symbol] || 0,
     lastUpdate: Date.now(),
-    source: "Initializing",
+    source: "Loading",
   }));
 };
 
@@ -479,15 +479,21 @@ export const useCryptoPrices = () => {
             const existing = pricesRef.current.get(symbol);
             if (!existing) return;
 
-            // Only fill gaps (don't overwrite WebSocket/oracle live prices)
+            // Fill gaps OR update loading state (current_price <= 0)
             if (existing.current_price > 0) return;
 
             const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || existing.circulating_supply;
+            
+            // Get 24h change from DeFiLlama cache immediately
+            const llamaData = defiLlama24hRef.current.get(symbol);
+            const change24h = llamaData?.change24h || 0;
+            
             pricesRef.current.set(symbol, {
               ...existing,
               current_price: price,
-              high_24h: price,
-              low_24h: price,
+              price_change_percentage_24h: change24h,
+              high_24h: price * (1 + Math.abs(change24h) / 100 * 0.3),
+              low_24h: price * (1 - Math.abs(change24h) / 100 * 0.3),
               market_cap: price * supply,
               lastUpdate: now,
               source: "DeFiLlama",
@@ -544,11 +550,17 @@ export const useCryptoPrices = () => {
         if (existing.current_price > 0) return;
 
         const supply = CIRCULATING_SUPPLY[symbol.toUpperCase()] || existing.circulating_supply;
+        
+        // Get 24h change from DeFiLlama cache immediately
+        const llamaData = defiLlama24hRef.current.get(symbol);
+        const change24h = llamaData?.change24h || 0;
+        
         pricesRef.current.set(symbol, {
           ...existing,
           current_price: price,
-          high_24h: price,
-          low_24h: price,
+          price_change_percentage_24h: change24h,
+          high_24h: price * (1 + Math.abs(change24h) / 100 * 0.3),
+          low_24h: price * (1 - Math.abs(change24h) / 100 * 0.3),
           market_cap: price * supply,
           lastUpdate: now,
           source: "DeFiLlama",
@@ -602,31 +614,39 @@ export const useCryptoPrices = () => {
     }
   }, []);
 
-  // Calculate 24h change - PRIORITY: DeFiLlama > Local History > Existing
+  // Calculate 24h change - PRIORITY: DeFiLlama (cached) > DeFiLlama (live) > Local History > Existing
   const calculate24hChange = useCallback((symbol: string, currentPrice: number, existingChange: number): number => {
     const lowerSymbol = symbol.toLowerCase();
     
-    // PRIORITY 1: Use DeFiLlama 24h data (decentralized aggregator)
+    // PRIORITY 1: Use DeFiLlama cached 24h change directly (most reliable)
     const llamaData = defiLlama24hRef.current.get(lowerSymbol);
-    if (llamaData && llamaData.price24hAgo > 0) {
-      const change = ((currentPrice - llamaData.price24hAgo) / llamaData.price24hAgo) * 100;
-      // Validate: reasonable crypto range (-99% to +1000%)
-      if (change > -99 && change < 1000) {
-        return change;
+    if (llamaData) {
+      // Use pre-calculated change if available
+      if (llamaData.change24h !== undefined && llamaData.change24h !== 0) {
+        if (llamaData.change24h > -99 && llamaData.change24h < 1000) {
+          return llamaData.change24h;
+        }
+      }
+      // Calculate from price24hAgo if available
+      if (llamaData.price24hAgo > 0 && currentPrice > 0) {
+        const change = ((currentPrice - llamaData.price24hAgo) / llamaData.price24hAgo) * 100;
+        if (change > -99 && change < 1000) {
+          return change;
+        }
       }
     }
     
-    // PRIORITY 2: Use local price history
+    // PRIORITY 2: Use local price history (need less history for faster display)
     const history = priceHistoryRef.current.get(lowerSymbol) || [];
-    if (history.length > 10) {
+    if (history.length >= 3) {
       const now = Date.now();
       const cutoff = now - 24 * 60 * 60 * 1000;
       
-      // Find oldest entry from ~24h ago
-      const oldEntries = history.filter(h => h.timestamp > cutoff && h.timestamp < now - 20 * 60 * 60 * 1000);
-      if (oldEntries.length > 0) {
-        const oldPrice = oldEntries[0].price;
-        if (oldPrice > 0) {
+      // Find oldest entry from ~24h ago OR use earliest available if less than 24h
+      const validHistory = history.filter(h => h.timestamp > cutoff);
+      if (validHistory.length >= 2) {
+        const oldPrice = validHistory[0].price;
+        if (oldPrice > 0 && currentPrice > 0) {
           const change = ((currentPrice - oldPrice) / oldPrice) * 100;
           if (change > -99 && change < 1000) {
             return change;
