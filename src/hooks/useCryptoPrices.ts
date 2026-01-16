@@ -755,10 +755,13 @@ export const useCryptoPrices = () => {
             const estimatedMarketCap = oracleData.price * supply;
             const estimatedVolume = getEstimatedVolume(symbol, existing.total_volume);
             
+            // PRESERVE existing 24h change if valid - don't overwrite with 0
+            const finalChange24h = change24h !== 0 ? change24h : existing.price_change_percentage_24h;
+            
             const updated = {
               ...existing,
               current_price: oracleData.price,
-              price_change_percentage_24h: change24h !== 0 ? change24h : existing.price_change_percentage_24h,
+              price_change_percentage_24h: finalChange24h,
               high_24h: newHigh24h,
               low_24h: newLow24h,
               total_volume: estimatedVolume,
@@ -838,7 +841,7 @@ export const useCryptoPrices = () => {
       const existing = pricesRef.current.get(lowerSymbol);
       
       if (existing) {
-        const isFirstPrice = existing.current_price === 0 || existing.current_price === undefined;
+        const isFirstPrice = existing.current_price <= 0;
         const priceDiff = existing.current_price > 0 
           ? Math.abs(existing.current_price - wsData.price) / existing.current_price 
           : 1;
@@ -847,7 +850,12 @@ export const useCryptoPrices = () => {
         
         if (isSignificant) {
           addToHistory(lowerSymbol, wsData.price);
-          const change24h = calculate24hChange(lowerSymbol, wsData.price, existing.price_change_percentage_24h);
+          
+          // PRESERVE existing 24h change if it's valid - don't recalculate unnecessarily
+          let change24h = existing.price_change_percentage_24h;
+          if (change24h === 0 || isFirstPrice) {
+            change24h = calculate24hChange(lowerSymbol, wsData.price, existing.price_change_percentage_24h);
+          }
           
           const newHigh24h = existing.high_24h > 0 ? Math.max(existing.high_24h, wsData.price) : wsData.price;
           const newLow24h = existing.low_24h > 0 ? Math.min(existing.low_24h, wsData.price) : wsData.price;
@@ -859,7 +867,7 @@ export const useCryptoPrices = () => {
           pricesRef.current.set(lowerSymbol, {
             ...existing,
             current_price: wsData.price,
-            price_change_percentage_24h: change24h !== 0 ? change24h : existing.price_change_percentage_24h,
+            price_change_percentage_24h: change24h,
             high_24h: newHigh24h,
             low_24h: newLow24h,
             total_volume: estimatedVolume,

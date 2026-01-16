@@ -190,7 +190,17 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   }, []);
 
   // Smooth typewriter effect using requestAnimationFrame
+  // Reset charIndex when fullAnalysis changes entirely (new analysis started)
+  const prevAnalysisRef = useRef<string>("");
+  
   useEffect(() => {
+    // If fullAnalysis changed significantly (new analysis), reset the typewriter
+    if (fullAnalysis && !fullAnalysis.startsWith(prevAnalysisRef.current.slice(0, 50))) {
+      charIndexRef.current = 0;
+      setDisplayedText("");
+    }
+    prevAnalysisRef.current = fullAnalysis;
+    
     const animate = (timestamp: number) => {
       if (timestamp - lastFrameTimeRef.current >= FRAME_INTERVAL) {
         if (charIndexRef.current < fullAnalysis.length) {
