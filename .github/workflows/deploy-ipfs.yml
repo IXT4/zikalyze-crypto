@@ -159,7 +159,7 @@ jobs:
           node upload.mjs
 
       - name: Upload deployment artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ipfs-deployment
           path: ipfs-deployment.json
