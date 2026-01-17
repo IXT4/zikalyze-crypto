@@ -2,13 +2,14 @@
 # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
 
 version: 2
+
 updates:
   # NPM dependencies
   - package-ecosystem: "npm"
-  versioning-strategy: "increase"
-  allow:
-  - dependency-type: "direct:production"
-  - dependency-type: "indirect  # Optional for transitive deps"
+    versioning-strategy: "increase"
+    allow:
+      - dependency-type: "direct:production"
+      - dependency-type: "indirect"  # Optional for transitive deps
     directory: "/"
     schedule:
       interval: "weekly"
@@ -36,15 +37,14 @@ updates:
     # Security updates are always prioritized
     reviewers:
       - "zikalyze"
-assignees:
-  - "zikalyze"  # Or your team lead's username
-    # Ignore specific packages if needed
+    assignees:
+      - "zikalyze"  # Or your team lead's username
     ignore:
       # Example: ignore major updates for specific packages
       # - dependency-name: "some-package"
       #   update-types: ["version-update:semver-major"]
 
-  # GitHub Actions
+  # Github Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
