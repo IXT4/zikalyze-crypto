@@ -1,8 +1,12 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { injectSpeedInsights } from "@vercel/speed-insights";
 import App from "./App.tsx";
 import "./index.css";
 import "./i18n/config";
+
+// Initialize Vercel Speed Insights
+injectSpeedInsights();
 
 // Register service worker for offline caching (must respect Vite base "./" for preview/IPFS)
 if ("serviceWorker" in navigator) {
