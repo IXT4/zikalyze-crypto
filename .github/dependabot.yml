@@ -5,6 +5,10 @@ version: 2
 updates:
   # NPM dependencies
   - package-ecosystem: "npm"
+  versioning-strategy: "increase"
+  allow:
+  - dependency-type: "direct:production"
+  - dependency-type: "indirect  # Optional for transitive deps"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -32,6 +36,8 @@ updates:
     # Security updates are always prioritized
     reviewers:
       - "zikalyze"
+assignees:
+  - "zikalyze"  # Or your team lead's username
     # Ignore specific packages if needed
     ignore:
       # Example: ignore major updates for specific packages
