@@ -11,6 +11,7 @@ import { useChartTrendData } from "@/hooks/useChartTrendData";
 import { useMultiTimeframeData, Timeframe } from "@/hooks/useMultiTimeframeData";
 import { useAILearning } from "@/hooks/useAILearning";
 import { useGlobalPriceWebSocket } from "@/hooks/useGlobalPriceWebSocket";
+import { useVWAPPrices } from "@/hooks/useVWAPPrices";
 import { runClientSideAnalysis, AnalysisResult } from "@/lib/zikalyze-brain";
 import { MultiTimeframeInput, TimeframeAnalysisInput } from "@/lib/zikalyze-brain/types";
 import { format } from "date-fns";
@@ -18,6 +19,7 @@ import { Progress } from "@/components/ui/progress";
 import AISummaryCard from "./AISummaryCard";
 import { LivePriceLarge } from "./LivePrice";
 import { PriceChange } from "./PriceChange";
+import { VWAPIndicator } from "./VWAPIndicator";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -101,6 +103,10 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
   const websocketSymbols = useMemo(() => [crypto.toUpperCase()], [crypto]);
   const websocket = useGlobalPriceWebSocket(websocketSymbols);
   
+  // 📊 VWAP Aggregated Price with ML outlier filtering
+  const { getVWAPPrice, isConnected: vwapConnected } = useVWAPPrices();
+  const vwapData = getVWAPPrice(crypto);
+  
   // Get LIVE price directly from WebSocket - no caching, no fallback to props
   const wsPrice = websocket.getPrice(crypto.toUpperCase());
   
@@ -118,8 +124,10 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
     { volume, marketCap, coinGeckoId: undefined }
   );
   
-  // ALWAYS use WebSocket price - NEVER use cached/prop prices for AI analysis
-  const currentPrice = wsPrice?.price || price;
+  // Use VWAP price if available and confident, otherwise use WebSocket
+  const currentPrice = (vwapData && vwapData.confidence >= 0.5) 
+    ? vwapData.price 
+    : (wsPrice?.price || price);
   const currentChange = change;
   const currentHigh = high24h || currentPrice * 1.02;
   const currentLow = low24h || currentPrice * 0.98;
@@ -678,7 +686,7 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
           </div>
         </div>
 
-        {/* Live Price Display - Shows real-time WebSocket data with animated updates */}
+        {/* Live Price Display - Shows real-time VWAP aggregated data with animated updates */}
         <div className={cn(
           "mb-4 p-3 rounded-xl bg-gradient-to-r from-background to-secondary/30 border transition-all duration-500",
           isWebSocketLive ? (currentChange >= 0 ? "border-success/30" : "border-destructive/30") : "border-border/50"
@@ -700,6 +708,16 @@ const AIAnalyzer = ({ crypto, price, change, high24h, low24h, volume, marketCap 
               </div>
               <PriceChange value={currentChange} showBadge={true} />
             </div>
+            {/* VWAP Aggregation Indicator */}
+            {vwapData && vwapData.price > 0 && (
+              <VWAPIndicator
+                method={vwapData.method}
+                confidence={vwapData.confidence}
+                sourcesUsed={vwapData.sourcesUsed}
+                outliersFiltered={vwapData.outliersFiltered}
+                compact
+              />
+            )}
           </div>
         </div>
 
