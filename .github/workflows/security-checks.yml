@@ -138,11 +138,13 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Dependency Audit | ${{ needs.dependency-audit.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| CodeQL Analysis | ${{ needs.codeql-analysis.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Secret Scanning | ${{ needs.secret-scanning.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Code Quality | ${{ needs.code-quality.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Test | ${{ needs.build-test.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Audit | ${{ needs.dependency-audit.result == 'success' && '✅ Passed' || (needs.dependency-audit.result == 'skipped' && '⏭️ Skipped' || '❌ Failed') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CodeQL Analysis | ${{ needs.codeql-analysis.result == 'success' && '✅ Passed' || (needs.codeql-analysis.result == 'skipped' && '⏭️ Skipped' || '❌ Failed') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Scanning | ${{ needs.secret-scanning.result == 'success' && '✅ Passed' || (needs.secret-scanning.result == 'skipped' && '⏭️ Skipped' || '❌ Failed') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Quality | ${{ needs.code-quality.result == 'success' && '✅ Passed' || (needs.code-quality.result == 'skipped' && '⏭️ Skipped' || '❌ Failed') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Test | ${{ needs.build-test.result == 'success' && '✅ Passed' || (needs.build-test.result == 'skipped' && '⏭️ Skipped' || '❌ Failed') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Run Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
       - name: Fail if any check failed
         if: contains(needs.*.result, 'failure')
