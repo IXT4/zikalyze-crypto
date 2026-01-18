@@ -34,10 +34,12 @@ const PYTH_HERMES_WSS = "wss://hermes.pyth.network/ws";
 const PYTH_HERMES_REST = "https://hermes.pyth.network/api/latest_price_feeds";
 const DEFILLAMA_API = "https://coins.llama.fi/prices/current";
 
-const RECONNECT_DELAY = 2000;
-const MAX_RECONNECT_ATTEMPTS = 10;
-const PING_INTERVAL = 25000;
-const FALLBACK_POLL_INTERVAL = 5000;
+// Connection resilience configuration
+const RECONNECT_DELAY = 1500; // Faster initial reconnect
+const MAX_RECONNECT_ATTEMPTS = 15; // More attempts before fallback
+const PING_INTERVAL = 20000; // More frequent pings
+const FALLBACK_POLL_INTERVAL = 4000; // Faster REST polling
+const CONNECTION_TIMEOUT = 8000; // Timeout for initial connection
 
 // Binance trading pairs (symbol -> Binance stream name)
 const BINANCE_STREAMS: Record<string, string> = {
@@ -452,6 +454,16 @@ async function fetchDeFiLlama(symbols: string[]): Promise<void> {
   }
 }
 
+// Connection timeout handler
+let connectionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+function clearConnectionTimeout() {
+  if (connectionTimeoutId) {
+    clearTimeout(connectionTimeoutId);
+    connectionTimeoutId = null;
+  }
+}
+
 // Connect to Binance Combined Streams WebSocket (primary)
 function connectBinance(symbols: string[]) {
   if (binanceSocket?.readyState === WebSocket.OPEN) return;
@@ -463,20 +475,28 @@ function connectBinance(symbols: string[]) {
     .map(s => `${s}@trade`);
 
   if (streams.length === 0) {
-    console.log("[PriceWS] No Binance streams available, using Pyth fallback");
     connectPyth();
     return;
   }
 
-  // Binance combined stream URL
-  const wsUrl = `${BINANCE_WSS_BASE}/${streams.slice(0, 100).join("/")}`;
+  // Binance combined stream URL - limit to 50 streams for stability
+  const wsUrl = `${BINANCE_WSS_BASE}/${streams.slice(0, 50).join("/")}`;
 
   try {
-    console.log(`[PriceWS] Connecting to Binance (${streams.length} streams)...`);
     binanceSocket = new WebSocket(wsUrl);
 
+    // Set connection timeout - if not connected within timeout, fallback
+    clearConnectionTimeout();
+    connectionTimeoutId = setTimeout(() => {
+      if (binanceSocket?.readyState !== WebSocket.OPEN) {
+        binanceSocket?.close();
+        binanceSocket = null;
+        connectPyth();
+      }
+    }, CONNECTION_TIMEOUT);
+
     binanceSocket.onopen = () => {
-      console.log("[PriceWS] ✅ Connected to Binance WebSocket (primary)");
+      clearConnectionTimeout();
       reconnectAttempts = 0;
 
       globalState = {
@@ -544,8 +564,8 @@ function connectBinance(symbols: string[]) {
       }
     };
 
-    binanceSocket.onclose = (event) => {
-      console.log("[PriceWS] Binance disconnected:", event.code, event.reason);
+    binanceSocket.onclose = () => {
+      clearConnectionTimeout();
 
       globalState = {
         ...globalState,
@@ -565,8 +585,7 @@ function connectBinance(symbols: string[]) {
       if (globalListeners.size > 0) {
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttempts++;
-          const delay = Math.min(RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1), 15000);
-          console.log(`[PriceWS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
+          const delay = Math.min(RECONNECT_DELAY * Math.pow(1.3, reconnectAttempts - 1), 10000);
 
           // Use fallbacks while reconnecting
           fetchPythREST(subscribedSymbols);
@@ -575,7 +594,6 @@ function connectBinance(symbols: string[]) {
           reconnectTimeout = setTimeout(() => connectBinance(subscribedSymbols), delay);
         } else {
           // Fall back to Pyth after max attempts
-          console.log("[PriceWS] Falling back to Pyth WebSocket");
           connectPyth();
         }
       }
@@ -583,17 +601,15 @@ function connectBinance(symbols: string[]) {
       notifyListeners();
     };
 
-    binanceSocket.onerror = (error) => {
-      console.warn("[PriceWS] Binance WebSocket error - switching to fallback");
+    binanceSocket.onerror = () => {
       globalState = {
         ...globalState,
-        error: null, // Don't show error to user, we have fallbacks
+        error: null, // Silent - we have fallbacks
         connecting: false,
       };
       // Will trigger onclose which handles fallback
     };
-  } catch (err) {
-    console.warn("[PriceWS] Failed to create Binance WebSocket, using Pyth fallback");
+  } catch {
     // Fall back to Pyth silently
     connectPyth();
   }
@@ -605,11 +621,21 @@ function connectPyth() {
   if (pythSocket?.readyState === WebSocket.CONNECTING) return;
 
   try {
-    console.log("[PriceWS] Connecting to Pyth Hermes (fallback)...");
     pythSocket = new WebSocket(PYTH_HERMES_WSS);
 
+    // Set connection timeout for Pyth
+    clearConnectionTimeout();
+    connectionTimeoutId = setTimeout(() => {
+      if (pythSocket?.readyState !== WebSocket.OPEN) {
+        pythSocket?.close();
+        pythSocket = null;
+        // Use REST fallback
+        startRESTFallback();
+      }
+    }, CONNECTION_TIMEOUT);
+
     pythSocket.onopen = () => {
-      console.log("[PriceWS] ✅ Connected to Pyth Hermes (fallback)");
+      clearConnectionTimeout();
 
       globalState = {
         ...globalState,
@@ -629,7 +655,6 @@ function connectPyth() {
           type: "subscribe",
           ids: feedIds,
         }));
-        console.log(`[PriceWS] Subscribed to ${feedIds.length} Pyth feeds`);
       }
 
       // Fallback polling for symbols not in Pyth
@@ -675,13 +700,13 @@ function connectPyth() {
             }
           }
         }
-      } catch (err) {
+      } catch {
         // Ignore parse errors
       }
     };
 
     pythSocket.onclose = () => {
-      console.log("[PriceWS] Pyth disconnected");
+      clearConnectionTimeout();
       pythSocket = null;
       
       // Try to reconnect to Binance
@@ -692,39 +717,43 @@ function connectPyth() {
     };
 
     pythSocket.onerror = () => {
-      console.warn("[PriceWS] Pyth WebSocket error - using REST fallback");
       globalState = {
         ...globalState,
-        error: null, // Don't show error, we have REST fallback
+        error: null, // Silent - we have REST fallback
       };
       // Trigger immediate REST fallback
       fetchPythREST(subscribedSymbols);
       fetchDeFiLlama(subscribedSymbols);
     };
-  } catch (err) {
-    console.warn("[PriceWS] Failed to create Pyth WebSocket, using REST fallback");
+  } catch {
     // Use REST fallbacks only
-    fetchPythREST(subscribedSymbols);
-    fetchDeFiLlama(subscribedSymbols);
-    
-    // Set up polling fallback
-    if (fallbackInterval) clearInterval(fallbackInterval);
-    fallbackInterval = setInterval(() => {
-      fetchPythREST(subscribedSymbols);
-      fetchDeFiLlama(subscribedSymbols);
-    }, FALLBACK_POLL_INTERVAL);
-    
-    globalState = {
-      ...globalState,
-      connected: true, // Mark as connected via REST
-      connecting: false,
-      primarySource: "DeFiLlama",
-    };
-    notifyListeners();
+    startRESTFallback();
   }
 }
 
+// Pure REST fallback when both WebSockets fail
+function startRESTFallback() {
+  fetchPythREST(subscribedSymbols);
+  fetchDeFiLlama(subscribedSymbols);
+  
+  // Set up polling fallback
+  if (fallbackInterval) clearInterval(fallbackInterval);
+  fallbackInterval = setInterval(() => {
+    fetchPythREST(subscribedSymbols);
+    fetchDeFiLlama(subscribedSymbols);
+  }, FALLBACK_POLL_INTERVAL);
+  
+  globalState = {
+    ...globalState,
+    connected: true, // Mark as connected via REST
+    connecting: false,
+    primarySource: "DeFiLlama",
+  };
+  notifyListeners();
+}
+
 function disconnect() {
+  clearConnectionTimeout();
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
