@@ -17,6 +17,10 @@ import {
 
 const resend = new Resend(Deno.env.get('RESEND_API_KEY') as string)
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 📧 Send Digest Email Edge Function with Authentication for Manual Triggers
+// ═══════════════════════════════════════════════════════════════════════════════
+
 // Allowed origins for CORS - restrict to application domains
 const ALLOWED_ORIGINS = [
   "https://zikalyze.app",
@@ -35,10 +39,102 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
   const allowedOrigin = isAllowedOrigin(origin) ? origin! : ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Authentication & Authorization
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface AuthResult {
+  authorized: boolean;
+  userId?: string;
+  isCron: boolean;
+  isAdmin: boolean;
+  error?: string;
+}
+
+async function authenticateRequest(req: Request): Promise<AuthResult> {
+  // Check for cron secret (for scheduled jobs)
+  const cronSecret = req.headers.get('x-cron-secret');
+  const expectedCronSecret = Deno.env.get('CRON_SECRET');
+  
+  if (cronSecret && expectedCronSecret && cronSecret === expectedCronSecret) {
+    console.log('[digest] Authenticated via cron secret');
+    return { authorized: true, isCron: true, isAdmin: true };
+  }
+  
+  // Check for service role key (internal calls)
+  const authHeader = req.headers.get('Authorization');
+  if (authHeader?.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || 'invalid')) {
+    console.log('[digest] Authenticated via service role');
+    return { authorized: true, isCron: false, isAdmin: true };
+  }
+  
+  // Check for user JWT (manual trigger by authenticated user)
+  if (authHeader?.startsWith('Bearer ')) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    
+    const { data: { user }, error } = await supabase.auth.getUser();
+    
+    if (error || !user) {
+      console.warn('[digest] Invalid user token:', error?.message);
+      return { authorized: false, isCron: false, isAdmin: false, error: 'Invalid authentication token' };
+    }
+    
+    console.log('[digest] Authenticated user:', user.id);
+    return { authorized: true, userId: user.id, isCron: false, isAdmin: false };
+  }
+  
+  // No authentication provided - only allow if this looks like a Supabase cron job
+  // Supabase cron jobs don't always have headers, but they come from internal IPs
+  const forwardedFor = req.headers.get('x-forwarded-for');
+  const userAgent = req.headers.get('user-agent');
+  
+  // Allow requests that appear to be from Supabase infrastructure
+  if (!forwardedFor && userAgent?.includes('Supabase')) {
+    console.log('[digest] Allowing Supabase infrastructure request');
+    return { authorized: true, isCron: true, isAdmin: true };
+  }
+  
+  return { authorized: false, isCron: false, isAdmin: false, error: 'Authentication required' };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Rate Limiting for Manual Triggers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const rateLimitCache = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 5; // max manual triggers per hour per user
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitCache.get(userId);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitCache.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return false;
+  }
+
+  entry.count += 1;
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Email Components
+// ═══════════════════════════════════════════════════════════════════════════════
 
 interface AlertItem {
   type: string;
@@ -110,7 +206,6 @@ const DigestEmail = ({ frequency, alerts, marketSummary, dashboardUrl }: {
 
 async function fetchMarketSummary(): Promise<MarketSummary | null> {
   try {
-    // Use DeFiLlama (open source, decentralized) for market data
     const [btcResponse, ethResponse] = await Promise.all([
       fetch('https://coins.llama.fi/prices/current/coingecko:bitcoin?searchWidth=4h', { signal: AbortSignal.timeout(8000) }),
       fetch('https://coins.llama.fi/prices/current/coingecko:ethereum?searchWidth=4h', { signal: AbortSignal.timeout(8000) }),
@@ -128,8 +223,6 @@ async function fetchMarketSummary(): Promise<MarketSummary | null> {
       ethPrice = ethData.coins?.['coingecko:ethereum']?.price || 0;
     }
     
-    // Calculate sentiment from on-chain data (decentralized alternative to Fear & Greed)
-    // Use BTC price momentum as proxy for market sentiment
     const historicalResponse = await fetch(
       'https://coins.llama.fi/chart/coingecko:bitcoin?start=' + Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000),
       { signal: AbortSignal.timeout(8000) }
@@ -146,7 +239,6 @@ async function fetchMarketSummary(): Promise<MarketSummary | null> {
         const oldPrice = prices[0]?.price || btcPrice;
         btcChange = ((btcPrice - oldPrice) / oldPrice) * 100;
         
-        // Derive sentiment from 7-day performance
         if (btcChange > 10) { fearGreed = 85; fearGreedLabel = 'Extreme Greed'; }
         else if (btcChange > 5) { fearGreed = 70; fearGreedLabel = 'Greed'; }
         else if (btcChange > 0) { fearGreed = 55; fearGreedLabel = 'Neutral'; }
@@ -159,28 +251,45 @@ async function fetchMarketSummary(): Promise<MarketSummary | null> {
       btcPrice,
       btcChange,
       ethPrice,
-      ethChange: 0, // Simplified - could fetch historical ETH data too
+      ethChange: 0,
       topGainer: { symbol: 'N/A', change: 0 },
       topLoser: { symbol: 'N/A', change: 0 },
       fearGreed,
       fearGreedLabel,
     };
   } catch (error) {
-    console.error('Error fetching market summary:', error);
+    console.error('[digest] Error fetching market summary:', error);
     return null;
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Main Handler
+// ═══════════════════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
   const origin = req.headers.get('Origin');
   const corsHeaders = getCorsHeaders(origin);
   
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Authentication
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    const auth = await authenticateRequest(req);
+    
+    if (!auth.authorized) {
+      console.warn('[digest] Unauthorized request:', auth.error);
+      return new Response(
+        JSON.stringify({ error: auth.error || 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -199,12 +308,35 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Authorization & Rate Limiting for Manual Triggers
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    // If a specific user is targeted and requester is not admin, verify they can only target themselves
+    if (targetUserId && !auth.isAdmin) {
+      if (auth.userId !== targetUserId) {
+        console.warn('[digest] User tried to send digest to another user:', auth.userId, '->', targetUserId);
+        return new Response(
+          JSON.stringify({ error: 'Cannot send digest to other users' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Rate limit manual triggers
+      if (!checkRateLimit(auth.userId)) {
+        console.warn('[digest] Rate limit exceeded for user:', auth.userId);
+        return new Response(
+          JSON.stringify({ error: 'Too many manual digest requests. Try again later.' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Determine which users to send digests to
     const now = new Date();
     const currentHour = now.getUTCHours();
-    const dayOfWeek = now.getUTCDay(); // 0 = Sunday
+    const dayOfWeek = now.getUTCDay();
     
-    // Build query based on trigger type
     let query = supabase
       .from('user_email_preferences')
       .select('*')
@@ -215,10 +347,7 @@ Deno.serve(async (req) => {
     } else if (targetFrequency) {
       query = query.eq('digest_frequency', targetFrequency);
     } else {
-      // Cron job logic: send to users whose digest_time matches current hour
       query = query.eq('digest_time', currentHour);
-      
-      // For weekly digests, only send on Sundays
       if (dayOfWeek !== 0) {
         query = query.neq('digest_frequency', 'weekly');
       }
@@ -227,24 +356,22 @@ Deno.serve(async (req) => {
     const { data: preferences, error: prefError } = await query;
 
     if (prefError) {
-      console.error('Error fetching preferences:', prefError);
+      console.error('[digest] Error fetching preferences:', prefError);
       throw prefError;
     }
 
     if (!preferences || preferences.length === 0) {
-      console.log('No users to send digests to at this time');
+      console.log('[digest] No users to send digests to at this time');
       return new Response(
         JSON.stringify({ message: 'No users eligible for digest', sent: 0 }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Processing ${preferences.length} digest emails`);
+    console.log(`[digest] Processing ${preferences.length} digest emails`);
 
-    // Fetch market summary once for all emails
     const marketSummary = await fetchMarketSummary();
 
-    // Determine dashboard URL
     const dashboardUrl = supabaseUrl.includes('supabase.co')
       ? supabaseUrl.replace('.supabase.co', '.lovableproject.com')
       : 'https://zikalyze.app';
@@ -254,17 +381,16 @@ Deno.serve(async (req) => {
 
     for (const pref of preferences) {
       try {
-        // Fetch user email from Supabase Auth (more secure than storing in application table)
         const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(pref.user_id);
         
         if (authError || !authUser?.user?.email) {
-          console.error(`Error fetching email for user ${pref.user_id}:`, authError);
+          console.error(`[digest] Error fetching email for user ${pref.user_id}:`, authError);
           errors.push(`${pref.user_id}: Could not fetch user email`);
           continue;
         }
         
         const userEmail = authUser.user.email;
-        // Fetch pending alerts for this user
+        
         const alertsQuery = supabase
           .from('alert_digest_queue')
           .select('*')
@@ -276,11 +402,10 @@ Deno.serve(async (req) => {
         const { data: alerts, error: alertsError } = await alertsQuery;
 
         if (alertsError) {
-          console.error(`Error fetching alerts for user ${pref.user_id}:`, alertsError);
+          console.error(`[digest] Error fetching alerts for user ${pref.user_id}:`, alertsError);
           continue;
         }
 
-        // Filter alerts based on user preferences
         const filteredAlerts = (alerts || []).filter((alert: any) => {
           if (alert.alert_type === 'price_alert' && !pref.include_price_alerts) return false;
           if (alert.alert_type === 'sentiment_shift' && !pref.include_sentiment) return false;
@@ -296,13 +421,11 @@ Deno.serve(async (req) => {
           triggered_at: a.triggered_at,
         }));
 
-        // Skip if no alerts and no market summary
         if (alertItems.length === 0 && !pref.include_market_summary) {
-          console.log(`Skipping user ${pref.user_id} - no content to send`);
+          console.log(`[digest] Skipping user ${pref.user_id} - no content to send`);
           continue;
         }
 
-        // Render email
         const html = render(
           React.createElement(DigestEmail, {
             frequency: pref.digest_frequency as 'daily' | 'weekly',
@@ -314,7 +437,6 @@ Deno.serve(async (req) => {
 
         const periodLabel = pref.digest_frequency === 'daily' ? 'Daily' : 'Weekly';
         
-        // Send email (using email from Supabase Auth)
         const { error: sendError } = await resend.emails.send({
           from: 'Zikalyze <onboarding@resend.dev>',
           to: [userEmail],
@@ -323,12 +445,11 @@ Deno.serve(async (req) => {
         });
 
         if (sendError) {
-          console.error(`Error sending to ${userEmail}:`, sendError);
+          console.error(`[digest] Error sending to ${userEmail}:`, sendError);
           errors.push(`${userEmail}: ${sendError.message}`);
           continue;
         }
 
-        // Mark alerts as included in digest
         if (filteredAlerts.length > 0) {
           const alertIds = filteredAlerts.map((a: any) => a.id);
           await supabase
@@ -340,22 +461,21 @@ Deno.serve(async (req) => {
             .in('id', alertIds);
         }
 
-        // Update last_digest_sent_at
         await supabase
           .from('user_email_preferences')
           .update({ last_digest_sent_at: new Date().toISOString() })
           .eq('id', pref.id);
 
         sentCount++;
-        console.log(`Sent digest to ${userEmail}`);
+        console.log(`[digest] Sent digest to ${userEmail}`);
 
       } catch (userError) {
-        console.error(`Error processing user ${pref.user_id}:`, userError);
+        console.error(`[digest] Error processing user ${pref.user_id}:`, userError);
         errors.push(`${pref.user_id}: ${userError}`);
       }
     }
 
-    console.log(`Successfully sent ${sentCount}/${preferences.length} digest emails`);
+    console.log(`[digest] Successfully sent ${sentCount}/${preferences.length} digest emails`);
 
     return new Response(
       JSON.stringify({ 
@@ -368,7 +488,7 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error in send-digest-email:', error);
+    console.error('[digest] Error in send-digest-email:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
