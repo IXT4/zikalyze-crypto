@@ -1,5 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 📰 Crypto News Edge Function with Rate Limiting and Caching
+// ═══════════════════════════════════════════════════════════════════════════════
+
 // Allowed origins for CORS - restrict to application domains
 const ALLOWED_ORIGINS = [
   "https://zikalyze.app",
@@ -23,6 +27,80 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Rate Limiting (in-memory, per-IP/origin)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+}
+
+const rateLimitCache = new Map<string, RateLimitEntry>();
+const RATE_LIMIT_MAX = 30; // max requests per window
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+
+function checkRateLimit(identifier: string): { allowed: boolean; remaining: number; resetIn: number } {
+  const now = Date.now();
+  const entry = rateLimitCache.get(identifier);
+
+  // Clean up old entries periodically
+  if (rateLimitCache.size > 1000) {
+    for (const [key, val] of rateLimitCache.entries()) {
+      if (now > val.resetAt) rateLimitCache.delete(key);
+    }
+  }
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitCache.set(identifier, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true, remaining: RATE_LIMIT_MAX - 1, resetIn: RATE_LIMIT_WINDOW_MS };
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return { allowed: false, remaining: 0, resetIn: entry.resetAt - now };
+  }
+
+  entry.count += 1;
+  return { allowed: true, remaining: RATE_LIMIT_MAX - entry.count, resetIn: entry.resetAt - now };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Response Caching (in-memory, per-symbol)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface CacheEntry {
+  data: unknown;
+  expiresAt: number;
+}
+
+const responseCache = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function getCachedResponse(symbol: string): unknown | null {
+  const entry = responseCache.get(symbol);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    responseCache.delete(symbol);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCachedResponse(symbol: string, data: unknown): void {
+  // Clean up old entries periodically
+  if (responseCache.size > 100) {
+    const now = Date.now();
+    for (const [key, val] of responseCache.entries()) {
+      if (now > val.expiresAt) responseCache.delete(key);
+    }
+  }
+  responseCache.set(symbol, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// News Types and Utilities
+// ═══════════════════════════════════════════════════════════════════════════════
 
 interface NewsItem {
   source: string;
@@ -82,6 +160,19 @@ function formatRelativeTime(dateStr: string): string {
   return `${diffDays}d ago`;
 }
 
+// Validate symbol input
+function validateSymbol(symbol: unknown): string | null {
+  if (!symbol || typeof symbol !== 'string') return 'BTC';
+  const cleaned = symbol.trim().toUpperCase().slice(0, 10);
+  // Only allow alphanumeric
+  if (!/^[A-Z0-9]+$/.test(cleaned)) return null;
+  return cleaned;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Main Handler
+// ═══════════════════════════════════════════════════════════════════════════════
+
 serve(async (req) => {
   const origin = req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
@@ -90,16 +181,59 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Rate Limiting
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  const clientIdentifier = origin || req.headers.get("x-forwarded-for") || "anonymous";
+  const rateLimit = checkRateLimit(clientIdentifier);
+  
+  if (!rateLimit.allowed) {
+    console.warn(`[crypto-news] Rate limit exceeded for: ${clientIdentifier}`);
+    return new Response(
+      JSON.stringify({ 
+        error: 'Rate limit exceeded. Please try again later.',
+        retryAfter: Math.ceil(rateLimit.resetIn / 1000),
+      }),
+      { 
+        status: 429, 
+        headers: { 
+          ...corsHeaders, 
+          "Content-Type": "application/json",
+          "Retry-After": String(Math.ceil(rateLimit.resetIn / 1000)),
+        } 
+      }
+    );
+  }
+
   try {
-    const { symbol = "BTC" } = await req.json().catch(() => ({}));
-    const cryptoSymbol = symbol.toUpperCase();
+    const { symbol: rawSymbol = "BTC" } = await req.json().catch(() => ({}));
+    
+    // Validate symbol
+    const cryptoSymbol = validateSymbol(rawSymbol);
+    if (!cryptoSymbol) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid symbol format', news: [] }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Check cache first
+    const cached = getCachedResponse(cryptoSymbol);
+    if (cached) {
+      console.log(`[crypto-news] Cache hit for ${cryptoSymbol}`);
+      return new Response(
+        JSON.stringify({ ...(cached as object), cached: true, remaining: rateLimit.remaining }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     const newsItems: NewsItem[] = [];
     
     // Fetch from CryptoPanic API (free tier)
     try {
       const cryptoPanicUrl = `https://cryptopanic.com/api/free/v1/posts/?auth_token=&currencies=${cryptoSymbol}&kind=news&public=true`;
-      const response = await fetch(cryptoPanicUrl);
+      const response = await fetch(cryptoPanicUrl, { signal: AbortSignal.timeout(5000) });
       
       if (response.ok) {
         const data = await response.json();
@@ -117,7 +251,7 @@ serve(async (req) => {
         }
       }
     } catch (e) {
-      console.log("CryptoPanic fetch failed, using fallback");
+      console.log("[crypto-news] CryptoPanic fetch failed, using fallback");
     }
 
     // Fallback: Fetch from CoinGecko news (no API key needed)
@@ -125,7 +259,8 @@ serve(async (req) => {
       try {
         const geckoUrl = `https://api.coingecko.com/api/v3/news`;
         const response = await fetch(geckoUrl, {
-          headers: { 'Accept': 'application/json' }
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(5000)
         });
         
         if (response.ok) {
@@ -154,7 +289,7 @@ serve(async (req) => {
           }
         }
       } catch (e) {
-        console.log("CoinGecko news fetch failed");
+        console.log("[crypto-news] CoinGecko news fetch failed");
       }
     }
 
@@ -162,7 +297,7 @@ serve(async (req) => {
     if (newsItems.length < 5) {
       try {
         const messariUrl = `https://data.messari.io/api/v1/news`;
-        const response = await fetch(messariUrl);
+        const response = await fetch(messariUrl, { signal: AbortSignal.timeout(5000) });
         
         if (response.ok) {
           const data = await response.json();
@@ -180,13 +315,12 @@ serve(async (req) => {
           }
         }
       } catch (e) {
-        console.log("Messari fetch failed");
+        console.log("[crypto-news] Messari fetch failed");
       }
     }
 
     // If still no news, generate from real crypto RSS feeds
     if (newsItems.length === 0) {
-      // Use a curated list of real crypto headlines based on market conditions
       const fallbackNews: NewsItem[] = [
         {
           source: 'CoinDesk',
@@ -237,19 +371,23 @@ serve(async (req) => {
       new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
     );
 
+    const responseData = {
+      news: newsItems.slice(0, 10),
+      symbol: cryptoSymbol,
+      fetchedAt: new Date().toISOString(),
+      source: newsItems.length > 0 && newsItems[0].source !== 'CoinDesk' ? 'Live API' : 'Curated',
+      remaining: rateLimit.remaining,
+    };
+
+    // Cache the response
+    setCachedResponse(cryptoSymbol, responseData);
+
     return new Response(
-      JSON.stringify({
-        news: newsItems.slice(0, 10),
-        symbol: cryptoSymbol,
-        fetchedAt: new Date().toISOString(),
-        source: newsItems.length > 0 && newsItems[0].source !== 'CoinDesk' ? 'Live API' : 'Curated'
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify(responseData),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("crypto-news error:", error);
+    console.error("[crypto-news] error:", error);
     return new Response(
       JSON.stringify({ 
         error: error instanceof Error ? error.message : "Failed to fetch news",
