@@ -18,6 +18,7 @@ import { detectVolumeSpike, getVolumeSpikeFlag } from './volume-analysis';
 import { analyzeInstitutionalVsRetail, generateIfThenScenarios } from './institutional-analysis';
 import { estimateOnChainMetrics, estimateETFFlowData } from './on-chain-estimator';
 import { analyzeMarketStructure, generatePrecisionEntry, calculateFinalBias, performTopDownAnalysis } from './technical-analysis';
+import { enhanceBiasWithNeuralEnsemble, type NeuralPrediction } from './neural-ensemble';
 
 // Translation maps for multi-language support
 const TRANSLATIONS: Record<string, Record<string, string>> = {
@@ -256,39 +257,73 @@ export function runClientSideAnalysis(input: AnalysisInput): AnalysisResult {
   
   // TECHNICAL ANALYSIS IS PRIMARY — Use top-down direction as the source of truth
   // Fundamentals (rawBias) only affect confidence, NOT direction
-  let bias: 'LONG' | 'SHORT' | 'NEUTRAL';
-  let confidence: number;
+  let technicalBias: 'LONG' | 'SHORT' | 'NEUTRAL';
+  let technicalConfidence: number;
   
   // Map technical direction to bias
   if (topDownAnalysis.tradeableDirection === 'LONG') {
-    bias = 'LONG';
+    technicalBias = 'LONG';
   } else if (topDownAnalysis.tradeableDirection === 'SHORT') {
-    bias = 'SHORT';
+    technicalBias = 'SHORT';
   } else {
-    bias = 'NEUTRAL';
+    technicalBias = 'NEUTRAL';
   }
   
   // Calculate confidence based on confluence + fundamental alignment
   const confluenceBase = topDownAnalysis.confluenceScore;
-  const fundamentalAlignment = (rawBias === 'LONG' && bias === 'LONG') || (rawBias === 'SHORT' && bias === 'SHORT');
-  const fundamentalConflict = (rawBias === 'LONG' && bias === 'SHORT') || (rawBias === 'SHORT' && bias === 'LONG');
+  const fundamentalAlignment = (rawBias === 'LONG' && technicalBias === 'LONG') || (rawBias === 'SHORT' && technicalBias === 'SHORT');
+  const fundamentalConflict = (rawBias === 'LONG' && technicalBias === 'SHORT') || (rawBias === 'SHORT' && technicalBias === 'LONG');
   
-  if (bias === 'NEUTRAL') {
+  if (technicalBias === 'NEUTRAL') {
     // No trade signal — low confidence
-    confidence = Math.max(40, Math.min(55, confluenceBase * 0.55)) - macroPenalty;
+    technicalConfidence = Math.max(40, Math.min(55, confluenceBase * 0.55)) - macroPenalty;
   } else if (fundamentalAlignment) {
     // Technical + fundamental agree — moderate-high signal (capped lower for humility)
-    confidence = Math.max(55, Math.min(75, (confluenceBase * 0.6 + rawConfidence * 0.25))) - macroPenalty;
+    technicalConfidence = Math.max(55, Math.min(75, (confluenceBase * 0.6 + rawConfidence * 0.25))) - macroPenalty;
   } else if (fundamentalConflict) {
     // Technical vs fundamental conflict — reduce confidence significantly
-    confidence = Math.max(42, Math.min(58, confluenceBase * 0.5)) - macroPenalty;
+    technicalConfidence = Math.max(42, Math.min(58, confluenceBase * 0.5)) - macroPenalty;
   } else {
     // Technical clear, fundamental neutral — moderate confidence
-    confidence = Math.max(48, Math.min(68, confluenceBase * 0.65)) - macroPenalty;
+    technicalConfidence = Math.max(48, Math.min(68, confluenceBase * 0.65)) - macroPenalty;
   }
   
-  // Clamp final confidence — lower ceiling for epistemic humility
-  confidence = Math.max(35, Math.min(78, confidence));
+  // Clamp technical confidence — lower ceiling for epistemic humility
+  technicalConfidence = Math.max(35, Math.min(78, technicalConfidence));
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🧠 NEURAL ENSEMBLE ENHANCEMENT — Advanced pattern recognition layer
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // Estimate volatility from price range
+  const estimatedVolatility = range > 0 ? (range / price) * 100 : Math.abs(change) * 0.5;
+  
+  // Estimate momentum from change and position
+  const momentum = change + (pricePosition - 50) * 0.1;
+  
+  // Apply neural ensemble to refine bias and confidence
+  const neuralEnhanced = enhanceBiasWithNeuralEnsemble(
+    crypto,
+    technicalBias,
+    technicalConfidence,
+    {
+      price,
+      change,
+      volume,
+      volatility: estimatedVolatility,
+      momentum,
+    }
+  );
+  
+  // Use neural-enhanced values as final bias
+  const bias = neuralEnhanced.bias;
+  const confidence = Math.max(35, Math.min(78, neuralEnhanced.confidence));
+  
+  // Store neural signal for logging
+  const neuralSignal: NeuralPrediction = neuralEnhanced.neuralSignal;
+  
+  // Log neural enhancement (debug)
+  console.log(`[AI Brain] Neural Enhancement: ${technicalBias}@${technicalConfidence.toFixed(0)}% → ${bias}@${confidence.toFixed(0)}% | Agreement: ${(neuralSignal.ensembleAgreement * 100).toFixed(0)}%`);
 
   // Market structure
   const structure = analyzeMarketStructure(price, high24h, low24h, change);
@@ -604,3 +639,4 @@ export { detectVolumeSpike, getVolumeSpikeFlag } from './volume-analysis';
 export { analyzeInstitutionalVsRetail, generateIfThenScenarios } from './institutional-analysis';
 export { estimateOnChainMetrics, estimateETFFlowData } from './on-chain-estimator';
 export { analyzeMarketStructure, generatePrecisionEntry, calculateFinalBias } from './technical-analysis';
+export { neuralEnsemblePredict, enhanceBiasWithNeuralEnsemble, analyzeSequence } from './neural-ensemble';
