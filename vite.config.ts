@@ -11,8 +11,24 @@ export default defineConfig(({ mode }) => ({
   build: {
     rollupOptions: {
       output: {
-        // Inline small chunks (< 10KB) to reduce network request chains
-        experimentalMinChunkSize: 10000,
+        // Inline small chunks (< 15KB) to reduce network request chains
+        experimentalMinChunkSize: 15000,
+        // Force lucide icons into main bundle to eliminate dependency chain
+        manualChunks(id) {
+          // Inline all lucide-react icons into main bundle
+          if (id.includes('lucide-react')) {
+            return 'vendor';
+          }
+          // Keep large vendor libraries in a separate chunk
+          if (id.includes('node_modules')) {
+            if (id.includes('recharts') || id.includes('d3-')) {
+              return 'charts';
+            }
+            if (id.includes('react-router') || id.includes('@radix-ui')) {
+              return 'ui';
+            }
+          }
+        },
       },
     },
   },
