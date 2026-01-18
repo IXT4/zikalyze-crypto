@@ -9,23 +9,39 @@ export default defineConfig(({ mode }) => ({
   // Use relative paths for IPFS compatibility
   base: './',
   build: {
+    // Increase chunk size limit to reduce small chunks
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        // Inline small chunks (< 15KB) to reduce network request chains
-        experimentalMinChunkSize: 15000,
-        // Force lucide icons into main bundle to eliminate dependency chain
+        // Aggressive inlining - inline all chunks under 20KB
+        experimentalMinChunkSize: 20000,
+        // Strategic chunking to eliminate dependency chains
         manualChunks(id) {
-          // Inline all lucide-react icons into main bundle
+          // Force ALL lucide-react icons into a single chunk (eliminates 6+ separate icon files)
           if (id.includes('lucide-react')) {
-            return 'vendor';
+            return 'icons';
           }
-          // Keep large vendor libraries in a separate chunk
+          // Keep large vendor libraries in dedicated chunks
           if (id.includes('node_modules')) {
+            // Charts library - large, rarely changes
             if (id.includes('recharts') || id.includes('d3-')) {
               return 'charts';
             }
-            if (id.includes('react-router') || id.includes('@radix-ui')) {
+            // UI framework - core Radix components
+            if (id.includes('@radix-ui')) {
               return 'ui';
+            }
+            // React core and router
+            if (id.includes('react-router') || id.includes('react-dom')) {
+              return 'react';
+            }
+            // Supabase SDK
+            if (id.includes('@supabase')) {
+              return 'supabase';
+            }
+            // Three.js (3D graphics)
+            if (id.includes('three') || id.includes('@react-three')) {
+              return 'three';
             }
           }
         },
